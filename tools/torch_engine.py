@@ -90,13 +90,17 @@ class TorchEngine:
         model = self.models[mode]
         logger.info(f"Generating Torch audio using mode: {mode} (Model: {self.model_paths.get(mode)})")
 
+        # Safety: Sanitize text (remove non-standard chars that might confuse the tokenizer)
+        import re
+        text = re.sub(r'[^\x00-\x7F]+', ' ', text) # Remove non-ASCII for now
+        
         # Safety: Truncate text if it's exceptionally long to avoid CUDA asserts
-        # Qwen3-TTS usually handles up to 512 tokens, roughly 400-500 chars
-        if len(text) > 400:
-            logger.warning(f"Text too long ({len(text)} chars). Truncating to 400 to avoid CUDA assert.")
-            text = text[:400]
+        # Qwen3-TTS usually handles up to 512 tokens. 350 chars is a very safe limit.
+        if len(text) > 350:
+            logger.warning(f"Text too long ({len(text)} chars). Truncating to 350 to avoid CUDA assert.")
+            text = text[:350]
 
-        logger.info(f"Generating Torch audio for text ({len(text)} chars)...")
+        logger.info(f"Generating Torch audio for sanitized text ({len(text)} chars)...")
         
         # Prepare generation arguments
         # Note: API names may vary slightly based on the final qwen_tts package release

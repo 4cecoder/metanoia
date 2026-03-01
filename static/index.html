@@ -303,8 +303,24 @@
 
         function copyError() {
             const body = document.getElementById('error-body').textContent;
-            navigator.clipboard.writeText(body);
-            alert("Error copied to clipboard. Ready for debugging!");
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(body).then(() => {
+                    alert("Error copied to clipboard!");
+                });
+            } else {
+                // Fallback for non-secure contexts (LAN IPs)
+                const textArea = document.createElement("textarea");
+                textArea.value = body;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    alert("Error copied to clipboard (fallback mode)!");
+                } catch (err) {
+                    console.error('Fallback copy failed', err);
+                }
+                document.body.removeChild(textArea);
+            }
         }
 
         async function setMode(m) {
