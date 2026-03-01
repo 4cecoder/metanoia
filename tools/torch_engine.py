@@ -120,10 +120,22 @@ class TorchEngine:
         
         # --- GPU ENFORCEMENT CHECK ---
         if self.device == "cuda":
-            model_device = next(model.parameters()).device
-            if model_device.type != 'cuda':
-                logger.error(f"STALEMATE: Model {mode} is on {model_device}, but system requires CUDA.")
-                raise RuntimeError(f"GPU Enforcement Failed: Model {mode} is not resident on RTX 4090.")
+            # Handle specialized model classes that might hide parameters in sub-modules
+            param_source = None
+            if hasattr(model, "parameters"):
+                param_source = model
+            elif hasattr(model, "model") and hasattr(model.model, "parameters"):
+                param_source = model.model
+            elif hasattr(model, "talker") and hasattr(model.talker, "parameters"):
+                param_source = model.talker
+                
+            if param_source:
+                model_device = next(param_source.parameters()).device
+                if model_device.type != 'cuda':
+                    logger.error(f"STALEMATE: Model {mode} is on {model_device}, but system requires CUDA.")
+                    raise RuntimeError(f"GPU Enforcement Failed: Model {mode} is not resident on RTX 4090.")
+            else:
+                logger.warning(f"Could not verify device for model class {type(model).__name__}. Proceeding with caution.")
         # -----------------------------
 
         # Check if we have a cached prompt or tensor for this voice
