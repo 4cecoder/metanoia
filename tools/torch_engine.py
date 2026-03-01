@@ -66,19 +66,22 @@ class TorchEngine:
         
         try:
             with torch.no_grad():
-                # Extract speaker prompt using the model's internal API
-                # This prevents re-encoding the WAV on every single request
-                # Note: exact method name might vary, qwen-tts usually uses get_speaker_prompt or similar
+                # Try common names for speaker prompt extraction in different Qwen3 versions
+                prompt = None
                 if hasattr(model, "get_speaker_prompt"):
-                    prompt = model.get_speaker_prompt(
-                        ref_audio=audio_path,
-                        ref_text=ref_text
-                    )
+                    prompt = model.get_speaker_prompt(ref_audio=audio_path, ref_text=ref_text)
+                elif hasattr(model, "preprocess_ref_audio"):
+                    prompt = model.preprocess_ref_audio(ref_audio=audio_path, ref_text=ref_text)
+                elif hasattr(model, "extract_speaker_embedding"):
+                    prompt = model.extract_speaker_embedding(ref_audio=audio_path)
+
+                if prompt is not None:
                     self.prompt_cache[name] = prompt
                     logger.info(f"Successfully cached prompt for {name}")
                 else:
-                    logger.warning(f"Model {mode} does not support pre-computing prompts.")
+                    logger.warning(f"Model {mode} (class: {type(model).__name__}) does not expose a known pre-computation method.")
         except Exception as e:
+
             logger.warning(f"Failed to pre-compute prompt for {name}: {e}")
 
     @property
