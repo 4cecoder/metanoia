@@ -40,6 +40,7 @@ mobile/app/src/main/assets/*.data
 mobile/app/src/main/assets/*.npy
 
 # Large Binary Files
+*.db
 *.bin
 *.onnx
 *.data
