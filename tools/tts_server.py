@@ -16,6 +16,7 @@ import hashlib
 import asyncio
 import subprocess
 import platform
+import torch
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any
 
@@ -445,7 +446,7 @@ async def generate_speech(request: TTSRequest):
                 # Add custom headers for client metrics
                 headers = {
                     "X-Render-Time": f"{elapsed:.2f}s",
-                    "X-Render-Backend": "CUDA" if torch_engine and torch.cuda.is_available() else ("MLX" if mlx_engine else "CPU")
+                    "X-Render-Backend": "CUDA" if torch.cuda.is_available() else ("MLX" if mlx_engine else "CPU")
                 }
                 
                 return Response(content=audio_bytes, media_type="audio/wav", headers=headers)
@@ -682,6 +683,14 @@ if __name__ == "__main__":
     import socket
     import os
     
+    # Check for sudo/root
+    if os.geteuid() == 0:
+        print("\n" + "!"*50)
+        print("WARNING: Running as ROOT/SUDO detected.")
+        print("This often breaks 'uv' virtual environments and GPU discovery.")
+        print("Please run as a normal user if possible.")
+        print("!"*50 + "\n")
+
     # Debug CUDA asserts
     os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
     
