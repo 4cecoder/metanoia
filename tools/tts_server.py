@@ -14,6 +14,7 @@ import logging
 import time
 import hashlib
 import asyncio
+import subprocess
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any
 
@@ -131,6 +132,23 @@ from concurrent.futures import ThreadPoolExecutor
 executor = ThreadPoolExecutor(max_workers=4)
 gpu_semaphore = asyncio.Semaphore(3) # 3 concurrent GPU tasks for maximum throughput
 
+async def check_git_updates():
+    """Background task to poll for git updates on the master branch."""
+    while True:
+        await asyncio.sleep(60) # Poll every minute
+        try:
+            # Check for updates
+            subprocess.run(["git", "fetch", "origin", "master"], check=True, capture_output=True)
+            local = subprocess.getoutput("git rev-parse HEAD").strip()
+            remote = subprocess.getoutput("git rev-parse origin/master").strip()
+            
+            if local != remote:
+                logger.info("--- Git updates detected on master! Pulling changes... ---")
+                subprocess.run(["git", "pull", "origin", "master"], check=True)
+                # uvicorn with reload=True will detect the file changes and restart the server
+        except Exception as e:
+            logger.debug(f"Git update check failed (likely no internet or not a git repo): {e}")
+
 # Voice Configurations
 VOICE_CONFIGS = {
     "tommy": {
@@ -172,6 +190,9 @@ VOICE_CONFIGS = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global mlx_engine, torch_engine, whisper_model
+    
+    # Start git polling in the background
+    update_task = asyncio.create_task(check_git_updates())
     
     # System Detection
     has_mlx = False
@@ -233,6 +254,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to load engines: {e}")
     yield
+    update_task.cancel()
     mlx_engine = None
     torch_engine = None
 
@@ -429,4 +451,14 @@ app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    import sys
+    
+    # Ensure the tools directory is in the path so uvicorn can find the module
+    tools_dir = os.path.dirname(os.path.abspath(__file__))
+    if tools_dir not in sys.path:
+        sys.path.insert(0, tools_dir)
+        
+    logger.info("Starting TTS Server with UV Run compatibility and auto-reload...")
+    # Use string-based loading for reload support
+    # We must be in the parent directory for "tools.tts_server" or use "tts_server" if tools_dir is in sys.path
+    uvicorn.run("tts_server:app", host="127.0.0.1", port=8000, reload=True, reload_dirs=[tools_dir])
