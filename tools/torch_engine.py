@@ -11,7 +11,8 @@ class TorchEngine:
     def __init__(self):
         self.models = {}
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.dtype = torch.float16 if self.device == "cuda" else torch.float32
+        # Modern NVIDIA GPUs (RTX 30/40) are much more stable with bfloat16
+        self.dtype = torch.bfloat16 if self.device == "cuda" else torch.float32
         self.model_paths = {
             "speedy": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
             "gold": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
