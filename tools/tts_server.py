@@ -222,7 +222,7 @@ async def lifespan(app: FastAPI):
         except ImportError:
             logger.info("MLX not found on macOS. Falling back to Torch/CPU.")
     else:
-        logger.info(f"Platform: {platform.system()} (WSL/Ubuntu). Ignoring MLX and checking for NVIDIA/CUDA...")
+        logger.info(f"Platform: {platform.system()} (WSL/Ubuntu). MLX is disabled. Checking for NVIDIA/CUDA...")
 
     try:
         engine = None
@@ -232,10 +232,11 @@ async def lifespan(app: FastAPI):
             mlx_engine.load_models()
             engine = mlx_engine
         else:
-            # Import torch here as fallback for both non-MLX macOS and all Linux/WSL
+            # Explicitly use TorchEngine for Linux/WSL or non-MLX Mac
             import torch
+            logger.info(f"Torch version: {torch.__version__}")
             if torch.cuda.is_available():
-                logger.info("NVIDIA GPU with CUDA detected. Using TorchEngine.")
+                logger.info(f"NVIDIA GPU detected: {torch.cuda.get_device_name(0)} (CUDA {torch.version.cuda})")
             else:
                 logger.warning("No NVIDIA GPU detected. Running on CPU (slow).")
             
@@ -243,6 +244,7 @@ async def lifespan(app: FastAPI):
             torch_engine = TorchEngine()
             torch_engine.load_models()
             engine = torch_engine
+            logger.info("TorchEngine initialized successfully.")
 
         # Pre-compute prompts for preset voices
         if engine:

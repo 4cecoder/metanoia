@@ -17,6 +17,8 @@ dependencies = [
     "scipy>=1.17.1",
     "numba>=0.64.0",
     "pyloudnorm>=0.2.0",
+    "torch; sys_platform == 'darwin'",
+    "torch>=2.4.0; sys_platform != 'darwin'",
     "qwen-tts; sys_platform != 'darwin'",
     "transformers==4.57.3; sys_platform != 'darwin'",
     "huggingface-hub>=0.25.0; sys_platform != 'darwin'",
@@ -34,6 +36,12 @@ dev = []
 [tool.uv]
 managed = true
 
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
 [tool.uv.sources]
+torch = { index = "pytorch-cuda", marker = "sys_platform != 'darwin'" }
 mlx-audio = { git = "https://github.com/Blaizzy/mlx-audio.git", rev = "9349644ccbd62eb10900852228f7b952c566def3" }
 qwen-tts = { git = "https://github.com/QwenLM/Qwen3-TTS.git" }
