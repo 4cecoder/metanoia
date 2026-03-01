@@ -42,5 +42,6 @@ explicit = true
 
 [tool.uv.sources]
 torch = { index = "pytorch-cuda", marker = "sys_platform != 'darwin'" }
+torchaudio = { index = "pytorch-cuda", marker = "sys_platform != 'darwin'" }
 mlx-audio = { git = "https://github.com/Blaizzy/mlx-audio.git", rev = "9349644ccbd62eb10900852228f7b952c566def3" }
 qwen-tts = { git = "https://github.com/QwenLM/Qwen3-TTS.git" }
