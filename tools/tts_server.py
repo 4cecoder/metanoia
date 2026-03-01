@@ -442,7 +442,13 @@ async def generate_speech(request: TTSRequest):
                 elapsed = time.time() - start_time
                 logger.info(f"Generation Complete: {cache_key} in {elapsed:.2f}s")
                 
-                return Response(content=audio_bytes, media_type="audio/wav")
+                # Add custom headers for client metrics
+                headers = {
+                    "X-Render-Time": f"{elapsed:.2f}s",
+                    "X-Render-Backend": "CUDA" if torch_engine and torch.cuda.is_available() else ("MLX" if mlx_engine else "CPU")
+                }
+                
+                return Response(content=audio_bytes, media_type="audio/wav", headers=headers)
             except Exception as e:
                 logger.error(f"Generation error for {cache_key}: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
@@ -679,6 +685,14 @@ if __name__ == "__main__":
     # Debug CUDA asserts
     os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
     
+    # WSL2 GPU Discovery Fix: Ensure LD_LIBRARY_PATH includes WSL driver directory
+    if platform.system() == "Linux" and "microsoft" in platform.release().lower():
+        wsl_lib_path = "/usr/lib/wsl/lib"
+        current_ld_path = os.environ.get("LD_LIBRARY_PATH", "")
+        if wsl_lib_path not in current_ld_path:
+            os.environ["LD_LIBRARY_PATH"] = f"{wsl_lib_path}:{current_ld_path}"
+            logger.info(f"WSL2: Injected {wsl_lib_path} into LD_LIBRARY_PATH for GPU discovery.")
+
     def get_local_ip():
         try:
             # Create a dummy socket to detect the primary network interface IP

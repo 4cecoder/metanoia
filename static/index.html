@@ -708,6 +708,9 @@
                     throw new Error(msg);
                 }
                 
+                const renderTime = response.headers.get("X-Render-Time") || "Unknown";
+                const backend = response.headers.get("X-Render-Backend") || "Unknown";
+                
                 const blob = await response.blob();
                 const url = URL.createObjectURL(blob);
                 
@@ -716,7 +719,7 @@
                 status.textContent = "Success!";
                 audio.play();
                 
-                perf.textContent = "Render complete. Audio generated on the remote GPU backend.";
+                perf.textContent = `Render: ${renderTime} | Backend: ${backend}`;
 
             } catch (e) {
                 showError("Generation Error: " + e.message);
