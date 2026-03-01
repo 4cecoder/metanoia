@@ -17,7 +17,7 @@ A Bible study software prototype written in Zig and GTK4, inspired by Logos Bibl
 ## Repository Hygiene & Workflow
 To keep the repository lightweight and clean:
 - **Large Files:** Databases (`*.db`), model weights (`*.onnx`, `*.bin`), and audio files (`*.wav`) are **ignored** by Git.
-- **Auto-Reloading TTS Server:** Use `./tools/run_tts_server.sh` to start the TTS server. It will automatically poll for updates from the `master` branch and reload itself when changes are detected.
+- **Auto-Reloading TTS Server:** Use `uv run python tools/tts_server.py` to start the TTS server. It will automatically poll for updates from the `master` branch and reload itself when changes are detected.
 - **Mobile Development:** See `mobile/README.md` for instructions on placing model assets and hardware optimization for the Pixel 9 Pro.
 
 ## Helpful Hints for Gemini CLI Users
@@ -32,5 +32,5 @@ This project is optimized for AI-assisted development:
 zig build run
 
 # Start the TTS backend (requires Python/MLX)
-./tools/run_tts_server.sh
+uv run python tools/tts_server.py
 ```
