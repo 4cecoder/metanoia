@@ -624,10 +624,15 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/")
 async def serve_index():
     from fastapi.responses import FileResponse
+    import time
     response = FileResponse("static/index.html")
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    # Extremely aggressive cache busting
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, proxy-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    # Add a timestamp to the ETag to force mismatch
+    response.headers["ETag"] = str(time.time())
     return response
 
 if __name__ == "__main__":
