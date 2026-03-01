@@ -20,8 +20,10 @@ dependencies = [
     "scipy>=1.17.1",
     "numba>=0.64.0",
     "pyloudnorm>=0.2.0",
-    "mlx-audio",
     "qwen-tts",
+    "mlx>=0.31.0; sys_platform == 'darwin'",
+    "mlx-lm>=0.30.5; sys_platform == 'darwin'",
+    "mlx-audio; sys_platform == 'darwin'",
 ]
 
 [dependency-groups]
