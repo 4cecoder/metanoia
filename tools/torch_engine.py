@@ -79,14 +79,12 @@ class TorchEngine:
                     logger.info(f"Successfully cached speaker prompt for {name}")
                     return
 
-                # 2. Fallback: Cache the processed audio tensor to skip Disk IO/Resampling
-                # This still helps speed up 0.6B base models significantly
+                # 2. Fallback: Cache the processed audio array to skip Disk IO/Resampling
                 import librosa
                 audio, _ = librosa.load(audio_path, sr=self.sample_rate)
-                # EXPLICIT: Ensure the tensor is moved to the GPU immediately
-                audio_tensor = torch.from_numpy(audio).to(device=self.device, dtype=self.dtype)
-                self.tensor_cache[name] = audio_tensor
-                logger.info(f"Successfully cached audio tensor for {name} on {self.device} (VRAM resident)")
+                # Cache as numpy array because the model API expects it
+                self.tensor_cache[name] = audio
+                logger.info(f"Successfully cached audio array for {name} (RAM resident, IO bypassed)")
 
         except Exception as e:
             logger.warning(f"Could not pre-cache {name}: {e}")
@@ -196,7 +194,7 @@ class TorchEngine:
                         logger.info(f"Using CACHED speaker prompt for {voice}")
                         gen_args["speaker_prompt"] = cached_prompt
                     elif cached_tensor is not None:
-                        logger.info(f"Using CACHED audio tensor for {voice} (Disk IO bypassed)")
+                        logger.info(f"Using CACHED audio array for {voice} (Disk IO bypassed)")
                         gen_args["ref_audio"] = cached_tensor
                         gen_args["ref_text"] = ref_text
                     else:
@@ -207,10 +205,10 @@ class TorchEngine:
                         if not os.path.exists(final_ref_audio):
                             raise FileNotFoundError(f"Reference audio not found: {final_ref_audio}")
                         
-                        # Load and force to GPU immediately
+                        # Load as numpy array (API expected format)
                         import librosa
                         audio, _ = librosa.load(final_ref_audio, sr=self.sample_rate)
-                        gen_args["ref_audio"] = torch.from_numpy(audio).to(device=self.device, dtype=self.dtype)
+                        gen_args["ref_audio"] = audio
                         gen_args["ref_text"] = final_ref_text
 
                     audio_values = model.generate_voice_clone(**gen_args)
