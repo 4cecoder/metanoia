@@ -180,6 +180,14 @@ def setup_system_deps():
                 logger.info("System dependencies (SoX) installed successfully.")
             else:
                 logger.info("System dependency check: SoX is already installed.")
+            
+            # Firewall: Allow port 8000 for network access
+            try:
+                logger.info("Configuring firewall: Allowing port 8000/tcp...")
+                subprocess.run(["sudo", "ufw", "allow", "8000/tcp"], check=False, capture_output=True)
+            except Exception:
+                pass # UFW might not be installed or active
+                
         except Exception as e:
             logger.warning(f"Could not automatically install system deps: {e}")
             logger.warning("Please manualy run: sudo apt install -y sox libsox-fmt-all")
