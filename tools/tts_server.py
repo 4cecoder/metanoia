@@ -583,13 +583,34 @@ app.mount("/", StaticFiles(directory="static", html=True), name="static")
 if __name__ == "__main__":
     import uvicorn
     import sys
+    import socket
     
+    def get_local_ip():
+        try:
+            # Create a dummy socket to detect the primary network interface IP
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
     # Ensure the tools directory is in the path so uvicorn can find the module
     tools_dir = os.path.dirname(os.path.abspath(__file__))
     if tools_dir not in sys.path:
         sys.path.insert(0, tools_dir)
         
+    local_ip = get_local_ip()
+    port = 8000
+    
+    print("\n" + "="*50)
+    print(f"Metanoia TTS Server is starting!")
+    print(f"Local Access: http://127.0.0.1:{port}")
+    print(f"Network Access: http://{local_ip}:{port}")
+    print("="*50 + "\n")
+    
     logger.info("Starting TTS Server with UV Run compatibility and auto-reload...")
     # Use string-based loading for reload support
-    # We must be in the parent directory for "tools.tts_server" or use "tts_server" if tools_dir is in sys.path
-    uvicorn.run("tts_server:app", host="0.0.0.0", port=8000, reload=True, reload_dirs=[tools_dir])
+    # Bind to 0.0.0.0 to allow network streaming
+    uvicorn.run("tts_server:app", host="0.0.0.0", port=port, reload=True, reload_dirs=[tools_dir])
