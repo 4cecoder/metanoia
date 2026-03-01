@@ -46,7 +46,6 @@ class TorchEngine:
                     torch_dtype=self.dtype,
                     attn_implementation=attn_implementation
                 )
-                model.eval() # Ensure model is in evaluation mode
                 self.models[key] = model
         except ImportError:
             logger.error("torch_engine: 'qwen_tts' package not found. Please install the Qwen3-TTS torch implementation.")
