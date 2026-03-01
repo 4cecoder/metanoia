@@ -26,15 +26,17 @@ class TorchEngine:
         try:
             from qwen_tts import Qwen3TTSModel
             
-            # Auto-detect flash attention availability
-            attn_implementation = "eager"
+            # Optimization: Use built-in SDPA (Scaled Dot Product Attention) 
+            # as the baseline for all modern GPUs. It's much faster than 'eager'.
+            attn_implementation = "sdpa" 
+            
             if self.device == "cuda":
                 try:
                     import flash_attn
                     attn_implementation = "flash_attention_2"
                     logger.info("Flash Attention 2 detected and enabled.")
                 except ImportError:
-                    logger.info("Flash Attention not found, using default attention.")
+                    logger.info("Flash Attention not found. Using optimized PyTorch SDPA.")
 
             modes = [mode] if mode else ["speedy"]
             for key in modes:
@@ -42,13 +44,17 @@ class TorchEngine:
                 model_id = self.model_paths.get(key)
                 logger.info(f"Loading Torch model {key} on {self.device} (Attn: {attn_implementation})...")
                 
+                # Load with explicit optimizations
                 model = Qwen3TTSModel.from_pretrained(
                     model_id,
-                    device_map=self.device,
                     torch_dtype=self.dtype,
                     attn_implementation=attn_implementation
                 )
+                
+                # Explicitly move to device to ensure no lazy CPU residency
+                model.to(self.device)
                 self.models[key] = model
+                logger.info(f"Model {key} is now resident on {self.device}")
         except ImportError:
             logger.error("torch_engine: 'qwen_tts' package not found. Please install the Qwen3-TTS torch implementation.")
             raise RuntimeError("TorchEngine requires 'qwen_tts' package for NVIDIA/CUDA support.")
@@ -172,6 +178,9 @@ class TorchEngine:
         if instruct:
             gen_kwargs["instruct"] = instruct
 
+        import time
+        t0 = time.time()
+        
         try:
             # Generate using the Torch model
             with torch.no_grad():
@@ -224,7 +233,10 @@ class TorchEngine:
                         gen_args["ref_audio"] = (audio, self.sample_rate)
                         gen_args["ref_text"] = final_ref_text
 
+                    logger.info("Triggering model.generate_voice_clone...")
+                    inference_start = time.time()
                     audio_values = model.generate_voice_clone(**gen_args)
+                    logger.info(f"Model inference call took {time.time() - inference_start:.2f}s")
                 else:
                     # Generic fallback if specific methods are missing but generate exists
                     logger.warning("Specific generate methods missing, trying generic generate.")
