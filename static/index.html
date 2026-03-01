@@ -181,7 +181,7 @@
         <div id="upload-controls" class="section" style="display:none;">
             <label>Restore Missing Voice Samples</label>
             <div class="compact-row">
-                <select id="upload-voice-select">
+                <select id="upload-voice-select" onchange="updateExpectedFilename()">
                     <option value="lennox">John Lennox</option>
                     <option value="tommy">Tommy</option>
                     <option value="mari">Mari</option>
@@ -191,9 +191,13 @@
                 </select>
                 <input type="file" id="upload-file" accept="audio/wav">
             </div>
+            <div style="margin-top: 10px; font-size: 0.85em; background: var(--bg); padding: 10px; border-radius: 6px; border: 1px dashed var(--accent);">
+                <strong>Target on Remote:</strong> <code>data/</code><code id="expected-filename">lennox_ref.wav</code>
+            </div>
             <button class="secondary" onclick="uploadSample()" style="margin-top: 10px;">📤 Upload Reference (.wav)</button>
             <p style="font-size: 0.75em; margin-top: 10px; opacity: 0.8;">
-                Since large .wav files are excluded from Git, use this to upload them to your remote machine's <code>data/</code> folder.
+                Select the voice preset above and upload the corresponding <code>.wav</code> file from your Mac. 
+                This will save the file to the remote server's <code>data/</code> folder.
             </p>
         </div>
 
@@ -323,6 +327,20 @@
             document.querySelectorAll('#speaker-toggles .toggle-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             selectedSpeaker = s;
+        }
+
+        function updateExpectedFilename() {
+            const voice = document.getElementById('upload-voice-select').value;
+            const display = document.getElementById('expected-filename');
+            const maps = {
+                'lennox': 'lennox_ref.wav',
+                'tommy': 'tommy.wav',
+                'mari': 'mari_ref.wav',
+                'jordan': 'jordan_ref.wav',
+                'shamoun': 'shamoun_ref.wav',
+                'roumie': 'roumie_perfect_15s.wav'
+            };
+            display.textContent = maps[voice] || 'sample.wav';
         }
 
         async function autoTranscribe() {
