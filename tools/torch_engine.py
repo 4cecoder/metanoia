@@ -83,9 +83,10 @@ class TorchEngine:
                 # This still helps speed up 0.6B base models significantly
                 import librosa
                 audio, _ = librosa.load(audio_path, sr=self.sample_rate)
+                # EXPLICIT: Ensure the tensor is moved to the GPU immediately
                 audio_tensor = torch.from_numpy(audio).to(device=self.device, dtype=self.dtype)
                 self.tensor_cache[name] = audio_tensor
-                logger.info(f"Successfully cached audio tensor for {name} (IO bypass enabled)")
+                logger.info(f"Successfully cached audio tensor for {name} on {self.device} (VRAM resident)")
 
         except Exception as e:
             logger.warning(f"Could not pre-cache {name}: {e}")
@@ -119,6 +120,14 @@ class TorchEngine:
         
         model = self.models[mode]
         
+        # --- GPU ENFORCEMENT CHECK ---
+        if self.device == "cuda":
+            model_device = next(model.parameters()).device
+            if model_device.type != 'cuda':
+                logger.error(f"STALEMATE: Model {mode} is on {model_device}, but system requires CUDA.")
+                raise RuntimeError(f"GPU Enforcement Failed: Model {mode} is not resident on RTX 4090.")
+        # -----------------------------
+
         # Check if we have a cached prompt or tensor for this voice
         voice_key = voice.lower()
         cached_prompt = self.prompt_cache.get(voice_key)
@@ -198,7 +207,10 @@ class TorchEngine:
                         if not os.path.exists(final_ref_audio):
                             raise FileNotFoundError(f"Reference audio not found: {final_ref_audio}")
                         
-                        gen_args["ref_audio"] = final_ref_audio
+                        # Load and force to GPU immediately
+                        import librosa
+                        audio, _ = librosa.load(final_ref_audio, sr=self.sample_rate)
+                        gen_args["ref_audio"] = torch.from_numpy(audio).to(device=self.device, dtype=self.dtype)
                         gen_args["ref_text"] = final_ref_text
 
                     audio_values = model.generate_voice_clone(**gen_args)
