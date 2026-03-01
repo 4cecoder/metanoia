@@ -115,9 +115,9 @@ The application supports multiple voice clones.
 
 ### Switching Voices
 Edit `data/config.json` and change the `selected_voice` field:
-```json
-{
-  "selected_voice": "lennox"
-}
-```
-The server will automatically use the cached prompt for the selected voice.
+## 8. AI-Assisted Development Hints
+These hints help AI agents work effectively with the Metanoia repository:
+- **Repository Hygiene:** All large binary data (`.db`, `.wav`, `.onnx`, `.bin`) is excluded from Git. Do not attempt to read these unless checking local presence.
+- **Auto-Updating Server:** The script `tools/run_tts_server.sh` combines `git fetch/pull` and `uvicorn --reload`. This is preferred for running the TTS server during development.
+- **Mobile Pathing:** Model assets for Android belong in `mobile/app/src/main/assets/` but are ignored. If testing mobile features, verify asset presence first.
+- **Zig 0.16.0 Migration:** Always cross-reference `src/main.zig` with `std.Io` patterns in section 1 of this document.
