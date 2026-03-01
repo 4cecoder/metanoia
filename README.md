@@ -13,7 +13,12 @@ A Bible study software prototype written in Zig and GTK4, inspired by Logos Bibl
 ## Requirements
 - Zig (tested with 0.16.0-dev)
 - GTK4 development libraries
-- **Linux/WSL:** `sudo apt install sox` (required for audio processing)
+- **Linux/WSL:** 
+  - `sudo apt install sox` (required for audio processing)
+  - **Hardware Performance (RTX 4090):**
+    - Ensure `LD_LIBRARY_PATH` includes `/usr/lib/wsl/lib` for GPU discovery.
+    - To install pre-compiled Flash Attention (CUDA 12.1):
+      `uv pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.0.post2/flash_attn-2.7.0.post2+cu121torch2.5cxx11abiFALSE-cp312-cp312-linux_x86_64.whl`
 
 ## Repository Hygiene & Workflow
 To keep the repository lightweight and clean:
