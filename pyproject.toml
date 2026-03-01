@@ -1,0 +1,33 @@
+[project]
+name = "metanoia-tts"
+version = "0.1.0"
+description = "Qwen3-TTS Backend for Metanoia"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "torch",
+    "soundfile",
+    "pydantic",
+    "faster-whisper",
+    "python-multipart",
+    "beautifulsoup4",
+    "requests",
+    "mlx>=0.31.0",
+    "mlx-lm>=0.30.5",
+    "huggingface-hub>=1.5.0",
+    "librosa>=0.11.0",
+    "scipy>=1.17.1",
+    "numba>=0.64.0",
+    "pyloudnorm>=0.2.0",
+    "mlx-audio",
+]
+
+[dependency-groups]
+dev = []
+
+[tool.uv]
+managed = true
+
+[tool.uv.sources]
+mlx-audio = { git = "https://github.com/Blaizzy/mlx-audio.git", rev = "9349644ccbd62eb10900852228f7b952c566def3" }

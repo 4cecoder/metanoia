@@ -1,0 +1,45 @@
+# Zig
+zig-out/
+.zig-cache/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.uv/
+
+# macOS
+.DS_Store
+
+# Application Caches & Assets
+cache/
+uploads/
+models/
+
+# Data & Databases
+data/*.db
+data/*.wav
+data/tts_req_*.json
+data/ollama_req.json
+data/*.html
+
+# Mobile (Android/Kotlin)
+mobile/.gradle/
+mobile/.kotlin/
+mobile/app/build/
+mobile/build/
+mobile/local.properties
+mobile/*.apk
+mobile/*.aar
+
+# Miscellaneous
+probe
+check_allocator.zig
+check_child_id.zig
+*.log
+.DS_Store
+node_modules/
+dist/
+build/

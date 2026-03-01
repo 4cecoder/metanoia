@@ -1,0 +1,215 @@
+/* Tokyo Night Theme for Metanoia - Pure Dark Mode */
+
+window {
+    background-color: #1a1b26;
+    color: #c0caf5;
+}
+
+/* GLOBAL RESET */
+button {
+    background-image: none;
+    box-shadow: none;
+    text-shadow: none;
+    -gtk-icon-shadow: none;
+    outline: none;
+}
+
+/* Headerbar / Top Bar */
+headerbar, .headerbar {
+    background-image: linear-gradient(to bottom, #1f2335, #16161e);
+    color: #c0caf5;
+    padding: 10px 15px;
+    border-bottom: 1px solid #414868;
+}
+
+headerbar button, .headerbar button {
+    background-image: linear-gradient(to bottom, #24283b, #1a1b26);
+    border: 1px solid #414868;
+    color: #ffffff;
+    padding: 6px 14px;
+    min-width: 36px;
+    font-weight: bold;
+    border-radius: 6px;
+}
+
+headerbar button:hover, .headerbar button:hover {
+    background-image: linear-gradient(to bottom, #3d59a1, #24283b);
+    border-color: #7aa2f7;
+    color: #7dcfff;
+}
+
+/* Notebook / Tabs Optimization */
+notebook {
+    background-color: #1a1b26;
+    border: none;
+}
+
+notebook header {
+    background-color: #16161e; /* Match top bar for unity */
+    padding: 0;
+    border-bottom: 1px solid #414868;
+}
+
+notebook header tabs {
+    background-color: #16161e;
+}
+
+notebook tab {
+    background-color: #16161e;
+    color: #565f89;
+    padding: 8px 20px;
+    border: none;
+    border-right: 1px solid #24283b;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+notebook tab:hover {
+    background-color: #24283b;
+    color: #c0caf5;
+}
+
+notebook tab:checked {
+    background-color: #1a1b26; /* Content background */
+    color: #7dcfff;
+    border-top: 2px solid #7aa2f7;
+}
+
+notebook stack {
+    background-color: #1a1b26;
+}
+
+/* Sidebar */
+.sidebar {
+    background-image: linear-gradient(to right, #16161e, #1a1b26);
+    border-right: 1px solid #414868;
+    padding: 15px;
+}
+
+.sidebar-expander {
+    color: #7aa2f7;
+    font-weight: bold;
+}
+
+/* Original Language Styling */
+.greek {
+    font-family: "Palatino", "Palatino Linotype", "Gentium Plus", serif;
+    font-size: 26px;
+    color: #7dcfff;
+    padding: 2px 0;
+}
+
+.hebrew {
+    font-family: "SBL Hebrew", "Ezra SIL", serif;
+    font-size: 30px;
+    color: #bb9af7;
+    padding: 4px 0;
+    line-height: 1.2;
+}
+
+.interlinear-word {
+    padding: 10px;
+    margin: 4px;
+    border-radius: 8px;
+}
+
+.interlinear-word-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    color: #7dcfff;
+}
+
+.interlinear-word-btn:hover {
+    color: #89ddff;
+    text-shadow: 0 0 8px rgba(125, 207, 255, 0.5);
+}
+
+.interlinear-english {
+    color: #9eb1d6;
+    font-size: 0.9em;
+    font-style: italic;
+}
+
+/* Selection Flow Grids - Gradient Rework */
+.selection-grid button {
+    margin: 6px;
+    padding: 14px;
+    min-width: 110px;
+    font-weight: bold;
+    border-radius: 8px;
+    transition: all 0.2s ease-in-out;
+}
+
+.selection-grid button.cached {
+    background-image: linear-gradient(to bottom, #2f3549, #24283b);
+    border: 1px solid #7aa2f7;
+    color: #c0caf5;
+}
+
+.selection-grid button.cached:hover {
+    background-image: linear-gradient(to bottom, #3d59a1, #2f3549);
+    border-color: #7dcfff;
+    color: #ffffff;
+    box-shadow: 0 4px 15px rgba(122, 162, 247, 0.2);
+}
+
+.selection-grid button.uncached {
+    background-image: linear-gradient(to bottom, #16161e, #13131a);
+    border: 1px solid #24283b;
+    color: #414868;
+    opacity: 0.5;
+}
+
+/* Chapter and Verse Selection Specifics */
+.compact-grid button {
+    min-width: 50px;
+    padding: 12px;
+    background-image: linear-gradient(to bottom, #32344a, #24283b);
+    border: 1px solid #414868;
+    color: #c0caf5;
+}
+
+.compact-grid button:hover {
+    background-image: linear-gradient(to bottom, #7aa2f7, #3d59a1);
+    border-color: #bb9af7;
+    color: #ffffff;
+}
+
+.nav-header {
+    background-color: #16161e;
+    padding: 15px;
+    border-bottom: 1px solid #414868;
+}
+
+.nav-header button {
+    background-image: linear-gradient(to bottom, #24283b, #1a1b26);
+    border: 1px solid #414868;
+    color: #ffffff;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-weight: bold;
+}
+
+.nav-header button:hover {
+    background-color: #24283b;
+    border-color: #7aa2f7;
+    color: #7dcfff;
+}
+
+.nav-header label {
+    color: #7aa2f7;
+    font-size: 1.2em;
+}
+
+/* Fix for potential white backgrounds */
+scrolledwindow viewport {
+    background-color: #1a1b26;
+}
+
+button:disabled {
+    background-color: #16161e;
+    color: #414868;
+    border-color: #24283b;
+}

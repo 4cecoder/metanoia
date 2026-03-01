@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metanoia Voice Lab</title>
+    <style>
+        :root {
+            --bg: #1a1b26;
+            --panel: #24283b;
+            --text: #c0caf5;
+            --accent: #7aa2f7;
+            --highlight: #7dcfff;
+            --border: #414868;
+            --green: #9ece6a;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: var(--panel);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 1px solid var(--border);
+        }
+        h1 { color: var(--accent); margin: 0 0 15px 0; font-size: 1.5em; text-align: center; }
+        .section { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.85em; opacity: 0.8; }
+        textarea, input, select {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 10px;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 0.95em;
+        }
+        textarea { height: 80px; resize: vertical; }
+        .btn-group { display: flex; gap: 8px; margin-top: 8px; }
+        button {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.2s;
+            font-size: 1em;
+        }
+        button.secondary { background: var(--panel); border: 1px solid var(--accent); color: var(--accent); }
+        button:hover { background: var(--highlight); color: var(--bg); }
+        button.secondary:hover { background: var(--accent); color: white; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        /* Toggle Grid */
+        .toggle-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+        .toggle-btn {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 4px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .toggle-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+        .toggle-btn:hover:not(.active) {
+            border-color: var(--accent);
+        }
+
+        .audio-player { margin-top: 15px; display: none; text-align: center; background: var(--bg); padding: 10px; border-radius: 8px; }
+        audio { width: 100%; height: 35px; }
+        .status { margin-top: 10px; font-size: 0.85em; color: var(--green); display: none; text-align: center; }
+        .error { color: #f7768e; margin-top: 10px; display: none; font-size: 0.85em; }
+        .tab-bar { display: flex; gap: 15px; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 8px; font-size: 0.9em; justify-content: center; }
+        .tab { cursor: pointer; padding: 2px 5px; opacity: 0.6; transition: all 0.2s; }
+        .tab.active { opacity: 1; border-bottom: 2px solid var(--accent); color: var(--accent); font-weight: bold; }
+        
+        .compact-row { display: flex; gap: 10px; align-items: flex-end; }
+        .compact-row > div { flex: 1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Metanoia Voice Lab</h1>
+        
+        <div class="tab-bar">
+            <div id="tab-preset" class="tab active" onclick="setMode('preset')">Presets</div>
+            <div id="tab-custom" class="tab" onclick="setMode('custom')">Custom</div>
+            <div id="tab-clone" class="tab" onclick="setMode('clone')">Instant</div>
+        </div>
+
+        <div class="section">
+            <label>Text to Speak (<span id="char-count">0</span> characters)</label>
+            <textarea id="text-input" placeholder="Enter text..." oninput="document.getElementById('char-count').textContent = this.value.length"></textarea>
+        </div>
+
+        <div class="section">
+            <div class="compact-row">
+                <div style="flex: 2;">
+                    <label>Emotion / Instruction (Optional)</label>
+                    <input type="text" id="emotion-input" placeholder="e.g. Excited, Whispering...">
+                </div>
+                <div style="flex: 1;">
+                    <label>Speed: <span id="speed-val">1.0</span>x</label>
+                    <input type="range" id="speed-input" min="0.5" max="2.0" step="0.1" value="1.0" oninput="document.getElementById('speed-val').textContent = this.value">
+                </div>
+            </div>
+        </div>
+
+        <div id="preset-controls" class="section">
+            <label>Select Voice Clone</label>
+            <div class="toggle-grid" id="voice-toggles">
+                <div class="toggle-btn active" onclick="selectVoice(this, 'lennox')">John Lennox</div>
+                <div class="toggle-btn" onclick="selectVoice(this, 'tommy')">Tommy</div>
+                <div class="toggle-btn" onclick="selectVoice(this, 'mari')">Mari</div>
+                <div class="toggle-btn" onclick="selectVoice(this, 'jordan')">Jordan Peterson</div>
+                <div class="toggle-btn" onclick="selectVoice(this, 'shamoun')">Sam Shamoun</div>
+                <div class="toggle-btn" onclick="selectVoice(this, 'roumie')">Jonathan Roumie</div>
+            </div>
+        </div>
+
+        <div id="custom-controls" class="section" style="display:none;">
+            <label>Speaker</label>
+            <div class="toggle-grid" id="speaker-toggles">
+                <div class="toggle-btn active" onclick="selectSpeaker(this, 'Aiden')">Aiden (M)</div>
+                <div class="toggle-btn" onclick="selectSpeaker(this, 'Serena')">Serena (F)</div>
+                <div class="toggle-btn" onclick="selectSpeaker(this, 'Ryan')">Ryan (M)</div>
+                <div class="toggle-btn" onclick="selectSpeaker(this, 'Chelsie')">Chelsie (F)</div>
+                <div class="toggle-btn" onclick="selectSpeaker(this, 'Ethan')">Ethan (M)</div>
+                <div class="toggle-btn" onclick="selectSpeaker(this, 'Vivian')">Vivian (F)</div>
+            </div>
+        </div>
+
+        <div id="clone-controls" class="section" style="display:none;">
+            <div class="compact-row">
+                <div>
+                    <label>Reference Audio</label>
+                    <input type="file" id="audio-file" accept="audio/*">
+                </div>
+                <button class="secondary" id="transcribe-btn" onclick="autoTranscribe()" style="width: auto; padding: 10px;">✨ Transcribe</button>
+            </div>
+            <textarea id="ref-text" style="height:50px; margin-top: 10px;" placeholder="Audio Transcript..."></textarea>
+        </div>
+
+        <button id="gen-btn" onclick="generate()">Generate High-Quality Audio</button>
+        
+        <div id="status" class="status"></div>
+        <div id="error" class="error"></div>
+
+        <div id="player-section" class="audio-player">
+            <label>Result</label>
+            <audio id="audio-output" controls></audio>
+            <p id="perf-info" style="font-size: 0.8em; opacity: 0.7; margin-top: 10px;"></p>
+        </div>
+    </div>
+
+    <script>
+        let mode = 'preset';
+        let selectedVoice = 'lennox';
+        let selectedSpeaker = 'Aiden';
+
+        function setMode(m) {
+            mode = m;
+            document.getElementById('preset-controls').style.display = m === 'preset' ? 'block' : 'none';
+            document.getElementById('custom-controls').style.display = m === 'custom' ? 'block' : 'none';
+            document.getElementById('clone-controls').style.display = m === 'clone' ? 'block' : 'none';
+            
+            document.getElementById('tab-preset').className = 'tab' + (m === 'preset' ? ' active' : '');
+            document.getElementById('tab-custom').className = 'tab' + (m === 'custom' ? ' active' : '');
+            document.getElementById('tab-clone').className = 'tab' + (m === 'clone' ? ' active' : '');
+        }
+
+        function selectVoice(btn, v) {
+            document.querySelectorAll('#voice-toggles .toggle-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            selectedVoice = v;
+        }
+
+        function selectSpeaker(btn, s) {
+            document.querySelectorAll('#speaker-toggles .toggle-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            selectedSpeaker = s;
+        }
+
+        async function autoTranscribe() {
+            const file = document.getElementById('audio-file').files[0];
+            const btn = document.getElementById('transcribe-btn');
+            const refTextArea = document.getElementById('ref-text');
+            const status = document.getElementById('status');
+
+            if (!file) { alert("Please select an audio file first"); return; }
+
+            btn.disabled = true;
+            status.textContent = "Transcribing with Whisper AI...";
+            status.style.display = "block";
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/transcribe', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error(await response.text());
+                const result = await response.json();
+                
+                refTextArea.value = result.text;
+                status.textContent = "Transcription complete!";
+            } catch (e) {
+                alert("Transcription failed: " + e.message);
+                status.style.display = "none";
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function generate() {
+            const btn = document.getElementById('gen-btn');
+            const status = document.getElementById('status');
+            const error = document.getElementById('error');
+            const player = document.getElementById('player-section');
+            const audio = document.getElementById('audio-output');
+            const perf = document.getElementById('perf-info');
+
+            const text = document.getElementById('text-input').value;
+            if(!text) { alert("Please enter text"); return; }
+
+            const speed = parseFloat(document.getElementById('speed-input').value);
+            const emotion = document.getElementById('emotion-input').value;
+
+            btn.disabled = true;
+            status.textContent = "Processing... (Generating AI audio on GPU)";
+            status.style.display = "block";
+            error.style.display = "none";
+            player.style.display = "none";
+
+            try {
+                let response;
+                if (mode === 'preset') {
+                    response = await fetch('/generate', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ text, voice: selectedVoice, speed, emotion, mode: 'base' })
+                    });
+                } else if (mode === 'custom') {
+                    response = await fetch('/generate', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ text, voice: selectedSpeaker, speed, emotion, mode: 'custom' })
+                    });
+                } else {
+                    const file = document.getElementById('audio-file').files[0];
+                    if(!file) throw new Error("Please select an audio file for cloning");
+                    const refText = document.getElementById('ref-text').value;
+                    
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('text', text);
+                    formData.append('ref_text', refText);
+                    formData.append('emotion', emotion);
+                    formData.append('speed', speed);
+
+                    response = await fetch('/clone_dynamic', {
+                        method: 'POST',
+                        body: formData
+                    });
+                }
+
+                if (!response.ok) throw new Error(await response.text());
+                
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                
+                audio.src = url;
+                player.style.display = "block";
+                status.textContent = "Success!";
+                audio.play();
+                
+                perf.textContent = "Render complete. Audio generated on your Mac's Metal GPU.";
+
+            } catch (e) {
+                error.textContent = "Error: " + e.message;
+                error.style.display = "block";
+                status.style.display = "none";
+            } finally {
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

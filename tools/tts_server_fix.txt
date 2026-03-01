@@ -1,0 +1,41 @@
+            try:
+                # Generate via MLX in a separate thread to avoid blocking the event loop
+                wav, sr = await asyncio.to_thread(
+                    mlx_engine.generate,
+                    text=clean_text,
+                    mode=mode,
+                    voice=request.voice if mode == "custom" else selected_voice,
+                    instruct=request.emotion,
+                    speed=request.speed,
+                    ref_audio=ref_audio,
+                    ref_text=ref_text,
+                    temperature=temperature,
+                    cfg_scale=cfg_scale
+                )
+                
+                if wav is None:
+                    raise ValueError("MLX generation failed")
+
+                gen_duration = time.time() - start_time
+                logger.info(f"MLX Generation took {gen_duration:.2f}s for {len(clean_text)} chars")
+
+                # 2. Save to Cache Manager index & disk
+                import io as python_io
+                byte_io = python_io.BytesIO()
+                sf.write(byte_io, wav, sr, format='WAV')
+                audio_bytes = byte_io.getvalue()
+                
+                temp_filename = f"{filename}.tmp"
+                with open(temp_filename, "wb") as f:
+                    f.write(audio_bytes)
+                os.replace(temp_filename, filename)
+                
+                cache_manager.add(cache_key, filename, clean_text, selected_voice, params_hash)
+                
+                elapsed = time.time() - start_time
+                logger.info(f"Generation Complete: {cache_key} in {elapsed:.2f}s")
+                
+                return Response(content=audio_bytes, media_type="audio/wav")
+            except Exception as e:
+                logger.error(f"Generation error for {cache_key}: {e}")
+                raise HTTPException(status_code=500, detail=str(e))

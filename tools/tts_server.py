@@ -1,0 +1,384 @@
+import os
+import numpy as np
+import soundfile as sf
+import sqlite3
+import io as python_io
+from fastapi import FastAPI, HTTPException, Body, UploadFile, File, Form, Response
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from mlx_engine import MLXEngine
+from faster_whisper import WhisperModel
+import uuid
+import logging
+import time
+import hashlib
+import asyncio
+from contextlib import asynccontextmanager
+from typing import Optional, Dict, Any
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("metanoia-tts")
+
+# Cache Configuration
+CACHE_DIR = "cache"
+CACHE_DB = os.path.join(CACHE_DIR, "index.db")
+MAX_CACHE_SIZE_MB = 1000 # 1GB
+MAX_CACHE_AGE_DAYS = 30
+
+class TTSCacheManager:
+    def __init__(self):
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        self.conn = sqlite3.connect(CACHE_DB, check_same_thread=False)
+        self.init_db()
+        self.mem_cache: Dict[str, bytes] = {} # Small in-memory cache for very frequent items
+        self.max_mem_items = 20
+
+    def init_db(self):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tts_cache (
+                key TEXT PRIMARY KEY,
+                filename TEXT,
+                text TEXT,
+                voice TEXT,
+                params_hash TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                access_count INTEGER DEFAULT 1,
+                file_size INTEGER
+            )
+        """)
+        self.conn.commit()
+
+    def get(self, key: str) -> Optional[str]:
+        """Returns filename if exists and updates access stats."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT filename FROM tts_cache WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        if row:
+            filename = row[0]
+            if os.path.exists(filename):
+                cursor.execute("""
+                    UPDATE tts_cache SET 
+                    last_accessed = CURRENT_TIMESTAMP, 
+                    access_count = access_count + 1 
+                    WHERE key = ?
+                """, (key,))
+                self.conn.commit()
+                return filename
+            else:
+                # File missing but in DB, cleanup
+                cursor.execute("DELETE FROM tts_cache WHERE key = ?", (key,))
+                self.conn.commit()
+        return None
+
+    def add(self, key: str, filename: str, text: str, voice: str, params_hash: str):
+        """Adds a new entry to the cache index."""
+        file_size = os.path.getsize(filename)
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO tts_cache 
+            (key, filename, text, voice, params_hash, file_size) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (key, filename, text, voice, params_hash, file_size))
+        self.conn.commit()
+        # Trigger async pruning check
+        self.prune()
+
+    def prune(self):
+        """Removes old or least accessed files to stay under size limits."""
+        cursor = self.conn.cursor()
+        # 1. Prune by Age
+        cursor.execute(f"SELECT filename FROM tts_cache WHERE created_at < datetime('now', '-{MAX_CACHE_AGE_DAYS} days')")
+        for (f,) in cursor.fetchall():
+            if os.path.exists(f): os.remove(f)
+        cursor.execute(f"DELETE FROM tts_cache WHERE created_at < datetime('now', '-{MAX_CACHE_AGE_DAYS} days')")
+
+        # 2. Prune by Size (LRU)
+        cursor.execute("SELECT SUM(file_size) FROM tts_cache")
+        total_size = cursor.fetchone()[0] or 0
+        if total_size > MAX_CACHE_SIZE_MB * 1024 * 1024:
+            logger.info("Cache size limit reached, pruning oldest entries...")
+            cursor.execute("SELECT key, filename, file_size FROM tts_cache ORDER BY last_accessed ASC LIMIT 50")
+            for key, f, size in cursor.fetchall():
+                if os.path.exists(f): os.remove(f)
+                cursor.execute("DELETE FROM tts_cache WHERE key = ?", (key,))
+                total_size -= size
+                if total_size <= (MAX_CACHE_SIZE_MB * 0.8) * 1024 * 1024: break # Prune down to 80%
+        
+        self.conn.commit()
+
+# Global instances
+mlx_engine = None
+whisper_model = None
+cache_manager = TTSCacheManager()
+generation_locks: Dict[str, asyncio.Lock] = {}
+
+# Multi-threading helpers
+from concurrent.futures import ThreadPoolExecutor
+executor = ThreadPoolExecutor(max_workers=4)
+gpu_semaphore = asyncio.Semaphore(3) # 3 concurrent GPU tasks for maximum throughput
+
+# Voice Configurations
+VOICE_CONFIGS = {
+    "tommy": {
+        "audio": "data/tommy.wav",
+        "text": "Okay, I do believe I am live"
+    },
+    "lennox": {
+        "audio": "data/lennox_ref.wav",
+        "text": "We need to be worried, first of all, about what the AI that's currently working about the ethical problems it leads to. And they are very scary, and the one that scares people most is deception."
+    },
+    "mari": {
+        "audio": "data/mari_ref.wav",
+        "text": "we all worship the same God each to their own way shame on you for denying your Lord Jesus the Lord said I am the way no other way no one",
+        "mode": "gold",
+        "temperature": 0.4,
+        "cfg_scale": 2.5
+    },
+    "jordan": {
+        "audio": "data/jordan_ref.wav",
+        "text": "Look around and see what bugs you in your room. Do I like this room? No, it bugs me. Why? It's dusty there and the carpet's dirty and that corner's kind of ugly and the light there isn't very good. Okay, pick a problem. Pick a solution to it that you know wouldn't help, that you could do."
+    },
+    "shamoun": {
+        "audio": "data/shamoun_ref.wav",
+        "text": "Okay, why didn't Jesus Christ come out and say, I am God? Why didn't Jesus Christ come out and say, I am God? Now, I already have dozens of sessions answering this, articles answering this, but we are creatures of repetition, and we need to hear something.",
+        "mode": "gold",
+        "temperature": 0.4,
+        "cfg_scale": 2.5
+    },
+    "roumie": {
+        "audio": "data/roumie_perfect_15s.wav",
+        "text": "I am the way, and the truth, and the life. No one comes to the Father except through me. Ah, there's that word. Soon.",
+        "mode": "speedy",
+        "temperature": 0.5,
+        "cfg_scale": 2.0
+    }
+    };
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global mlx_engine, whisper_model
+    logger.info("Loading MLX Engine for Multi-Voice setup...")
+    try:
+        mlx_engine = MLXEngine()
+        mlx_engine.load_models()
+        
+        # Pre-compute prompts for preset voices
+        for name, cfg in VOICE_CONFIGS.items():
+            # Use the voice's preferred mode for pre-computation if specified
+            precompute_mode = cfg.get("mode", "speedy")
+            mlx_engine.precompute_voice_prompt(
+                name=name,
+                audio_path=cfg["audio"],
+                ref_text=cfg["text"],
+                mode=precompute_mode
+            )
+
+        # Load whisper for auto-transcription support
+        logger.info("Loading Faster Whisper (small) for web interface...")
+        whisper_model = WhisperModel("small", device="cpu", compute_type="int8")
+
+    except Exception as e:
+        logger.error(f"Failed to load: {e}")
+    yield
+    mlx_engine = None
+
+app = FastAPI(lifespan=lifespan)
+
+# Create cache and uploads dirs
+os.makedirs("cache", exist_ok=True)
+os.makedirs("uploads", exist_ok=True)
+
+class TTSRequest(BaseModel):
+    text: str
+    voice: str = "tommy"
+    style: str = "Natural"
+    speed: float = 1.0
+    emotion: Optional[str] = None
+    mode: str = "base"
+    force_refresh: bool = False
+    temperature: float = 0.5
+    cfg_scale: float = 2.0
+
+@app.post("/generate")
+async def generate_speech(request: TTSRequest):
+    if mlx_engine is None:
+        raise HTTPException(status_code=503, detail="MLX Engine not loaded")
+    
+    # Normalize input
+    clean_text = request.text.strip()
+    selected_voice = request.voice.lower()
+    
+    # Check if voice is a preset or needs cloning
+    ref_audio = None
+    ref_text = None
+    mode = request.mode
+    temperature = request.temperature
+    cfg_scale = request.cfg_scale
+
+    if selected_voice in VOICE_CONFIGS:
+        cfg = VOICE_CONFIGS[selected_voice]
+        ref_audio = cfg["audio"]
+        ref_text = cfg["text"]
+        
+        # Apply voice-specific overrides
+        mode = cfg.get("mode", "speedy" if mode != "gold" else "gold")
+        temperature = cfg.get("temperature", temperature)
+        cfg_scale = cfg.get("cfg_scale", cfg_scale)
+    else:
+        # If not a preset cloning voice, maybe it's a CustomVoice speaker name
+        if mode != "gold": mode = "custom"
+
+    # Generate a robust cache key including new parameters
+    cache_parts = [clean_text, selected_voice, str(request.speed), str(request.emotion), mode, str(temperature), str(cfg_scale)]
+    params_hash = "|".join(cache_parts[1:]) # Hash of everything but the text
+    cache_key = hashlib.md5("|".join(cache_parts).encode()).hexdigest()
+    filename = f"cache/tts_{cache_key}.wav"
+    abs_filename = os.path.abspath(filename)
+    
+    # 1. Use Cache Manager for retrieval
+    if not request.force_refresh:
+        cached_file = cache_manager.get(cache_key)
+        if cached_file:
+            try:
+                with open(cached_file, "rb") as f:
+                    data = f.read()
+                logger.info(f"Cache Hit (Memory-Buffered): {cache_key}")
+                return Response(content=data, media_type="audio/wav")
+            except Exception as e:
+                logger.warning(f"Failed to read cache file {cached_file}: {e}")
+
+    if cache_key not in generation_locks:
+        generation_locks[cache_key] = asyncio.Lock()
+    
+    async with generation_locks[cache_key]:
+        # Double check after lock
+        if not request.force_refresh:
+            cached_file = cache_manager.get(cache_key)
+            if cached_file and os.path.exists(cached_file):
+                with open(cached_file, "rb") as f:
+                    return Response(content=f.read(), media_type="audio/wav")
+
+        logger.info(f"Cache Miss. Generating via MLX for key {cache_key} (Mode: {mode})...")
+        start_time = time.time()
+        
+        async with gpu_semaphore:
+            try:
+                # Generate via MLX in a separate thread to avoid blocking the event loop
+                wav, sr = await asyncio.to_thread(
+                    mlx_engine.generate,
+                    text=clean_text,
+                    mode=mode,
+                    voice=request.voice if mode == "custom" else selected_voice,
+                    instruct=request.emotion,
+                    speed=request.speed,
+                    ref_audio=ref_audio,
+                    ref_text=ref_text,
+                    temperature=temperature,
+                    cfg_scale=cfg_scale
+                )
+                
+                if wav is None:
+                    raise ValueError("MLX generation failed")
+
+                gen_duration = time.time() - start_time
+                logger.info(f"MLX Generation took {gen_duration:.2f}s for {len(clean_text)} chars")
+
+                # 2. Save to Cache Manager index & disk
+                import io as python_io
+                byte_io = python_io.BytesIO()
+                sf.write(byte_io, wav, sr, format='WAV')
+                audio_bytes = byte_io.getvalue()
+                
+                temp_filename = f"{filename}.tmp"
+                with open(temp_filename, "wb") as f:
+                    f.write(audio_bytes)
+                os.replace(temp_filename, filename)
+                
+                cache_manager.add(cache_key, filename, clean_text, selected_voice, params_hash)
+                
+                elapsed = time.time() - start_time
+                logger.info(f"Generation Complete: {cache_key} in {elapsed:.2f}s")
+                
+                return Response(content=audio_bytes, media_type="audio/wav")
+            except Exception as e:
+                logger.error(f"Generation error for {cache_key}: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/transcribe")
+async def api_transcribe(file: UploadFile = File(...)):
+    if whisper_model is None:
+        raise HTTPException(status_code=503, detail="Whisper model not loaded")
+    
+    temp_path = f"uploads/transcribe_{uuid.uuid4().hex}_{file.filename}"
+    with open(temp_path, "wb") as f:
+        f.write(await file.read())
+    
+    try:
+        logger.info(f"Auto-transcribing uploaded file: {file.filename}")
+        segments, info = whisper_model.transcribe(temp_path, beam_size=5, vad_filter=True)
+        text = " ".join([s.text for s in segments]).strip()
+        os.remove(temp_path)
+        return {"text": text, "language": info.language}
+    except Exception as e:
+        if os.path.exists(temp_path): os.remove(temp_path)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/clone_dynamic")
+async def clone_dynamic(
+    file: UploadFile = File(...),
+    text: str = Form(...),
+    ref_text: Optional[str] = Form(None),
+    emotion: Optional[str] = Form(None),
+    speed: float = Form(1.0)
+):
+    if mlx_engine is None:
+        raise HTTPException(status_code=503, detail="MLX Engine not loaded")
+
+    # Save uploaded reference
+    ref_id = uuid.uuid4().hex
+    ref_path = f"uploads/{ref_id}_{file.filename}"
+    with open(ref_path, "wb") as f:
+        f.write(await file.read())
+
+    logger.info(f"Dynamic Clone: Received {file.filename}, generating target text...")
+    
+    try:
+        # Generate via MLX
+        wav, sr = mlx_engine.generate(
+            text=text,
+            mode="base",
+            ref_audio=ref_path,
+            ref_text=ref_text,
+            instruct=emotion,
+            speed=speed
+        )
+
+        if wav is None:
+            raise ValueError("MLX generation failed")
+
+        out_filename = f"cache/dynamic_{ref_id}.wav"
+        sf.write(out_filename, wav, sr, format='WAV')
+        
+        # Cleanup upload
+        os.remove(ref_path)
+        
+        return FileResponse(os.path.abspath(out_filename), media_type="audio/wav")
+    except Exception as e:
+        logger.error(f"Dynamic clone error: {e}")
+        if os.path.exists(ref_path): os.remove(ref_path)
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Mount static files for the web interface
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)
