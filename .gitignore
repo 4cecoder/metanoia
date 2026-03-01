@@ -33,6 +33,23 @@ mobile/build/
 mobile/local.properties
 mobile/*.apk
 mobile/*.aar
+mobile/models/
+mobile/app/src/main/assets/*.bin
+mobile/app/src/main/assets/*.onnx
+mobile/app/src/main/assets/*.data
+mobile/app/src/main/assets/*.npy
+
+# Large Binary Files
+*.bin
+*.onnx
+*.data
+*.pt
+*.pth
+*.pkl
+*.npy
+*.wav
+*.mp3
+*.m4a
 
 # Miscellaneous
 probe

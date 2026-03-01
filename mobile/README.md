@@ -2,6 +2,21 @@
 
 This is a Kotlin port of the Metanoia TTS server, designed to run **Qwen3-TTS-0.6B** and **Whisper** locally on Android using **ONNX Runtime (ORT)** and **Tensor G4 NNAPI**.
 
+## Repository Structure & Large Files
+To keep the repository lightweight, large binary files are **ignored by Git**. This includes:
+- **Models:** Any `.bin`, `.onnx`, `.data`, or `.npy` files in `mobile/app/src/main/assets/` or `mobile/models/`.
+- **Build Artifacts:** Android `build/` directories, `.apk` files, and `.aar` libraries.
+
+### Model Placement
+After converting your models (see below), place them in:
+- `mobile/app/src/main/assets/`: For models used directly by the Android app.
+- `mobile/models/`: For raw or intermediate ONNX models.
+
+Example required files (not in repo):
+- `mobile/app/src/main/assets/granite_350m_instruct.bin`
+- `mobile/models/vocoder.onnx`
+- `mobile/models/talker_decode.onnx.data`
+
 ## How to Port the Models
 The 0.6B PyTorch model cannot run directly in Kotlin. You must convert it to ONNX:
 
