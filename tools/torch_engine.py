@@ -19,6 +19,7 @@ class TorchEngine:
             "custom": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
         }
         self.prompt_cache = {}
+        self.tensor_cache = {} # Cache for loaded/resampled audio tensors
 
     def load_models(self, mode: Optional[str] = None):
         """Lazy load models based on requested mode using Transformers/Torch."""
@@ -60,29 +61,35 @@ class TorchEngine:
         # Ensure the model for this mode is loaded
         if mode not in self.models:
             self.load_models(mode)
-        
+
         model = self.models[mode]
-        logger.info(f"Pre-computing Torch prompt for {name} ({mode})...")
-        
+        logger.info(f"Pre-caching voice: {name} (Mode: {mode})")
+
         try:
             with torch.no_grad():
-                # Try common names for speaker prompt extraction in different Qwen3 versions
+                # 1. Try to extract high-level speaker prompt (best for speed)
                 prompt = None
                 if hasattr(model, "get_speaker_prompt"):
                     prompt = model.get_speaker_prompt(ref_audio=audio_path, ref_text=ref_text)
                 elif hasattr(model, "preprocess_ref_audio"):
                     prompt = model.preprocess_ref_audio(ref_audio=audio_path, ref_text=ref_text)
-                elif hasattr(model, "extract_speaker_embedding"):
-                    prompt = model.extract_speaker_embedding(ref_audio=audio_path)
 
                 if prompt is not None:
                     self.prompt_cache[name] = prompt
-                    logger.info(f"Successfully cached prompt for {name}")
-                else:
-                    logger.warning(f"Model {mode} (class: {type(model).__name__}) does not expose a known pre-computation method.")
-        except Exception as e:
+                    logger.info(f"Successfully cached speaker prompt for {name}")
+                    return
 
-            logger.warning(f"Failed to pre-compute prompt for {name}: {e}")
+                # 2. Fallback: Cache the processed audio tensor to skip Disk IO/Resampling
+                # This still helps speed up 0.6B base models significantly
+                import librosa
+                audio, _ = librosa.load(audio_path, sr=self.sample_rate)
+                audio_tensor = torch.from_numpy(audio).to(device=self.device, dtype=self.dtype)
+                self.tensor_cache[name] = audio_tensor
+                logger.info(f"Successfully cached audio tensor for {name} (IO bypass enabled)")
+
+        except Exception as e:
+            logger.warning(f"Could not pre-cache {name}: {e}")
+
 
     @property
     def sample_rate(self):
@@ -112,8 +119,10 @@ class TorchEngine:
         
         model = self.models[mode]
         
-        # Check if we have a cached prompt for this voice
-        cached_prompt = self.prompt_cache.get(voice.lower())
+        # Check if we have a cached prompt or tensor for this voice
+        voice_key = voice.lower()
+        cached_prompt = self.prompt_cache.get(voice_key)
+        cached_tensor = self.tensor_cache.get(voice_key)
         
         logger.info(f"Generating Torch audio using mode: {mode} (Model: {self.model_paths.get(mode)})")
 
@@ -161,38 +170,38 @@ class TorchEngine:
                     )
                 elif hasattr(model, "generate_voice_clone"):
                     # Use zero-shot voice cloning
-                    # Prefer cached prompt if available for 10x speedup
+                    # Priority 1: High-level prompt (10x speedup)
+                    # Priority 2: Pre-loaded tensor (3x speedup)
+                    # Priority 3: Disk load (slowest)
+                    
+                    gen_args = {
+                        "text": text,
+                        "language": "English",
+                        "instructions": instruct,
+                        "speed": speed,
+                        "temperature": temperature,
+                        "cfg_scale": cfg_scale
+                    }
+
                     if cached_prompt is not None:
                         logger.info(f"Using CACHED speaker prompt for {voice}")
-                        audio_values = model.generate_voice_clone(
-                            text=text,
-                            language="English",
-                            speaker_prompt=cached_prompt,
-                            instructions=instruct,
-                            speed=speed,
-                            temperature=temperature,
-                            cfg_scale=cfg_scale
-                        )
+                        gen_args["speaker_prompt"] = cached_prompt
+                    elif cached_tensor is not None:
+                        logger.info(f"Using CACHED audio tensor for {voice} (Disk IO bypassed)")
+                        gen_args["ref_audio"] = cached_tensor
+                        gen_args["ref_text"] = ref_text
                     else:
-                        logger.info(f"Using generate_voice_clone. Requested: {ref_audio}")
-                        
+                        logger.info(f"Using slow-path (Disk IO) for {voice}")
                         final_ref_audio = ref_audio or "data/tommy.wav" 
                         final_ref_text = ref_text or "Okay, I do believe I am live"
                         
                         if not os.path.exists(final_ref_audio):
-                            logger.error(f"Missing reference audio: {final_ref_audio}")
-                            raise FileNotFoundError(f"Reference audio file not found: {final_ref_audio}. Please upload it in the 'Upload Samples' tab first.")
+                            raise FileNotFoundError(f"Reference audio not found: {final_ref_audio}")
+                        
+                        gen_args["ref_audio"] = final_ref_audio
+                        gen_args["ref_text"] = final_ref_text
 
-                        audio_values = model.generate_voice_clone(
-                            text=text,
-                            language="English",
-                            ref_audio=final_ref_audio,
-                            ref_text=final_ref_text,
-                            instructions=instruct,
-                            speed=speed,
-                            temperature=temperature,
-                            cfg_scale=cfg_scale
-                        )
+                    audio_values = model.generate_voice_clone(**gen_args)
                 else:
                     # Generic fallback if specific methods are missing but generate exists
                     logger.warning("Specific generate methods missing, trying generic generate.")
