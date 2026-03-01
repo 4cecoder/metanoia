@@ -156,12 +156,12 @@
             <div id="tab-wsl" class="tab" onclick="setMode('wsl')">WSL Debug</div>
         </div>
 
-        <div class="section">
+        <div id="text-input-section" class="section">
             <label>Text to Speak (<span id="char-count">0</span> characters)</label>
             <textarea id="text-input" placeholder="Enter text..." oninput="document.getElementById('char-count').textContent = this.value.length"></textarea>
         </div>
 
-        <div class="section">
+        <div id="params-section" class="section">
             <div class="compact-row">
                 <div style="flex: 2;">
                     <label>Emotion / Instruction (Optional)</label>
@@ -257,6 +257,8 @@
 
         async function setMode(m) {
             mode = m;
+            document.getElementById('text-input-section').style.display = m === 'upload' ? 'none' : 'block';
+            document.getElementById('params-section').style.display = m === 'upload' ? 'none' : 'block';
             document.getElementById('preset-controls').style.display = m === 'preset' ? 'block' : 'none';
             document.getElementById('custom-controls').style.display = m === 'custom' ? 'block' : 'none';
             document.getElementById('clone-controls').style.display = m === 'clone' ? 'block' : 'none';
