@@ -13,7 +13,7 @@ dependencies = [
     "python-multipart",
     "beautifulsoup4",
     "requests",
-    "transformers>=5.0.0",
+    "transformers>=4.48.0",
     "huggingface-hub>=0.25.0",
     "librosa>=0.11.0",
     "scipy>=1.17.1",
