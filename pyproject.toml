@@ -22,7 +22,6 @@ dependencies = [
     "qwen-tts; sys_platform != 'darwin'",
     "transformers==4.57.3; sys_platform != 'darwin'",
     "huggingface-hub>=0.25.0; sys_platform != 'darwin'",
-    "flash-attn>=2.7.0; sys_platform != 'darwin'",
     "mlx>=0.31.0; sys_platform == 'darwin'",
     "mlx-lm>=0.30.5; sys_platform == 'darwin'",
     "mlx-audio; sys_platform == 'darwin'",
@@ -45,6 +44,3 @@ explicit = true
 torch = { index = "pytorch-cuda", marker = "sys_platform != 'darwin'" }
 mlx-audio = { git = "https://github.com/Blaizzy/mlx-audio.git", rev = "9349644ccbd62eb10900852228f7b952c566def3" }
 qwen-tts = { git = "https://github.com/QwenLM/Qwen3-TTS.git" }
-
-[tool.uv.extra-build-dependencies]
-flash-attn = ["torch", "ninja", "setuptools", "wheel"]
