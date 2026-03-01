@@ -606,6 +606,10 @@ if __name__ == "__main__":
     import uvicorn
     import sys
     import socket
+    import os
+    
+    # Debug CUDA asserts
+    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
     
     def get_local_ip():
         try:

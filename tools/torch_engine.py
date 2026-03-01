@@ -46,6 +46,7 @@ class TorchEngine:
                     torch_dtype=self.dtype,
                     attn_implementation=attn_implementation
                 )
+                model.eval() # Ensure model is in evaluation mode
                 self.models[key] = model
         except ImportError:
             logger.error("torch_engine: 'qwen_tts' package not found. Please install the Qwen3-TTS torch implementation.")
@@ -89,6 +90,12 @@ class TorchEngine:
         
         model = self.models[mode]
         logger.info(f"Generating Torch audio using mode: {mode} (Model: {self.model_paths.get(mode)})")
+
+        # Safety: Truncate text if it's exceptionally long to avoid CUDA asserts
+        # Qwen3-TTS usually handles up to 512 tokens, roughly 400-500 chars
+        if len(text) > 400:
+            logger.warning(f"Text too long ({len(text)} chars). Truncating to 400 to avoid CUDA assert.")
+            text = text[:400]
 
         logger.info(f"Generating Torch audio for text ({len(text)} chars)...")
         
