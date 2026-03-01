@@ -102,14 +102,38 @@ class TorchEngine:
         try:
             # Generate using the Torch model
             with torch.no_grad():
-                audio_values = model.generate(**gen_kwargs)
+                if mode == "custom" or (not ref_audio and not instruct):
+                    # Use predefined speaker or base speaker
+                    audio_values = model.generate_custom_voice(
+                        text=text,
+                        language="English",
+                        speaker=voice if mode == "custom" else "Vivian",
+                        instructions=instruct,
+                        speed=speed,
+                        temperature=temperature,
+                        cfg_scale=cfg_scale
+                    )
+                else:
+                    # Use zero-shot voice cloning
+                    audio_values = model.generate_voice_clone(
+                        text=text,
+                        language="English",
+                        ref_audio=ref_audio,
+                        ref_text=ref_text,
+                        instructions=instruct,
+                        speed=speed,
+                        temperature=temperature,
+                        cfg_scale=cfg_scale
+                    )
             
-            # Convert to numpy array and ensure it's on CPU
-            if isinstance(audio_values, list) or isinstance(audio_values, tuple):
-                wav = audio_values[0]
+            # Qwen3 API typically returns (audio, sample_rate) or just audio tensor
+            if isinstance(audio_values, tuple):
+                wav, model_sr = audio_values
             else:
                 wav = audio_values
-                
+                model_sr = self.sample_rate
+            
+            # Ensure wav is on CPU and convert to numpy
             if hasattr(wav, "cpu"):
                 wav = wav.cpu().numpy()
             
@@ -119,7 +143,7 @@ class TorchEngine:
             # Trim silence for punchy playback
             wav = self.trim_silence(wav)
             
-            return wav, self.sample_rate
+            return wav, model_sr
             
         except Exception as e:
             logger.error(f"Torch generation failed: {e}")
