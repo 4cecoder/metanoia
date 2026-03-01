@@ -115,6 +115,13 @@ The application supports multiple voice clones.
 
 ### Switching Voices
 Edit `data/config.json` and change the `selected_voice` field:
+```json
+{
+  "selected_voice": "lennox"
+}
+```
+The server will automatically use the cached prompt for the selected voice.
+
 ## 8. AI-Assisted Development Hints
 These hints help AI agents work effectively with the Metanoia repository:
 - **Repository Hygiene:** All large binary data (`.db`, `.wav`, `.onnx`, `.bin`) is excluded from Git. Do not attempt to read these unless checking local presence.
