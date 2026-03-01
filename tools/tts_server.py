@@ -420,6 +420,41 @@ async def generate_speech(request: TTSRequest):
                 logger.error(f"Generation error for {cache_key}: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/upload_voice_sample")
+async def upload_voice_sample(
+    file: UploadFile = File(...),
+    voice: str = Form(...)
+):
+    """Upload a reference WAV file for a preset voice (e.g. lennox, tommy)."""
+    voice = voice.lower()
+    if voice not in VOICE_CONFIGS:
+        raise HTTPException(status_code=400, detail=f"Voice '{voice}' is not a recognized preset.")
+    
+    if not file.filename.endswith(".wav"):
+        raise HTTPException(status_code=400, detail="Only .wav files are supported for voice samples.")
+
+    target_path = VOICE_CONFIGS[voice]["audio"]
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+    
+    try:
+        content = await file.read()
+        with open(target_path, "wb") as f:
+            f.write(content)
+        
+        logger.info(f"Updated reference audio for {voice} at {target_path}")
+        
+        # Invalidate any pre-computed prompts for this voice
+        engine = get_engine()
+        if engine and hasattr(engine, "prompt_cache"):
+            if voice in engine.prompt_cache:
+                del engine.prompt_cache[voice]
+                logger.info(f"Invalidated prompt cache for {voice}")
+                
+        return {"status": "success", "message": f"Uploaded sample for {voice}", "path": target_path}
+    except Exception as e:
+        logger.error(f"Failed to upload voice sample: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/stream")
 async def stream_speech(
     text: str,

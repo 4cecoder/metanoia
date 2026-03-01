@@ -110,6 +110,7 @@
             <div id="tab-preset" class="tab active" onclick="setMode('preset')">Presets</div>
             <div id="tab-custom" class="tab" onclick="setMode('custom')">Custom</div>
             <div id="tab-clone" class="tab" onclick="setMode('clone')">Instant</div>
+            <div id="tab-upload" class="tab" onclick="setMode('upload')">Upload Samples</div>
             <div id="tab-wsl" class="tab" onclick="setMode('wsl')">WSL Debug</div>
         </div>
 
@@ -177,6 +178,25 @@
             </p>
         </div>
 
+        <div id="upload-controls" class="section" style="display:none;">
+            <label>Restore Missing Voice Samples</label>
+            <div class="compact-row">
+                <select id="upload-voice-select">
+                    <option value="lennox">John Lennox</option>
+                    <option value="tommy">Tommy</option>
+                    <option value="mari">Mari</option>
+                    <option value="jordan">Jordan Peterson</option>
+                    <option value="shamoun">Sam Shamoun</option>
+                    <option value="roumie">Jonathan Roumie</option>
+                </select>
+                <input type="file" id="upload-file" accept="audio/wav">
+            </div>
+            <button class="secondary" onclick="uploadSample()" style="margin-top: 10px;">📤 Upload Reference (.wav)</button>
+            <p style="font-size: 0.75em; margin-top: 10px; opacity: 0.8;">
+                Since large .wav files are excluded from Git, use this to upload them to your remote machine's <code>data/</code> folder.
+            </p>
+        </div>
+
         <button id="gen-btn" onclick="generate()">Generate High-Quality Audio</button>
         
         <div id="status" class="status"></div>
@@ -200,12 +220,46 @@
             document.getElementById('custom-controls').style.display = m === 'custom' ? 'block' : 'none';
             document.getElementById('clone-controls').style.display = m === 'clone' ? 'block' : 'none';
             document.getElementById('wsl-controls').style.display = m === 'wsl' ? 'block' : 'none';
-            document.getElementById('gen-btn').style.display = m === 'wsl' ? 'none' : 'block';
+            document.getElementById('upload-controls').style.display = m === 'upload' ? 'block' : 'none';
+            document.getElementById('gen-btn').style.display = (m === 'wsl' || m === 'upload') ? 'none' : 'block';
             
             document.getElementById('tab-preset').className = 'tab' + (m === 'preset' ? ' active' : '');
             document.getElementById('tab-custom').className = 'tab' + (m === 'custom' ? ' active' : '');
             document.getElementById('tab-clone').className = 'tab' + (m === 'clone' ? ' active' : '');
             document.getElementById('tab-wsl').className = 'tab' + (m === 'wsl' ? ' active' : '');
+            document.getElementById('tab-upload').className = 'tab' + (m === 'upload' ? ' active' : '');
+        }
+
+        async function uploadSample() {
+            const voice = document.getElementById('upload-voice-select').value;
+            const fileInput = document.getElementById('upload-file');
+            const status = document.getElementById('status');
+            const error = document.getElementById('error');
+
+            if (!fileInput.files[0]) { alert("Please select a .wav file"); return; }
+
+            status.textContent = `Uploading sample for ${voice}...`;
+            status.style.display = "block";
+            error.style.display = "none";
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('voice', voice);
+
+            try {
+                const response = await fetch('/upload_voice_sample', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error(await response.text());
+                const result = await response.json();
+                status.textContent = result.message + "!";
+            } catch (e) {
+                error.textContent = "Upload Failed: " + e.message;
+                error.style.display = "block";
+                status.style.display = "none";
+            }
         }
 
         async function runWSLTest(type) {
