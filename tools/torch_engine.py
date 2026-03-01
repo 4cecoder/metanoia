@@ -15,7 +15,7 @@ class TorchEngine:
         self.model_paths = {
             "speedy": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
             "gold": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-            "custom": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+            "custom": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
         }
         self.prompt_cache = {}
 
