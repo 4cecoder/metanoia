@@ -2,7 +2,7 @@
 name = "metanoia-tts"
 version = "0.1.0"
 description = "Qwen3-TTS Backend for Metanoia"
-requires-python = ">=3.12"
+requires-python = ">=3.12, <3.13"
 dependencies = [
     "fastapi",
     "uvicorn",
@@ -13,16 +13,18 @@ dependencies = [
     "python-multipart",
     "beautifulsoup4",
     "requests",
-    "transformers>=4.48.0",
-    "huggingface-hub>=0.25.0",
     "librosa>=0.11.0",
     "scipy>=1.17.1",
     "numba>=0.64.0",
     "pyloudnorm>=0.2.0",
-    "qwen-tts",
+    "qwen-tts; sys_platform != 'darwin'",
+    "transformers==4.57.3; sys_platform != 'darwin'",
+    "huggingface-hub>=0.25.0; sys_platform != 'darwin'",
     "mlx>=0.31.0; sys_platform == 'darwin'",
     "mlx-lm>=0.30.5; sys_platform == 'darwin'",
     "mlx-audio; sys_platform == 'darwin'",
+    "transformers==5.0.0rc3; sys_platform == 'darwin'",
+    "huggingface-hub>=1.5.0; sys_platform == 'darwin'",
 ]
 
 [dependency-groups]
