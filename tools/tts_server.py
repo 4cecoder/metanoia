@@ -165,6 +165,25 @@ async def check_git_updates():
         except Exception as e:
             logger.debug(f"Git update check failed: {e}")
 
+def setup_system_deps():
+    """Checks and installs system-level dependencies if on Linux/Ubuntu."""
+    if platform.system() == "Linux":
+        try:
+            # Check if sox is installed
+            res = subprocess.run(["which", "sox"], capture_output=True)
+            if res.returncode != 0:
+                logger.info("SoX not found. Attempting to install system dependencies...")
+                # Try to install - this assumes the user has sudo rights without password 
+                # or is in a shell that allows it.
+                subprocess.run(["sudo", "apt-get", "update", "-qq"], check=True)
+                subprocess.run(["sudo", "apt-get", "install", "-y", "-qq", "sox", "libsox-fmt-all"], check=True)
+                logger.info("System dependencies (SoX) installed successfully.")
+            else:
+                logger.info("System dependency check: SoX is already installed.")
+        except Exception as e:
+            logger.warning(f"Could not automatically install system deps: {e}")
+            logger.warning("Please manualy run: sudo apt install -y sox libsox-fmt-all")
+
 # Voice Configurations
 VOICE_CONFIGS = {
     "tommy": {
@@ -206,6 +225,9 @@ VOICE_CONFIGS = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global mlx_engine, torch_engine, whisper_model
+    
+    # Handle system dependencies on Linux
+    setup_system_deps()
     
     # Start git polling in the background
     update_task = asyncio.create_task(check_git_updates())
@@ -478,4 +500,4 @@ if __name__ == "__main__":
     logger.info("Starting TTS Server with UV Run compatibility and auto-reload...")
     # Use string-based loading for reload support
     # We must be in the parent directory for "tools.tts_server" or use "tts_server" if tools_dir is in sys.path
-    uvicorn.run("tts_server:app", host="127.0.0.1", port=8000, reload=True, reload_dirs=[tools_dir])
+    uvicorn.run("tts_server:app", host="0.0.0.0", port=8000, reload=True, reload_dirs=[tools_dir])
