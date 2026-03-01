@@ -468,6 +468,42 @@ async def get_voice_status():
         }
     return status
 
+@app.get("/diagnostics")
+async def get_diagnostics():
+    """Detailed hardware and environment report for debugging."""
+    import torch
+    import os
+    import sys
+    
+    cuda_available = torch.cuda.is_available()
+    cuda_details = {}
+    if cuda_available:
+        cuda_details = {
+            "device_count": torch.cuda.device_count(),
+            "current_device": torch.cuda.current_device(),
+            "device_name": torch.cuda.get_device_name(0),
+            "capability": torch.cuda.get_device_capability(0),
+            "memory_allocated": f"{torch.cuda.memory_allocated(0) / 1024**3:.2f} GB",
+            "memory_reserved": f"{torch.cuda.memory_reserved(0) / 1024**3:.2f} GB"
+        }
+
+    return {
+        "platform": platform.system(),
+        "release": platform.release(),
+        "python_version": sys.version,
+        "user_id": os.geteuid() if hasattr(os, 'geteuid') else "N/A",
+        "cuda": {
+            "available": cuda_available,
+            "version": torch.version.cuda,
+            "details": cuda_details
+        },
+        "env": {
+            "LD_LIBRARY_PATH": os.environ.get("LD_LIBRARY_PATH", "Not Set"),
+            "CUDA_HOME": os.environ.get("CUDA_HOME", "Not Set"),
+            "PATH_SNIPPET": os.environ.get("PATH", "")[:100] + "..."
+        }
+    }
+
 @app.get("/system_info")
 async def get_system_info():
     """Report hardware backend and system details."""

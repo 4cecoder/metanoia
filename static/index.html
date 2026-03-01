@@ -296,6 +296,7 @@
                 <button class="secondary" onclick="runWSLTest('custom_voice_1.7b')">Test 1.7B Custom Voice (Aiden)</button>
                 <button class="secondary" onclick="runWSLTest('network_stream')">Test Network Stream (GET)</button>
             </div>
+            <button class="secondary" onclick="runDiagnostics()" style="margin-top: 10px;">🔍 Run Deep Hardware Diagnostics</button>
             <button class="secondary" onclick="resetGPU()" style="margin-top: 10px; border-color: #f7768e; color: #f7768e;">☢️ Reset GPU Backend (Full Restart)</button>
             <p style="font-size: 0.75em; margin-top: 10px; opacity: 0.8;">
                 Use this tab to verify that your remote Linux environment is correctly handling 1.7B parameters and network streaming.
@@ -393,6 +394,21 @@
                     window.location.reload();
                 }, 8000);
             } catch (e) {}
+        }
+
+        async function runDiagnostics() {
+            const status = document.getElementById('status');
+            status.textContent = "Running deep diagnostics...";
+            status.style.display = "block";
+            
+            try {
+                const response = await fetch('/diagnostics');
+                const data = await response.json();
+                showError(JSON.stringify(data, null, 4));
+                status.textContent = "Diagnostics complete. See results below.";
+            } catch (e) {
+                showError("Diagnostics failed: " + e.message);
+            }
         }
 
         function showError(msg) {
