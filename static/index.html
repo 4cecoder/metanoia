@@ -100,6 +100,48 @@
         
         .compact-row { display: flex; gap: 10px; align-items: flex-end; }
         .compact-row > div { flex: 1; }
+
+        /* Status Grid for Uploads */
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .voice-status-card {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .voice-status-card.ready { border-left: 4px solid var(--green); }
+        .voice-status-card.missing { border-left: 4px solid #f7768e; }
+        
+        .voice-info h4 { margin: 0; font-size: 0.95em; }
+        .voice-info p { margin: 2px 0 0 0; font-size: 0.75em; opacity: 0.6; }
+        
+        .status-badge {
+            font-size: 0.7em;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+        .status-badge.ready { background: rgba(158, 206, 106, 0.2); color: var(--green); }
+        .status-badge.missing { background: rgba(247, 118, 142, 0.2); color: #f7768e; }
+        
+        .upload-mini-btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -179,26 +221,19 @@
         </div>
 
         <div id="upload-controls" class="section" style="display:none;">
-            <label>Restore Missing Voice Samples</label>
-            <div class="compact-row">
-                <select id="upload-voice-select" onchange="updateExpectedFilename()">
-                    <option value="lennox">John Lennox</option>
-                    <option value="tommy">Tommy</option>
-                    <option value="mari">Mari</option>
-                    <option value="jordan">Jordan Peterson</option>
-                    <option value="shamoun">Sam Shamoun</option>
-                    <option value="roumie">Jonathan Roumie</option>
-                </select>
-                <input type="file" id="upload-file" accept="audio/wav">
-            </div>
-            <div style="margin-top: 10px; font-size: 0.85em; background: var(--bg); padding: 10px; border-radius: 6px; border: 1px dashed var(--accent);">
-                <strong>Target on Remote:</strong> <code>data/</code><code id="expected-filename">lennox_ref.wav</code>
-            </div>
-            <button class="secondary" onclick="uploadSample()" style="margin-top: 10px;">📤 Upload Reference (.wav)</button>
-            <p style="font-size: 0.75em; margin-top: 10px; opacity: 0.8;">
-                Select the voice preset above and upload the corresponding <code>.wav</code> file from your Mac. 
-                This will save the file to the remote server's <code>data/</code> folder.
+            <label>Remote Voice Mission Control</label>
+            <p style="font-size: 0.75em; margin-bottom: 10px; opacity: 0.8;">
+                The items below are the reference voices your Metanoia app is looking for. 
+                Upload the <code>.wav</code> files from your Mac to arm the remote server.
             </p>
+            
+            <div id="voice-status-list" class="status-grid">
+                <!-- Dynamically populated -->
+                <p style="text-align:center; font-size: 0.8em; opacity: 0.5;">Loading voice status...</p>
+            </div>
+
+            <!-- Hidden file input for the logic -->
+            <input type="file" id="hidden-upload-input" accept="audio/wav" style="display:none;" onchange="handleFileSelected(this)">
         </div>
 
         <button id="gen-btn" onclick="generate()">Generate High-Quality Audio</button>
@@ -218,7 +253,9 @@
         let selectedVoice = 'lennox';
         let selectedSpeaker = 'Aiden';
 
-        function setMode(m) {
+        let currentUploadVoice = null;
+
+        async function setMode(m) {
             mode = m;
             document.getElementById('preset-controls').style.display = m === 'preset' ? 'block' : 'none';
             document.getElementById('custom-controls').style.display = m === 'custom' ? 'block' : 'none';
@@ -232,23 +269,63 @@
             document.getElementById('tab-clone').className = 'tab' + (m === 'clone' ? ' active' : '');
             document.getElementById('tab-wsl').className = 'tab' + (m === 'wsl' ? ' active' : '');
             document.getElementById('tab-upload').className = 'tab' + (m === 'upload' ? ' active' : '');
+
+            if (m === 'upload') {
+                await refreshVoiceStatus();
+            }
         }
 
-        async function uploadSample() {
-            const voice = document.getElementById('upload-voice-select').value;
-            const fileInput = document.getElementById('upload-file');
+        async function refreshVoiceStatus() {
+            const list = document.getElementById('voice-status-list');
+            try {
+                const response = await fetch('/voice_status');
+                const data = await response.json();
+                
+                list.innerHTML = '';
+                for (const [key, info] of Object.entries(data)) {
+                    const card = document.createElement('div');
+                    card.className = `voice-status-card ${info.exists ? 'ready' : 'missing'}`;
+                    
+                    card.innerHTML = `
+                        <div class="voice-info">
+                            <h4>${info.display_name}</h4>
+                            <p>Target: <code>data/${info.filename}</code></p>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span class="status-badge ${info.exists ? 'ready' : 'missing'}">
+                                ${info.exists ? 'Ready' : 'Missing'}
+                            </span>
+                            <button class="upload-mini-btn" onclick="triggerUpload('${key}')">
+                                ${info.exists ? 'Replace' : 'Upload'}
+                            </button>
+                        </div>
+                    `;
+                    list.appendChild(card);
+                }
+            } catch (e) {
+                list.innerHTML = `<p style="color:#f7768e; font-size:0.8em;">Error checking status: ${e.message}</p>`;
+            }
+        }
+
+        function triggerUpload(voiceKey) {
+            currentUploadVoice = voiceKey;
+            document.getElementById('hidden-upload-input').click();
+        }
+
+        async function handleFileSelected(input) {
+            if (!input.files[0] || !currentUploadVoice) return;
+            
+            const file = input.files[0];
             const status = document.getElementById('status');
             const error = document.getElementById('error');
 
-            if (!fileInput.files[0]) { alert("Please select a .wav file"); return; }
-
-            status.textContent = `Uploading sample for ${voice}...`;
+            status.textContent = `Uploading ${file.name} for ${currentUploadVoice}...`;
             status.style.display = "block";
             error.style.display = "none";
 
             const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            formData.append('voice', voice);
+            formData.append('file', file);
+            formData.append('voice', currentUploadVoice);
 
             try {
                 const response = await fetch('/upload_voice_sample', {
@@ -257,12 +334,15 @@
                 });
 
                 if (!response.ok) throw new Error(await response.text());
-                const result = await response.json();
-                status.textContent = result.message + "!";
+                status.textContent = "Upload successful!";
+                await refreshVoiceStatus(); // Update the list
             } catch (e) {
                 error.textContent = "Upload Failed: " + e.message;
                 error.style.display = "block";
                 status.style.display = "none";
+            } finally {
+                input.value = ''; // Reset
+                currentUploadVoice = null;
             }
         }
 

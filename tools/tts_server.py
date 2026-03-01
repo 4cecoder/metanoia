@@ -420,6 +420,20 @@ async def generate_speech(request: TTSRequest):
                 logger.error(f"Generation error for {cache_key}: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/voice_status")
+async def get_voice_status():
+    """Check which preset voice reference files exist on the server."""
+    status = {}
+    for name, cfg in VOICE_CONFIGS.items():
+        exists = os.path.exists(cfg["audio"])
+        status[name] = {
+            "exists": exists,
+            "path": cfg["audio"],
+            "filename": os.path.basename(cfg["audio"]),
+            "display_name": name.capitalize() if name != "roumie" else "Jonathan Roumie"
+        }
+    return status
+
 @app.post("/upload_voice_sample")
 async def upload_voice_sample(
     file: UploadFile = File(...),
