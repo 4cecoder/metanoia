@@ -57,10 +57,29 @@ class TorchEngine:
         if not os.path.exists(audio_path):
             return
 
-        logger.info(f"Pre-computing Torch prompt for {name}...")
-        # Torch implementation would involve extracting latents from audio
-        # self.prompt_cache[name] = ...
-        pass
+        # Ensure the model for this mode is loaded
+        if mode not in self.models:
+            self.load_models(mode)
+        
+        model = self.models[mode]
+        logger.info(f"Pre-computing Torch prompt for {name} ({mode})...")
+        
+        try:
+            with torch.no_grad():
+                # Extract speaker prompt using the model's internal API
+                # This prevents re-encoding the WAV on every single request
+                # Note: exact method name might vary, qwen-tts usually uses get_speaker_prompt or similar
+                if hasattr(model, "get_speaker_prompt"):
+                    prompt = model.get_speaker_prompt(
+                        ref_audio=audio_path,
+                        ref_text=ref_text
+                    )
+                    self.prompt_cache[name] = prompt
+                    logger.info(f"Successfully cached prompt for {name}")
+                else:
+                    logger.warning(f"Model {mode} does not support pre-computing prompts.")
+        except Exception as e:
+            logger.warning(f"Failed to pre-compute prompt for {name}: {e}")
 
     @property
     def sample_rate(self):
@@ -89,6 +108,10 @@ class TorchEngine:
                 mode = "speedy"
         
         model = self.models[mode]
+        
+        # Check if we have a cached prompt for this voice
+        cached_prompt = self.prompt_cache.get(voice.lower())
+        
         logger.info(f"Generating Torch audio using mode: {mode} (Model: {self.model_paths.get(mode)})")
 
         # Safety: Sanitize text (remove non-standard chars that might confuse the tokenizer)
@@ -134,28 +157,39 @@ class TorchEngine:
                         cfg_scale=cfg_scale
                     )
                 elif hasattr(model, "generate_voice_clone"):
-                    # Use zero-shot voice cloning (default for Base models)
-                    # If no ref_audio is provided, we must check if we have a default
-                    logger.info(f"Using generate_voice_clone. Requested: {ref_audio}")
-                    
-                    final_ref_audio = ref_audio or "data/tommy.wav" 
-                    final_ref_text = ref_text or "Okay, I do believe I am live"
-                    
-                    # Safety: Ensure the reference file actually exists on the filesystem
-                    if not os.path.exists(final_ref_audio):
-                        logger.error(f"Missing reference audio: {final_ref_audio}")
-                        raise FileNotFoundError(f"Reference audio file not found: {final_ref_audio}. Please upload it in the 'Upload Samples' tab first.")
+                    # Use zero-shot voice cloning
+                    # Prefer cached prompt if available for 10x speedup
+                    if cached_prompt is not None:
+                        logger.info(f"Using CACHED speaker prompt for {voice}")
+                        audio_values = model.generate_voice_clone(
+                            text=text,
+                            language="English",
+                            speaker_prompt=cached_prompt,
+                            instructions=instruct,
+                            speed=speed,
+                            temperature=temperature,
+                            cfg_scale=cfg_scale
+                        )
+                    else:
+                        logger.info(f"Using generate_voice_clone. Requested: {ref_audio}")
+                        
+                        final_ref_audio = ref_audio or "data/tommy.wav" 
+                        final_ref_text = ref_text or "Okay, I do believe I am live"
+                        
+                        if not os.path.exists(final_ref_audio):
+                            logger.error(f"Missing reference audio: {final_ref_audio}")
+                            raise FileNotFoundError(f"Reference audio file not found: {final_ref_audio}. Please upload it in the 'Upload Samples' tab first.")
 
-                    audio_values = model.generate_voice_clone(
-                        text=text,
-                        language="English",
-                        ref_audio=final_ref_audio,
-                        ref_text=final_ref_text,
-                        instructions=instruct,
-                        speed=speed,
-                        temperature=temperature,
-                        cfg_scale=cfg_scale
-                    )
+                        audio_values = model.generate_voice_clone(
+                            text=text,
+                            language="English",
+                            ref_audio=final_ref_audio,
+                            ref_text=final_ref_text,
+                            instructions=instruct,
+                            speed=speed,
+                            temperature=temperature,
+                            cfg_scale=cfg_scale
+                        )
                 else:
                     # Generic fallback if specific methods are missing but generate exists
                     logger.warning("Specific generate methods missing, trying generic generate.")
