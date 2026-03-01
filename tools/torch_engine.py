@@ -22,20 +22,29 @@ class TorchEngine:
     def load_models(self, mode: Optional[str] = None):
         """Lazy load models based on requested mode using Transformers/Torch."""
         try:
-            # Note: This requires the 'qwen_tts' package or similar implementation
-            # available on HuggingFace/local.
             from qwen_tts import Qwen3TTSModel
             
+            # Auto-detect flash attention availability
+            attn_implementation = "eager"
+            if self.device == "cuda":
+                try:
+                    import flash_attn
+                    attn_implementation = "flash_attention_2"
+                    logger.info("Flash Attention 2 detected and enabled.")
+                except ImportError:
+                    logger.info("Flash Attention not found, using default attention.")
+
             modes = [mode] if mode else ["speedy"]
             for key in modes:
                 if key in self.models: continue
                 model_id = self.model_paths.get(key)
-                logger.info(f"Loading Torch model {key} on {self.device}...")
+                logger.info(f"Loading Torch model {key} on {self.device} (Attn: {attn_implementation})...")
                 
                 model = Qwen3TTSModel.from_pretrained(
                     model_id,
                     device_map=self.device,
-                    torch_dtype=self.dtype
+                    torch_dtype=self.dtype,
+                    attn_implementation=attn_implementation
                 )
                 self.models[key] = model
         except ImportError:
