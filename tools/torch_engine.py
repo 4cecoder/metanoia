@@ -47,14 +47,13 @@ class TorchEngine:
                 # Load with explicit optimizations
                 model = Qwen3TTSModel.from_pretrained(
                     model_id,
+                    device_map=self.device,
                     torch_dtype=self.dtype,
                     attn_implementation=attn_implementation
                 )
                 
-                # Explicitly move to device to ensure no lazy CPU residency
-                model.to(self.device)
                 self.models[key] = model
-                logger.info(f"Model {key} is now resident on {self.device}")
+                logger.info(f"Model {key} loaded successfully on {self.device}")
         except ImportError:
             logger.error("torch_engine: 'qwen_tts' package not found. Please install the Qwen3-TTS torch implementation.")
             raise RuntimeError("TorchEngine requires 'qwen_tts' package for NVIDIA/CUDA support.")
