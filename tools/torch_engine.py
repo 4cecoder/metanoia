@@ -54,6 +54,17 @@ class TorchEngine:
                 
                 self.models[key] = model
                 logger.info(f"Model {key} loaded successfully on {self.device}")
+
+                # --- MAXIMUM SPEED ARMAMENTS: torch.compile ---
+                if hasattr(torch, "compile"):
+                    logger.info(f"Compiling model {key} for maximum speed (reduce-overhead mode)...")
+                    try:
+                        # 'reduce-overhead' is ideal for TTS where latency is key
+                        self.models[key] = torch.compile(model, mode="reduce-overhead")
+                        logger.info(f"Model {key} compilation complete.")
+                    except Exception as e:
+                        logger.warning(f"Could not compile model {key}: {e}. Falling back to standard.")
+                # ---------------------------------------------
         except ImportError:
             logger.error("torch_engine: 'qwen_tts' package not found. Please install the Qwen3-TTS torch implementation.")
             raise RuntimeError("TorchEngine requires 'qwen_tts' package for NVIDIA/CUDA support.")
@@ -82,6 +93,20 @@ class TorchEngine:
                 if prompt is not None:
                     self.prompt_cache[name] = prompt
                     logger.info(f"Successfully cached speaker prompt for {name}")
+                    
+                    # WARMUP: Prime the compiled kernels so the first request is instant
+                    try:
+                        logger.info(f"Warming up kernels for {name}...")
+                        with torch.no_grad():
+                            model.generate_voice_clone(
+                                text="Warmup.",
+                                language="English",
+                                speaker_prompt=prompt,
+                                speed=1.0
+                            )
+                        logger.info(f"Warmup complete for {name}")
+                    except Exception:
+                        pass
                     return
 
                 # 2. Fallback: Cache the processed audio array to skip Disk IO/Resampling
