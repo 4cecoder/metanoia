@@ -77,10 +77,18 @@ class TorchEngine:
         temperature: float = 0.5,
         cfg_scale: float = 2.0
     ):
-        model = self.models.get(mode) or self.models.get("speedy")
-        if not model:
-            self.load_models(mode)
-            model = self.models.get(mode)
+        # Ensure the requested mode is loaded
+        if mode not in self.models:
+            if mode in self.model_paths:
+                self.load_models(mode)
+            else:
+                # Fallback to speedy if mode is unknown
+                if "speedy" not in self.models:
+                    self.load_models("speedy")
+                mode = "speedy"
+        
+        model = self.models[mode]
+        logger.info(f"Generating Torch audio using mode: {mode} (Model: {self.model_paths.get(mode)})")
 
         logger.info(f"Generating Torch audio for text ({len(text)} chars)...")
         
