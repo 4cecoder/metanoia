@@ -15,7 +15,7 @@ class TorchEngine:
         self.model_paths = {
             "speedy": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
             "gold": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-            "custom": "Qwen/Qwen3-TTS-12Hz-0.6B-Base" # Fallback to base
+            "custom": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
         }
         self.prompt_cache = {}
 
@@ -102,29 +102,45 @@ class TorchEngine:
         try:
             # Generate using the Torch model
             with torch.no_grad():
-                if mode == "custom" or (not ref_audio and not instruct):
-                    # Use predefined speaker or base speaker
+                # Check if we should use custom voice (predefined speakers)
+                if mode == "custom" and hasattr(model, "generate_custom_voice"):
+                    logger.info(f"Using generate_custom_voice with speaker: {voice}")
                     audio_values = model.generate_custom_voice(
                         text=text,
                         language="English",
-                        speaker=voice if mode == "custom" else "Vivian",
+                        speaker=voice,
+                        instructions=instruct,
+                        speed=speed,
+                        temperature=temperature,
+                        cfg_scale=cfg_scale
+                    )
+                elif hasattr(model, "generate_voice_clone"):
+                    # Use zero-shot voice cloning (default for Base models)
+                    # If no ref_audio is provided, we use a default prompt if the model requires it
+                    # or the model might have a built-in default for this method.
+                    logger.info(f"Using generate_voice_clone. Ref audio: {ref_audio}")
+                    
+                    # Ensure we have some reference if required by base model
+                    final_ref_audio = ref_audio or "data/tommy.wav" 
+                    final_ref_text = ref_text or "Okay, I do believe I am live"
+                    
+                    audio_values = model.generate_voice_clone(
+                        text=text,
+                        language="English",
+                        ref_audio=final_ref_audio,
+                        ref_text=final_ref_text,
                         instructions=instruct,
                         speed=speed,
                         temperature=temperature,
                         cfg_scale=cfg_scale
                     )
                 else:
-                    # Use zero-shot voice cloning
-                    audio_values = model.generate_voice_clone(
-                        text=text,
-                        language="English",
-                        ref_audio=ref_audio,
-                        ref_text=ref_text,
-                        instructions=instruct,
-                        speed=speed,
-                        temperature=temperature,
-                        cfg_scale=cfg_scale
-                    )
+                    # Generic fallback if specific methods are missing but generate exists
+                    logger.warning("Specific generate methods missing, trying generic generate.")
+                    if hasattr(model, "generate"):
+                        audio_values = model.generate(text=text, speed=speed)
+                    else:
+                        raise AttributeError(f"Model {type(model)} has no supported generation methods.")
             
             # Qwen3 API typically returns (audio, sample_rate) or just audio tensor
             if isinstance(audio_values, tuple):
