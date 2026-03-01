@@ -7,7 +7,6 @@ from fastapi import FastAPI, HTTPException, Body, UploadFile, File, Form, Respon
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from mlx_engine import MLXEngine
 from faster_whisper import WhisperModel
 import uuid
 import logging
@@ -15,6 +14,7 @@ import time
 import hashlib
 import asyncio
 import subprocess
+import platform
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any
 
@@ -195,13 +195,18 @@ async def lifespan(app: FastAPI):
     update_task = asyncio.create_task(check_git_updates())
     
     # System Detection
+    is_macos = platform.system() == "Darwin"
     has_mlx = False
-    try:
-        import mlx.core as mx
-        has_mlx = True
-        logger.info("MLX detected. Using MLXEngine for Apple Silicon.")
-    except ImportError:
-        logger.info("MLX not found. Checking for NVIDIA/CUDA...")
+    
+    if is_macos:
+        try:
+            import mlx.core as mx
+            has_mlx = True
+            logger.info("Apple Silicon detected. Using MLXEngine.")
+        except ImportError:
+            logger.info("MLX not found on macOS. Falling back to Torch/CPU.")
+    else:
+        logger.info(f"Platform: {platform.system()} (WSL/Ubuntu). Ignoring MLX and checking for NVIDIA/CUDA...")
 
     try:
         engine = None
@@ -211,23 +216,17 @@ async def lifespan(app: FastAPI):
             mlx_engine.load_models()
             engine = mlx_engine
         else:
+            # Import torch here as fallback for both non-MLX macOS and all Linux/WSL
             import torch
             if torch.cuda.is_available():
                 logger.info("NVIDIA GPU with CUDA detected. Using TorchEngine.")
-                from torch_engine import TorchEngine
-                torch_engine = TorchEngine()
-                torch_engine.load_models()
-                engine = torch_engine
             else:
-                logger.warning("No GPU (MLX or CUDA) detected. TTS will be slow on CPU.")
-                # Fallback to Torch CPU if possible
-                try:
-                    from torch_engine import TorchEngine
-                    torch_engine = TorchEngine()
-                    torch_engine.load_models()
-                    engine = torch_engine
-                except ImportError:
-                    logger.error("TorchEngine not available for CPU fallback.")
+                logger.warning("No NVIDIA GPU detected. Running on CPU (slow).")
+            
+            from torch_engine import TorchEngine
+            torch_engine = TorchEngine()
+            torch_engine.load_models()
+            engine = torch_engine
 
         # Pre-compute prompts for preset voices
         if engine:
