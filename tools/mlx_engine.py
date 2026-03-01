@@ -27,6 +27,10 @@ class MLXEngine:
         }
         self.prompt_cache = {} 
         
+    @property
+    def sample_rate(self):
+        return 24000
+
     def load_models(self, mode: Optional[str] = None):
         """Lazy load models based on requested mode."""
         modes = [mode] if mode else self.model_paths.keys()

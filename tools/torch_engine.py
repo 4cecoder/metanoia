@@ -61,6 +61,10 @@ class TorchEngine:
         # self.prompt_cache[name] = ...
         pass
 
+    @property
+    def sample_rate(self):
+        return 24000
+
     def generate(
         self, 
         text: str, 
@@ -78,10 +82,48 @@ class TorchEngine:
             self.load_models(mode)
             model = self.models.get(mode)
 
-        # Implementation depends on the specific Qwen3-TTS torch API
-        # results = model.generate(...)
-        # return wav, sr
-        raise NotImplementedError("Torch generation logic depends on the specific 'qwen_tts' package implementation.")
+        logger.info(f"Generating Torch audio for text ({len(text)} chars)...")
+        
+        # Prepare generation arguments
+        # Note: API names may vary slightly based on the final qwen_tts package release
+        gen_kwargs = {
+            "text": text,
+            "ref_audio": ref_audio,
+            "ref_text": ref_text,
+            "speed": speed,
+            "temperature": temperature,
+            "cfg_scale": cfg_scale,
+            "language": "en" # Default to English for now
+        }
+        
+        if instruct:
+            gen_kwargs["instruct"] = instruct
+
+        try:
+            # Generate using the Torch model
+            with torch.no_grad():
+                audio_values = model.generate(**gen_kwargs)
+            
+            # Convert to numpy array and ensure it's on CPU
+            if isinstance(audio_values, list) or isinstance(audio_values, tuple):
+                wav = audio_values[0]
+            else:
+                wav = audio_values
+                
+            if hasattr(wav, "cpu"):
+                wav = wav.cpu().numpy()
+            
+            # Squeeze to 1D if necessary
+            wav = np.squeeze(wav)
+            
+            # Trim silence for punchy playback
+            wav = self.trim_silence(wav)
+            
+            return wav, self.sample_rate
+            
+        except Exception as e:
+            logger.error(f"Torch generation failed: {e}")
+            raise
 
     def trim_silence(self, wav: np.ndarray, threshold: float = 0.005) -> np.ndarray:
         # Same logic as MLXEngine
