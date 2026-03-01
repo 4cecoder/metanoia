@@ -207,7 +207,8 @@ class TorchEngine:
                         gen_args["speaker_prompt"] = cached_prompt
                     elif cached_tensor is not None:
                         logger.info(f"Using CACHED audio array for {voice} (Disk IO bypassed)")
-                        gen_args["ref_audio"] = cached_tensor
+                        # API expects (waveform, sample_rate) for numpy input
+                        gen_args["ref_audio"] = (cached_tensor, self.sample_rate)
                         gen_args["ref_text"] = ref_text
                     else:
                         logger.info(f"Using slow-path (Disk IO) for {voice}")
@@ -217,10 +218,10 @@ class TorchEngine:
                         if not os.path.exists(final_ref_audio):
                             raise FileNotFoundError(f"Reference audio not found: {final_ref_audio}")
                         
-                        # Load as numpy array (API expected format)
+                        # Load as numpy array and package with sample rate
                         import librosa
                         audio, _ = librosa.load(final_ref_audio, sr=self.sample_rate)
-                        gen_args["ref_audio"] = audio
+                        gen_args["ref_audio"] = (audio, self.sample_rate)
                         gen_args["ref_text"] = final_ref_text
 
                     audio_values = model.generate_voice_clone(**gen_args)
