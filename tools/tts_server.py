@@ -144,10 +144,26 @@ async def check_git_updates():
             
             if local != remote:
                 logger.info("--- Git updates detected on master! Pulling changes... ---")
+                
+                # Check what files changed
+                changed_files = subprocess.getoutput("git diff --name-only HEAD origin/master").split()
+                
+                # Pull the changes
                 subprocess.run(["git", "pull", "origin", "master"], check=True)
+                
+                # If dependencies changed, sync them
+                if any(f in changed_files for f in ["pyproject.toml", "uv.lock", "requirements.txt"]):
+                    logger.info("--- Dependency changes detected! Running uv sync... ---")
+                    try:
+                        # Try uv sync first as it's the preferred method
+                        subprocess.run(["uv", "sync"], check=True)
+                    except FileNotFoundError:
+                        # Fallback to pip if uv is not in PATH (though uv run implies it is)
+                        subprocess.run([sys.executable, "-m", "pip", "install", "."], check=True)
+                
                 # uvicorn with reload=True will detect the file changes and restart the server
         except Exception as e:
-            logger.debug(f"Git update check failed (likely no internet or not a git repo): {e}")
+            logger.debug(f"Git update check failed: {e}")
 
 # Voice Configurations
 VOICE_CONFIGS = {
