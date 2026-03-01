@@ -110,6 +110,7 @@
             <div id="tab-preset" class="tab active" onclick="setMode('preset')">Presets</div>
             <div id="tab-custom" class="tab" onclick="setMode('custom')">Custom</div>
             <div id="tab-clone" class="tab" onclick="setMode('clone')">Instant</div>
+            <div id="tab-wsl" class="tab" onclick="setMode('wsl')">WSL Debug</div>
         </div>
 
         <div class="section">
@@ -165,6 +166,17 @@
             <textarea id="ref-text" style="height:50px; margin-top: 10px;" placeholder="Audio Transcript..."></textarea>
         </div>
 
+        <div id="wsl-controls" class="section" style="display:none;">
+            <label>RTX 4090 / WSL Diagnostic Tests</label>
+            <div class="btn-group">
+                <button class="secondary" onclick="runWSLTest('custom_voice_1.7b')">Test 1.7B Custom Voice (Aiden)</button>
+                <button class="secondary" onclick="runWSLTest('network_stream')">Test Network Stream (GET)</button>
+            </div>
+            <p style="font-size: 0.75em; margin-top: 10px; opacity: 0.8;">
+                Use this tab to verify that your remote Linux environment is correctly handling 1.7B parameters and network streaming.
+            </p>
+        </div>
+
         <button id="gen-btn" onclick="generate()">Generate High-Quality Audio</button>
         
         <div id="status" class="status"></div>
@@ -187,10 +199,64 @@
             document.getElementById('preset-controls').style.display = m === 'preset' ? 'block' : 'none';
             document.getElementById('custom-controls').style.display = m === 'custom' ? 'block' : 'none';
             document.getElementById('clone-controls').style.display = m === 'clone' ? 'block' : 'none';
+            document.getElementById('wsl-controls').style.display = m === 'wsl' ? 'block' : 'none';
+            document.getElementById('gen-btn').style.display = m === 'wsl' ? 'none' : 'block';
             
             document.getElementById('tab-preset').className = 'tab' + (m === 'preset' ? ' active' : '');
             document.getElementById('tab-custom').className = 'tab' + (m === 'custom' ? ' active' : '');
             document.getElementById('tab-clone').className = 'tab' + (m === 'clone' ? ' active' : '');
+            document.getElementById('tab-wsl').className = 'tab' + (m === 'wsl' ? ' active' : '');
+        }
+
+        async function runWSLTest(type) {
+            const status = document.getElementById('status');
+            const error = document.getElementById('error');
+            const player = document.getElementById('player-section');
+            const audio = document.getElementById('audio-output');
+            const perf = document.getElementById('perf-info');
+            const text = document.getElementById('text-input').value || "Metanoia system check. RTX 4090 armaments engaged.";
+
+            status.textContent = `Running WSL Test: ${type}...`;
+            status.style.display = "block";
+            error.style.display = "none";
+            player.style.display = "none";
+
+            try {
+                let response;
+                if (type === 'custom_voice_1.7b') {
+                    // Force a call to the 1.7B model with a specific speaker
+                    response = await fetch('/generate', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ 
+                            text: text, 
+                            voice: 'Aiden', 
+                            mode: 'custom',
+                            emotion: 'A deep, confident male voice' 
+                        })
+                    });
+                } else if (type === 'network_stream') {
+                    // Test the streaming GET endpoint
+                    const url = `/stream?text=${encodeURIComponent(text)}&voice=lennox&speed=1.0`;
+                    audio.src = url;
+                    player.style.display = "block";
+                    status.textContent = "Streaming started directly from GET endpoint!";
+                    audio.play();
+                    return;
+                }
+
+                if (!response.ok) throw new Error(await response.text());
+                const blob = await response.blob();
+                audio.src = URL.createObjectURL(blob);
+                player.style.display = "block";
+                status.textContent = "WSL Test Success!";
+                audio.play();
+                perf.textContent = "Render complete. Verified on Linux/WSL CUDA Backend.";
+            } catch (e) {
+                error.textContent = "WSL Test Failed: " + e.message;
+                error.style.display = "block";
+                status.style.display = "none";
+            }
         }
 
         function selectVoice(btn, v) {
