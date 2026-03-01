@@ -619,7 +619,16 @@ async def clone_dynamic(
         raise HTTPException(status_code=500, detail=str(e))
 
 # Mount static files for the web interface
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+async def serve_index():
+    from fastapi.responses import FileResponse
+    response = FileResponse("static/index.html")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 if __name__ == "__main__":
     import uvicorn
