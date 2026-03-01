@@ -47,4 +47,4 @@ mlx-audio = { git = "https://github.com/Blaizzy/mlx-audio.git", rev = "9349644cc
 qwen-tts = { git = "https://github.com/QwenLM/Qwen3-TTS.git" }
 
 [tool.uv.extra-build-dependencies]
-flash-attn = ["torch"]
+flash-attn = ["torch", "ninja", "setuptools", "wheel"]
