@@ -36,6 +36,20 @@ pub fn get_cache_key(allocator: std.mem.Allocator, text: []const u8, voice: []co
 
 pub fn generate_speech(engine: std.Io, text: []const u8, voice: []const u8, speed: f32, emotion: []const u8, mode: []const u8, force_refresh: bool) ![]const u8 {
     const allocator = std.heap.page_allocator;
+    
+    // 0. Load server address from config
+    var server_url: []const u8 = "http://127.0.0.1:8000";
+    if (std.Io.Dir.cwd().readFileAlloc(allocator, engine, "data/config.json", std.Io.Limit.limited(4096))) |config_data| {
+        defer allocator.free(config_data);
+        if (std.json.parseFromSlice(std.json.Value, allocator, config_data, .{})) |parsed| {
+            defer parsed.deinit();
+            if (parsed.value.object.get("tts_server_url")) |url| {
+                server_url = try allocator.dupe(u8, url.string);
+            }
+        } else |_| {}
+    } else |_| {}
+    defer if (!std.mem.eql(u8, server_url, "http://127.0.0.1:8000")) allocator.free(server_url);
+
     const cache_key = try get_cache_key(allocator, text, voice, speed, emotion, mode);
     // Note: Caller is responsible for this memory if we return it, but here we use it for path
     
@@ -78,8 +92,11 @@ pub fn generate_speech(engine: std.Io, text: []const u8, voice: []const u8, spee
     const data_arg = try std.fmt.allocPrint(allocator, "@{s}", .{tts_json_path});
     defer allocator.free(data_arg);
 
+    const full_endpoint = try std.fmt.allocPrint(allocator, "{s}/generate", .{server_url});
+    defer allocator.free(full_endpoint);
+
     var child = try std.process.spawn(engine, .{
-        .argv = &.{ "curl", "-s", "-f", "-X", "POST", "http://127.0.0.1:8000/generate", "-H", "Content-Type: application/json", "--data-binary", data_arg, "-o", out_audio_path },
+        .argv = &.{ "curl", "-s", "-f", "-X", "POST", full_endpoint, "-H", "Content-Type: application/json", "--data-binary", data_arg, "-o", out_audio_path },
     });
     const term = try child.wait(engine);
     if (term == .exited and term.exited != 0) return error.TtsServerError;

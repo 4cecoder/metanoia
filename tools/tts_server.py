@@ -5,7 +5,7 @@ import sqlite3
 import io as python_io
 from fastapi import FastAPI, HTTPException, Body, UploadFile, File, Form, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from faster_whisper import WhisperModel
 import uuid
@@ -419,6 +419,63 @@ async def generate_speech(request: TTSRequest):
             except Exception as e:
                 logger.error(f"Generation error for {cache_key}: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/stream")
+async def stream_speech(
+    text: str,
+    voice: str = "tommy",
+    speed: float = 1.0,
+    emotion: Optional[str] = None,
+    mode: str = "base",
+    temperature: float = 0.5,
+    cfg_scale: float = 2.0
+):
+    """Streaming endpoint for low-latency network playback."""
+    engine = get_engine()
+    if engine is None:
+        raise HTTPException(status_code=503, detail="TTS Engine not loaded")
+
+    # Resolve voice config for preset overrides
+    selected_voice = voice.lower()
+    ref_audio = None
+    ref_text = None
+    if selected_voice in VOICE_CONFIGS:
+        cfg = VOICE_CONFIGS[selected_voice]
+        ref_audio = cfg["audio"]
+        ref_text = cfg["text"]
+        mode = cfg.get("mode", "speedy" if mode != "gold" else "gold")
+        temperature = cfg.get("temperature", temperature)
+        cfg_scale = cfg.get("cfg_scale", cfg_scale)
+
+    async def audio_generator():
+        # This requires the engine.generate to be a generator or modified to yield
+        # For now, we'll simulate streaming by yielding the full result in chunks
+        # if the engine doesn't support true chunked yielding yet.
+        wav, sr = await asyncio.to_thread(
+            engine.generate,
+            text=text,
+            mode=mode,
+            voice=voice if mode == "custom" else selected_voice,
+            instruct=emotion,
+            speed=speed,
+            ref_audio=ref_audio,
+            ref_text=ref_text,
+            temperature=temperature,
+            cfg_scale=cfg_scale
+        )
+        
+        # Convert to WAV in memory but stream the bytes
+        import io as python_io
+        byte_io = python_io.BytesIO()
+        sf.write(byte_io, wav, sr, format='WAV')
+        data = byte_io.getvalue()
+        
+        # Yield in 16KB chunks
+        chunk_size = 16384
+        for i in range(0, len(data), chunk_size):
+            yield data[i:i + chunk_size]
+
+    return StreamingResponse(audio_generator(), media_type="audio/wav")
 
 @app.post("/transcribe")
 async def api_transcribe(file: UploadFile = File(...)):
