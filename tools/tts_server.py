@@ -3,9 +3,10 @@ import numpy as np
 import soundfile as sf
 import sqlite3
 import io as python_io
-from fastapi import FastAPI, HTTPException, Body, UploadFile, File, Form, Response
+from fastapi import FastAPI, HTTPException, Body, UploadFile, File, Form, Response, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
+import traceback
 from pydantic import BaseModel
 from faster_whisper import WhisperModel
 import uuid
@@ -306,6 +307,24 @@ async def lifespan(app: FastAPI):
     torch_engine = None
 
 app = FastAPI(lifespan=lifespan)
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch-all for any server error, returning full detail to the client."""
+    # Special handling for already-formatted Detail strings (like CUDA errors)
+    detail = str(exc)
+    
+    error_details = {
+        "detail": detail,
+        "type": type(exc).__name__,
+        "traceback": traceback.format_exc(),
+        "path": request.url.path
+    }
+    logger.error(f"NETWORK API ERROR: {error_details['type']} at {error_details['path']}\n{error_details['traceback']}")
+    return JSONResponse(
+        status_code=500,
+        content=error_details
+    )
 
 # Create cache and uploads dirs
 os.makedirs("cache", exist_ok=True)

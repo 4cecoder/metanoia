@@ -389,7 +389,13 @@
                     body: formData
                 });
 
-                if (!response.ok) throw new Error(await response.text());
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: "Network request failed" }));
+                    const msg = errorData.traceback ? 
+                        `${errorData.detail}\n\n[Server Traceback]\n${errorData.traceback}` : 
+                        (errorData.detail || "Unknown Server Error");
+                    throw new Error(msg);
+                }
                 status.textContent = "Upload successful!";
                 await refreshVoiceStatus(); // Update the list
             } catch (e) {
@@ -437,7 +443,13 @@
                     return;
                 }
 
-                if (!response.ok) throw new Error(await response.text());
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: "Network request failed" }));
+                    const msg = errorData.traceback ? 
+                        `${errorData.detail}\n\n[Server Traceback]\n${errorData.traceback}` : 
+                        (errorData.detail || "Unknown Server Error");
+                    throw new Error(msg);
+                }
                 const blob = await response.blob();
                 audio.src = URL.createObjectURL(blob);
                 player.style.display = "block";
@@ -496,7 +508,13 @@
                     body: formData
                 });
 
-                if (!response.ok) throw new Error(await response.text());
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: "Network request failed" }));
+                    const msg = errorData.traceback ? 
+                        `${errorData.detail}\n\n[Server Traceback]\n${errorData.traceback}` : 
+                        (errorData.detail || "Unknown Server Error");
+                    throw new Error(msg);
+                }
                 const result = await response.json();
                 
                 refTextArea.value = result.text;
@@ -561,7 +579,13 @@
                     });
                 }
 
-                if (!response.ok) throw new Error(await response.text());
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: "Network request failed" }));
+                    const msg = errorData.traceback ? 
+                        `${errorData.detail}\n\n[Server Traceback]\n${errorData.traceback}` : 
+                        (errorData.detail || "Unknown Server Error");
+                    throw new Error(msg);
+                }
                 
                 const blob = await response.blob();
                 const url = URL.createObjectURL(blob);
