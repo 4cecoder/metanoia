@@ -461,6 +461,34 @@ async def get_voice_status():
         }
     return status
 
+@app.get("/system_info")
+async def get_system_info():
+    """Report hardware backend and system details."""
+    import torch
+    backend = "Unknown"
+    gpu_name = "None"
+    
+    if platform.system() == "Darwin":
+        try:
+            import mlx.core as mx
+            backend = "MLX (Apple Silicon)"
+            gpu_name = "Apple M-Series GPU"
+        except ImportError:
+            backend = "Torch (CPU Fallback)"
+    else:
+        if torch.cuda.is_available():
+            backend = "Torch (CUDA)"
+            gpu_name = torch.cuda.get_device_name(0)
+        else:
+            backend = "Torch (CPU)"
+            
+    return {
+        "platform": platform.system(),
+        "backend": backend,
+        "gpu": gpu_name,
+        "torch_version": torch.__version__
+    }
+
 @app.post("/upload_voice_sample")
 async def upload_voice_sample(
     file: UploadFile = File(...),

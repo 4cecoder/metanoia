@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Metanoia Voice Lab</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎙️</text></svg>">
     <style>
         :root {
             --bg: #1a1b26;
@@ -130,6 +131,22 @@
         .compact-row { display: flex; gap: 10px; align-items: flex-end; }
         .compact-row > div { flex: 1; }
 
+        /* Hardware Badge */
+        .hw-badge {
+            background: rgba(122, 162, 247, 0.1);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            font-size: 0.7em;
+            padding: 4px 10px;
+            border-radius: 20px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .hw-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; box-shadow: 0 0 5px var(--green); }
+
         /* Status Grid for Uploads */
         .status-grid {
             display: grid;
@@ -175,6 +192,12 @@
 </head>
 <body>
     <div class="container">
+        <div style="text-align: center;">
+            <div id="hw-status" class="hw-badge" style="display:none;">
+                <div class="hw-dot"></div>
+                <span id="hw-text">Detecting Hardware...</span>
+            </div>
+        </div>
         <h1>Metanoia Voice Lab</h1>
         
         <div class="tab-bar">
@@ -290,6 +313,24 @@
         let selectedSpeaker = 'Aiden';
 
         let currentUploadVoice = null;
+
+        window.onload = async () => {
+            await loadSystemInfo();
+        };
+
+        async function loadSystemInfo() {
+            try {
+                const response = await fetch('/system_info');
+                const data = await response.json();
+                const badge = document.getElementById('hw-status');
+                const text = document.getElementById('hw-text');
+                
+                text.textContent = `${data.backend} | ${data.gpu}`;
+                badge.style.display = 'inline-flex';
+            } catch (e) {
+                console.warn("Could not load system info", e);
+            }
+        }
 
         function showError(msg) {
             const container = document.getElementById('error-container');
