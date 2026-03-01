@@ -530,7 +530,7 @@
         async function generate() {
             const btn = document.getElementById('gen-btn');
             const status = document.getElementById('status');
-            const error = document.getElementById('error');
+            const container = document.getElementById('error-container');
             const player = document.getElementById('player-section');
             const audio = document.getElementById('audio-output');
             const perf = document.getElementById('perf-info');
@@ -544,7 +544,7 @@
             btn.disabled = true;
             status.textContent = "Processing... (Generating AI audio on GPU)";
             status.style.display = "block";
-            error.style.display = "none";
+            container.style.display = "none";
             player.style.display = "none";
 
             try {
