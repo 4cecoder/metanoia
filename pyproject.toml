@@ -21,7 +21,7 @@ dependencies = [
     "torch==2.5.1; sys_platform != 'darwin'",
     "torchaudio==2.5.1; sys_platform != 'darwin'",
     "qwen-tts; sys_platform != 'darwin'",
-    "transformers==4.57.3; sys_platform != 'darwin'",
+    "transformers>=5.0.0; sys_platform != 'darwin'",
     "huggingface-hub>=0.25.0; sys_platform != 'darwin'",
     "mlx>=0.31.0; sys_platform == 'darwin'",
     "mlx-lm>=0.30.5; sys_platform == 'darwin'",

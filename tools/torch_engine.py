@@ -134,14 +134,17 @@ class TorchEngine:
                     )
                 elif hasattr(model, "generate_voice_clone"):
                     # Use zero-shot voice cloning (default for Base models)
-                    # If no ref_audio is provided, we use a default prompt if the model requires it
-                    # or the model might have a built-in default for this method.
-                    logger.info(f"Using generate_voice_clone. Ref audio: {ref_audio}")
+                    # If no ref_audio is provided, we must check if we have a default
+                    logger.info(f"Using generate_voice_clone. Requested: {ref_audio}")
                     
-                    # Ensure we have some reference if required by base model
                     final_ref_audio = ref_audio or "data/tommy.wav" 
                     final_ref_text = ref_text or "Okay, I do believe I am live"
                     
+                    # Safety: Ensure the reference file actually exists on the filesystem
+                    if not os.path.exists(final_ref_audio):
+                        logger.error(f"Missing reference audio: {final_ref_audio}")
+                        raise FileNotFoundError(f"Reference audio file not found: {final_ref_audio}. Please upload it in the 'Upload Samples' tab first.")
+
                     audio_values = model.generate_voice_clone(
                         text=text,
                         language="English",

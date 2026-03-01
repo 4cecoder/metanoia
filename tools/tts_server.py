@@ -489,6 +489,13 @@ async def get_system_info():
         "torch_version": torch.__version__
     }
 
+@app.get("/reset_gpu")
+async def reset_gpu():
+    """Restarts the server process to clear poisoned CUDA context."""
+    logger.warning("GPU RESET REQUESTED. Exiting process for auto-restart...")
+    # The auto-reloader or script loop will bring it back
+    os._exit(0)
+
 @app.post("/upload_voice_sample")
 async def upload_voice_sample(
     file: UploadFile = File(...),

@@ -267,6 +267,7 @@
                 <button class="secondary" onclick="runWSLTest('custom_voice_1.7b')">Test 1.7B Custom Voice (Aiden)</button>
                 <button class="secondary" onclick="runWSLTest('network_stream')">Test Network Stream (GET)</button>
             </div>
+            <button class="secondary" onclick="resetGPU()" style="margin-top: 10px; border-color: #f7768e; color: #f7768e;">☢️ Reset GPU Backend (Full Restart)</button>
             <p style="font-size: 0.75em; margin-top: 10px; opacity: 0.8;">
                 Use this tab to verify that your remote Linux environment is correctly handling 1.7B parameters and network streaming.
             </p>
@@ -330,6 +331,23 @@
             } catch (e) {
                 console.warn("Could not load system info", e);
             }
+        }
+
+        async function resetGPU() {
+            if (!confirm("This will kill the remote server process to clear CUDA errors. It will auto-restart in a few seconds. Continue?")) return;
+            
+            const status = document.getElementById('status');
+            status.textContent = "Requesting GPU Reset... Please wait 5-10 seconds then refresh.";
+            status.style.display = "block";
+            
+            try {
+                // This call will likely fail or time out because the server is exiting
+                fetch('/reset_gpu').catch(() => {}); 
+                
+                setTimeout(() => {
+                    window.location.reload();
+                }, 8000);
+            } catch (e) {}
         }
 
         function showError(msg) {
