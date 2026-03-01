@@ -115,9 +115,16 @@ class TTSCacheManager:
 
 # Global instances
 mlx_engine = None
+torch_engine = None
 whisper_model = None
 cache_manager = TTSCacheManager()
 generation_locks: Dict[str, asyncio.Lock] = {}
+
+def get_engine():
+    global mlx_engine, torch_engine
+    if mlx_engine: return mlx_engine
+    if torch_engine: return torch_engine
+    return None
 
 # Multi-threading helpers
 from concurrent.futures import ThreadPoolExecutor
@@ -164,31 +171,70 @@ VOICE_CONFIGS = {
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global mlx_engine, whisper_model
-    logger.info("Loading MLX Engine for Multi-Voice setup...")
+    global mlx_engine, torch_engine, whisper_model
+    
+    # System Detection
+    has_mlx = False
     try:
-        mlx_engine = MLXEngine()
-        mlx_engine.load_models()
-        
+        import mlx.core as mx
+        has_mlx = True
+        logger.info("MLX detected. Using MLXEngine for Apple Silicon.")
+    except ImportError:
+        logger.info("MLX not found. Checking for NVIDIA/CUDA...")
+
+    try:
+        engine = None
+        if has_mlx:
+            from mlx_engine import MLXEngine
+            mlx_engine = MLXEngine()
+            mlx_engine.load_models()
+            engine = mlx_engine
+        else:
+            import torch
+            if torch.cuda.is_available():
+                logger.info("NVIDIA GPU with CUDA detected. Using TorchEngine.")
+                from torch_engine import TorchEngine
+                torch_engine = TorchEngine()
+                torch_engine.load_models()
+                engine = torch_engine
+            else:
+                logger.warning("No GPU (MLX or CUDA) detected. TTS will be slow on CPU.")
+                # Fallback to Torch CPU if possible
+                try:
+                    from torch_engine import TorchEngine
+                    torch_engine = TorchEngine()
+                    torch_engine.load_models()
+                    engine = torch_engine
+                except ImportError:
+                    logger.error("TorchEngine not available for CPU fallback.")
+
         # Pre-compute prompts for preset voices
-        for name, cfg in VOICE_CONFIGS.items():
-            # Use the voice's preferred mode for pre-computation if specified
-            precompute_mode = cfg.get("mode", "speedy")
-            mlx_engine.precompute_voice_prompt(
-                name=name,
-                audio_path=cfg["audio"],
-                ref_text=cfg["text"],
-                mode=precompute_mode
-            )
+        if engine:
+            for name, cfg in VOICE_CONFIGS.items():
+                precompute_mode = cfg.get("mode", "speedy")
+                engine.precompute_voice_prompt(
+                    name=name,
+                    audio_path=cfg["audio"],
+                    ref_text=cfg["text"],
+                    mode=precompute_mode
+                )
 
         # Load whisper for auto-transcription support
         logger.info("Loading Faster Whisper (small) for web interface...")
-        whisper_model = WhisperModel("small", device="cpu", compute_type="int8")
+        device = "cpu"
+        if has_mlx:
+            device = "cpu" # Whisper-Faster doesn't support MPS well yet
+        elif torch_engine:
+            import torch
+            if torch.cuda.is_available(): device = "cuda"
+            
+        whisper_model = WhisperModel("small", device=device, compute_type="int8")
 
     except Exception as e:
-        logger.error(f"Failed to load: {e}")
+        logger.error(f"Failed to load engines: {e}")
     yield
     mlx_engine = None
+    torch_engine = None
 
 app = FastAPI(lifespan=lifespan)
 
@@ -209,8 +255,9 @@ class TTSRequest(BaseModel):
 
 @app.post("/generate")
 async def generate_speech(request: TTSRequest):
-    if mlx_engine is None:
-        raise HTTPException(status_code=503, detail="MLX Engine not loaded")
+    engine = get_engine()
+    if engine is None:
+        raise HTTPException(status_code=503, detail="TTS Engine not loaded")
     
     # Normalize input
     clean_text = request.text.strip()
@@ -266,14 +313,14 @@ async def generate_speech(request: TTSRequest):
                 with open(cached_file, "rb") as f:
                     return Response(content=f.read(), media_type="audio/wav")
 
-        logger.info(f"Cache Miss. Generating via MLX for key {cache_key} (Mode: {mode})...")
+        logger.info(f"Cache Miss. Generating for key {cache_key} (Mode: {mode})...")
         start_time = time.time()
         
         async with gpu_semaphore:
             try:
-                # Generate via MLX in a separate thread to avoid blocking the event loop
+                # Generate via Engine in a separate thread to avoid blocking the event loop
                 wav, sr = await asyncio.to_thread(
-                    mlx_engine.generate,
+                    engine.generate,
                     text=clean_text,
                     mode=mode,
                     voice=request.voice if mode == "custom" else selected_voice,
@@ -286,10 +333,10 @@ async def generate_speech(request: TTSRequest):
                 )
                 
                 if wav is None:
-                    raise ValueError("MLX generation failed")
+                    raise ValueError("TTS generation failed")
 
                 gen_duration = time.time() - start_time
-                logger.info(f"MLX Generation took {gen_duration:.2f}s for {len(clean_text)} chars")
+                logger.info(f"Generation took {gen_duration:.2f}s for {len(clean_text)} chars")
 
                 # 2. Save to Cache Manager index & disk
                 import io as python_io
@@ -339,8 +386,9 @@ async def clone_dynamic(
     emotion: Optional[str] = Form(None),
     speed: float = Form(1.0)
 ):
-    if mlx_engine is None:
-        raise HTTPException(status_code=503, detail="MLX Engine not loaded")
+    engine = get_engine()
+    if engine is None:
+        raise HTTPException(status_code=503, detail="TTS Engine not loaded")
 
     # Save uploaded reference
     ref_id = uuid.uuid4().hex
@@ -351,8 +399,8 @@ async def clone_dynamic(
     logger.info(f"Dynamic Clone: Received {file.filename}, generating target text...")
     
     try:
-        # Generate via MLX
-        wav, sr = mlx_engine.generate(
+        # Generate via Engine
+        wav, sr = engine.generate(
             text=text,
             mode="base",
             ref_audio=ref_path,
@@ -362,7 +410,7 @@ async def clone_dynamic(
         )
 
         if wav is None:
-            raise ValueError("MLX generation failed")
+            raise ValueError("TTS generation failed")
 
         out_filename = f"cache/dynamic_{ref_id}.wav"
         sf.write(out_filename, wav, sr, format='WAV')
