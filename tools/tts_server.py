@@ -171,28 +171,58 @@ def setup_system_deps():
     """Checks and installs system-level dependencies if on Linux/Ubuntu."""
     if platform.system() == "Linux":
         try:
-            # Check if sox is installed
-            res = subprocess.run(["which", "sox"], capture_output=True)
-            if res.returncode != 0:
-                logger.info("SoX not found. Attempting to install system dependencies...")
-                # Try to install - this assumes the user has sudo rights without password 
-                # or is in a shell that allows it.
-                subprocess.run(["sudo", "apt-get", "update", "-qq"], check=True)
-                subprocess.run(["sudo", "apt-get", "install", "-y", "-qq", "sox", "libsox-fmt-all"], check=True)
-                logger.info("System dependencies (SoX) installed successfully.")
-            else:
-                logger.info("System dependency check: SoX is already installed.")
+            # 1. Check for basic utilities
+            logger.info("Verifying system dependencies (build-essential, ffmpeg, sox)...")
+            subprocess.run(["sudo", "apt-get", "update", "-qq"], check=True)
+            subprocess.run(["sudo", "apt-get", "install", "-y", "-qq", 
+                          "build-essential", "ffmpeg", "sox", "libsox-fmt-all", "curl", "wget"], check=True)
             
-            # Firewall: Allow port 8000 for network access
+            # 2. CUDA Toolkit Check (12.1)
+            cuda_path = "/usr/local/cuda-12.1"
+            if not os.path.exists(cuda_path):
+                logger.info("CUDA Toolkit 12.1 not found. Attempting installation...")
+                # Download and install CUDA keyring
+                subprocess.run(["wget", "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb"], check=True)
+                subprocess.run(["sudo", "dpkg", "-i", "cuda-keyring_1.1-1_all.deb"], check=True)
+                subprocess.run(["sudo", "apt-get", "update", "-qq"], check=True)
+                # Install toolkit (this may take time)
+                logger.info("Installing CUDA Toolkit 12.1 (this may take several minutes)...")
+                subprocess.run(["sudo", "apt-get", "install", "-y", "-qq", "cuda-toolkit-12-1"], check=True)
+                os.remove("cuda-keyring_1.1-1_all.deb")
+            
+            # 3. Environment Variables (.bashrc and .zshrc)
+            logger.info("Synchronizing environment variables (~/.bashrc, ~/.zshrc)...")
+            env_vars = [
+                f'export CUDA_HOME={cuda_path}',
+                f'export PATH={cuda_path}/bin:$PATH',
+                f'export LD_LIBRARY_PATH={cuda_path}/lib64:/usr/lib/wsl/lib:$LD_LIBRARY_PATH'
+            ]
+            
+            for shell_rc in [".bashrc", ".zshrc"]:
+                rc_path = os.path.expanduser(f"~/{shell_rc}")
+                if os.path.exists(rc_path):
+                    with open(rc_path, "r") as f:
+                        content = f.read()
+                    
+                    changed = False
+                    with open(rc_path, "a") as f:
+                        for var in env_vars:
+                            if var.split('=')[0] not in content:
+                                f.write(f"\n{var}\n")
+                                changed = True
+                    if changed:
+                        logger.info(f"Updated {shell_rc} with CUDA paths.")
+
+            # 4. Firewall: Allow port 8000 for network access
             try:
                 logger.info("Configuring firewall: Allowing port 8000/tcp...")
                 subprocess.run(["sudo", "ufw", "allow", "8000/tcp"], check=False, capture_output=True)
             except Exception:
-                pass # UFW might not be installed or active
+                pass
                 
         except Exception as e:
-            logger.warning(f"Could not automatically install system deps: {e}")
-            logger.warning("Please manualy run: sudo apt install -y sox libsox-fmt-all")
+            logger.warning(f"Could not automatically fully provision system: {e}")
+            logger.warning("Some manual steps (like installing CUDA toolkit) might be required.")
 
 # Voice Configurations
 VOICE_CONFIGS = {
