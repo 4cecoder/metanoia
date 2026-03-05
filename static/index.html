@@ -4,222 +4,104 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Metanoia Voice Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎙️</text></svg>">
+    
+    <!-- Design & Visualization Systems -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+
     <style>
         :root {
             --bg: #1a1b26;
             --panel: #24283b;
-            --text: #c0caf5;
             --accent: #7aa2f7;
-            --highlight: #7dcfff;
-            --border: #414868;
+            --text: #cfc9c2;
             --green: #9ece6a;
+            --border: #414868;
+            --error: #f7768e;
+            --gold: #e0af68;
+            --highlight: #7dcfff;
         }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
-            display: flex;
-            justify-content: center;
-            padding: 20px;
-            margin: 0;
-        }
-        .container {
-            width: 100%;
-            max-width: 500px;
-            background: var(--panel);
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            border: 1px solid var(--border);
-        }
-        h1 { color: var(--accent); margin: 0 0 15px 0; font-size: 1.5em; text-align: center; }
-        .section { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.85em; opacity: 0.8; }
-        textarea, input, select {
-            width: 100%;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            color: var(--text);
-            padding: 10px;
-            border-radius: 6px;
-            box-sizing: border-box;
-            font-size: 0.95em;
-        }
-        textarea { height: 80px; resize: vertical; }
-        .btn-group { display: flex; gap: 8px; margin-top: 8px; }
-        button {
-            background: var(--accent);
-            color: white;
-            border: none;
-            padding: 12px;
-            border-radius: 6px;
-            font-weight: bold;
-            cursor: pointer;
-            width: 100%;
-            transition: all 0.2s;
-            font-size: 1em;
-        }
-        button.secondary { background: var(--panel); border: 1px solid var(--accent); color: var(--accent); }
-        button:hover { background: var(--highlight); color: var(--bg); }
-        button.secondary:hover { background: var(--accent); color: white; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; margin: 0; display: flex; justify-content: center; padding: 20px; -webkit-font-smoothing: antialiased; }
+        .container { width: 100%; max-width: 950px; background: var(--panel); padding: 30px; border-radius: 12px; box-shadow: 0 15px 50px rgba(0,0,0,0.6); border: 1px solid var(--border); }
+        h1 { color: var(--accent); margin-top: 0; font-weight: 700; text-align: center; font-size: 2.8em; font-family: 'Playfair Display', serif; letter-spacing: -1px; text-shadow: 0 2px 10px rgba(122, 162, 247, 0.3); }
         
-        /* Toggle Grid */
-        .toggle-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-        }
-        .toggle-btn {
-            background: var(--bg);
-            border: 1px solid var(--border);
-            color: var(--text);
-            padding: 8px 4px;
-            border-radius: 6px;
-            font-size: 0.85em;
-            cursor: pointer;
-            text-align: center;
-            transition: all 0.2s;
-        }
-        .toggle-btn.active {
-            background: var(--accent);
-            border-color: var(--accent);
-            color: white;
-        }
-        .toggle-btn:hover:not(.active) {
-            border-color: var(--accent);
-        }
+        /* Tab Navigation */
+        .tab-bar { display: flex; gap: 10px; margin-bottom: 30px; background: var(--bg); padding: 6px; border-radius: 12px; border: 1px solid var(--border); }
+        .tab { cursor: pointer; padding: 10px 20px; opacity: 0.6; transition: all 0.3s; flex: 1; text-align: center; border-radius: 8px; font-size: 0.9em; font-weight: 600; color: var(--text); display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .tab.active { opacity: 1; background: var(--panel); color: var(--accent); box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .tab i { width: 16px; height: 16px; }
 
-        .audio-player { margin-top: 15px; display: none; text-align: center; background: var(--bg); padding: 10px; border-radius: 8px; }
-        audio { width: 100%; height: 35px; }
-        .status { margin-top: 10px; font-size: 0.85em; color: var(--green); display: none; text-align: center; }
-        .error-container { 
-            background: rgba(247, 118, 142, 0.1); 
-            border: 1px solid #f7768e; 
-            border-radius: 8px; 
-            padding: 12px; 
-            margin-top: 15px; 
-            display: none; 
-        }
-        .error-header { 
-            color: #f7768e; 
-            font-weight: bold; 
-            font-size: 0.85em; 
-            margin-bottom: 5px; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-        }
-        .error-body { 
-            color: var(--text); 
-            font-family: monospace; 
-            font-size: 0.75em; 
-            white-space: pre-wrap; 
-            max-height: 150px; 
-            overflow-y: auto; 
-            background: rgba(0,0,0,0.2); 
-            padding: 8px; 
-            border-radius: 4px; 
-        }
-        .copy-link { cursor: pointer; text-decoration: underline; opacity: 0.7; font-size: 0.9em; }
-        .copy-link:hover { opacity: 1; }
-
-        /* Toast Notifications */
-        #toast-container {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 9999;
-        }
-        .toast {
-            background: var(--panel);
-            color: var(--text);
-            border: 1px solid var(--accent);
-            padding: 12px 20px;
-            border-radius: 8px;
-            margin-top: 10px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            font-size: 0.85em;
-            animation: slideIn 0.3s ease-out;
-            min-width: 200px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .toast.success { border-left: 4px solid var(--green); }
-        .toast.error { border-left: 4px solid #f7768e; }
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        .tab-bar { display: flex; gap: 15px; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 8px; font-size: 0.9em; justify-content: center; }
-        .tab { cursor: pointer; padding: 2px 5px; opacity: 0.6; transition: all 0.2s; }
-        .tab.active { opacity: 1; border-bottom: 2px solid var(--accent); color: var(--accent); font-weight: bold; }
+        .section { margin-bottom: 25px; border-top: 1px solid var(--border); padding-top: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; font-size: 0.75em; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); display: flex; align-items: center; gap: 6px; }
         
-        .compact-row { display: flex; gap: 10px; align-items: flex-end; }
+        textarea, input, select { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 12px; border-radius: 8px; box-sizing: border-box; font-size: 1em; transition: all 0.2s; }
+        textarea:focus, input:focus, select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px rgba(122, 162, 247, 0.2); }
+        textarea { height: 100px; resize: vertical; }
+
+        /* Synthesis Grid */
+        .toggle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+        .toggle-btn { background: var(--bg); border: 1px solid var(--border); padding: 15px; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.2s; font-size: 0.9em; display: flex; flex-direction: column; gap: 5px; }
+        .toggle-btn.active { border-color: var(--accent); background: rgba(122, 162, 247, 0.15); color: var(--accent); font-weight: bold; transform: scale(1.02); }
+        .toggle-btn span { font-size: 0.7em; opacity: 0.5; font-weight: normal; }
+
+        /* Master Buttons */
+        button { width: 100%; padding: 15px; background: var(--accent); color: white; border: none; border-radius: 8px; font-size: 0.9em; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        button:hover { background: var(--highlight); transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.3); color: var(--bg); }
+        button:active { transform: translateY(0); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        button.secondary { background: rgba(122, 162, 247, 0.05); border: 1px solid var(--accent); color: var(--accent); padding: 10px; }
+        button i { width: 18px; height: 18px; }
+
+        /* Neural Studio Elements */
+        .studio-card { background: rgba(122, 162, 247, 0.03); padding: 25px; border-radius: 12px; border: 1px solid var(--accent); }
+        .wave-container { background: var(--bg); border-radius: 10px; padding: 20px; margin: 15px 0; border: 1px solid var(--border); position: relative; }
+        #waveform { width: 100%; height: 128px; }
+        .wave-controls { display: flex; gap: 10px; margin-top: 15px; justify-content: center; }
+        .hint { font-size: 0.75em; opacity: 0.6; margin-top: 8px; font-style: italic; line-height: 1.4; color: var(--text); }
+        .gold-badge { color: var(--gold); border: 1px solid var(--gold); padding: 2px 8px; border-radius: 4px; font-size: 0.7em; font-weight: bold; text-transform: uppercase; display: flex; align-items: center; gap: 4px; }
+
+        /* Voice List Management */
+        .status-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 20px; }
+        .voice-status-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 15px; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; }
+        .voice-status-card:hover { border-color: var(--accent); background: rgba(122, 162, 247, 0.02); }
+        .voice-status-card.ready { border-left: 5px solid var(--green); }
+        .voice-status-card.missing { border-left: 5px solid var(--error); }
+        .voice-info h4 { margin: 0; font-size: 1em; color: var(--accent); }
+        .voice-info p { margin: 4px 0 0 0; font-size: 0.75em; opacity: 0.6; font-family: monospace; }
+        .action-btns { display: flex; gap: 8px; }
+        .mini-btn { background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+        .mini-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(122, 162, 247, 0.05); }
+        .mini-btn.danger:hover { border-color: var(--error); color: var(--error); background: rgba(247, 118, 142, 0.05); }
+        .mini-btn i { width: 14px; height: 14px; }
+
+        /* Audio Output Section */
+        .audio-player { margin-top: 25px; background: var(--bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border); }
+        #perf-info { font-size: 0.75em; opacity: 0.6; margin-top: 10px; text-align: center; font-family: monospace; }
+
+        /* System Telemetry */
+        #sys-info-box { font-family: 'JetBrains Mono', monospace; font-size: 0.85em; background: #000; padding: 20px; border-radius: 10px; line-height: 1.6; border: 1px solid var(--border); color: var(--green); overflow-x: auto; }
+
+        /* Layout Helpers */
+        .compact-row { display: flex; gap: 15px; align-items: flex-end; }
         .compact-row > div { flex: 1; }
 
-        /* Hardware Badge */
-        .hw-badge {
-            background: rgba(122, 162, 247, 0.1);
-            border: 1px solid var(--accent);
-            color: var(--accent);
-            font-size: 0.7em;
-            padding: 4px 10px;
-            border-radius: 20px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            margin-bottom: 10px;
-            font-weight: bold;
-        }
+        /* Toasts */
+        #toast-container { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 9999; }
+        .toast { background: var(--green); color: black; padding: 12px 24px; border-radius: 8px; font-weight: bold; transform: translateY(100px); opacity: 0; transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55); box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 0.9em; display: flex; align-items: center; gap: 10px; }
+        .toast i { width: 18px; height: 18px; }
+        .toast.visible { transform: translateY(0); opacity: 1; }
+        
+        .hw-badge { background: rgba(122, 162, 247, 0.1); border: 1px solid var(--accent); color: var(--accent); font-size: 0.7em; padding: 4px 10px; border-radius: 20px; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px; font-weight: bold; }
         .hw-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; box-shadow: 0 0 5px var(--green); }
-
-        /* Status Grid for Uploads */
-        .status-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        .voice-status-card {
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .voice-status-card.ready { border-left: 4px solid var(--green); }
-        .voice-status-card.missing { border-left: 4px solid #f7768e; }
-        
-        .voice-info h4 { margin: 0; font-size: 0.95em; }
-        .voice-info p { margin: 2px 0 0 0; font-size: 0.75em; opacity: 0.6; }
-        
-        .status-badge {
-            font-size: 0.7em;
-            padding: 2px 6px;
-            border-radius: 4px;
-            text-transform: uppercase;
-            font-weight: bold;
-        }
-        .status-badge.ready { background: rgba(158, 206, 106, 0.2); color: var(--green); }
-        .status-badge.missing { background: rgba(247, 118, 142, 0.2); color: #f7768e; }
-        
-        .upload-mini-btn {
-            background: var(--accent);
-            color: white;
-            border: none;
-            padding: 6px 10px;
-            border-radius: 4px;
-            font-size: 0.8em;
-            cursor: pointer;
-        }
     </style>
 </head>
 <body>
+    <div id="toast-container"></div>
     <div class="container">
         <div style="text-align: center;">
             <div id="hw-status" class="hw-badge" style="display:none;">
@@ -230,518 +112,490 @@
         <h1>Metanoia Voice Lab</h1>
         
         <div class="tab-bar">
-            <div id="tab-preset" class="tab active" onclick="setMode('preset')">Presets</div>
-            <div id="tab-custom" class="tab" onclick="setMode('custom')">Custom</div>
-            <div id="tab-clone" class="tab" onclick="setMode('clone')">Instant</div>
-            <div id="tab-upload" class="tab" onclick="setMode('upload')">Upload Samples</div>
-            <div id="tab-wsl" class="tab" onclick="setMode('wsl')">WSL Debug</div>
+            <div id="tab-preset" class="tab active" onclick="setMode('preset')"><i data-lucide="library"></i> Library</div>
+            <div id="tab-custom" class="tab" onclick="setMode('custom')"><i data-lucide="star"></i> Premium</div>
+            <div id="tab-manage" class="tab" onclick="setMode('manage')"><i data-lucide="mic-2"></i> Voice Studio</div>
+            <div id="tab-system" class="tab" onclick="setMode('system')"><i data-lucide="activity"></i> Telemetry</div>
         </div>
 
         <div id="text-input-section" class="section">
-            <label>Text to Speak (<span id="char-count">0</span> characters)</label>
-            <textarea id="text-input" placeholder="Enter text..." oninput="document.getElementById('char-count').textContent = this.value.length"></textarea>
+            <label><i data-lucide="type"></i> Neural Synthesis Input</label>
+            <textarea id="text-input" placeholder="Enter text for high-fidelity synthesis..." oninput="document.getElementById('char-count').textContent = this.value.length"></textarea>
+            <p class="hint">Synthesizing <span id="char-count">0</span> characters. Using Qwen3-TTS-12Hz models.</p>
         </div>
 
         <div id="params-section" class="section">
             <div class="compact-row">
                 <div style="flex: 2;">
-                    <label>Emotion / Instruction (Optional)</label>
-                    <input type="text" id="emotion-input" placeholder="e.g. Excited, Whispering...">
+                    <label><i data-lucide="smile"></i> Prosody & Emotion</label>
+                    <input type="text" id="emotion-input" placeholder="e.g. Excitement, Whispering, Deep Narrative...">
                 </div>
                 <div style="flex: 1;">
-                    <label>Speed: <span id="speed-val">1.0</span>x</label>
+                    <label><i data-lucide="layers"></i> Generation Mode</label>
+                    <select id="gen-mode-input">
+                        <option value="speedy">Speedy (12Hz)</option>
+                        <option value="gold">Gold Standard (HQ)</option>
+                    </select>
+                </div>
+                <div style="flex: 1;">
+                    <label><i data-lucide="gauge"></i> Cadence: <span id="speed-val">1.0</span>x</label>
                     <input type="range" id="speed-input" min="0.5" max="2.0" step="0.1" value="1.0" oninput="document.getElementById('speed-val').textContent = this.value">
                 </div>
             </div>
         </div>
 
+        <!-- Tab Content: Library -->
         <div id="preset-controls" class="section">
-            <label>Select Voice Clone</label>
+            <label><i data-lucide="database"></i> Active Neural Profiles</label>
             <div class="toggle-grid" id="voice-toggles">
-                <div class="toggle-btn active" onclick="selectVoice(this, 'lennox')">John Lennox</div>
-                <div class="toggle-btn" onclick="selectVoice(this, 'tommy')">Tommy</div>
-                <div class="toggle-btn" onclick="selectVoice(this, 'mari')">Mari</div>
-                <div class="toggle-btn" onclick="selectVoice(this, 'jordan')">Jordan Peterson</div>
-                <div class="toggle-btn" onclick="selectVoice(this, 'shamoun')">Sam Shamoun</div>
-                <div class="toggle-btn" onclick="selectVoice(this, 'roumie')">Jonathan Roumie</div>
-            </div>
-        </div>
-
-        <div id="custom-controls" class="section" style="display:none;">
-            <label>Speaker</label>
-            <div class="toggle-grid" id="speaker-toggles">
-                <div class="toggle-btn active" onclick="selectSpeaker(this, 'Aiden')">Aiden (M)</div>
-                <div class="toggle-btn" onclick="selectSpeaker(this, 'Serena')">Serena (F)</div>
-                <div class="toggle-btn" onclick="selectSpeaker(this, 'Ryan')">Ryan (M)</div>
-                <div class="toggle-btn" onclick="selectSpeaker(this, 'Chelsie')">Chelsie (F)</div>
-                <div class="toggle-btn" onclick="selectSpeaker(this, 'Ethan')">Ethan (M)</div>
-                <div class="toggle-btn" onclick="selectSpeaker(this, 'Vivian')">Vivian (F)</div>
-            </div>
-        </div>
-
-        <div id="clone-controls" class="section" style="display:none;">
-            <div class="compact-row">
-                <div>
-                    <label>Reference Audio</label>
-                    <input type="file" id="audio-file" accept="audio/*">
-                </div>
-                <button class="secondary" id="transcribe-btn" onclick="autoTranscribe()" style="width: auto; padding: 10px;">✨ Transcribe</button>
-            </div>
-            <textarea id="ref-text" style="height:50px; margin-top: 10px;" placeholder="Audio Transcript..."></textarea>
-        </div>
-
-        <div id="wsl-controls" class="section" style="display:none;">
-            <label>RTX 4090 / WSL Diagnostic Tests</label>
-            <div class="btn-group">
-                <button class="secondary" onclick="runWSLTest('custom_voice_1.7b')">Test 1.7B Custom Voice (Aiden)</button>
-                <button class="secondary" onclick="runWSLTest('network_stream')">Test Network Stream (GET)</button>
-            </div>
-            <button class="secondary" onclick="runDiagnostics()" style="margin-top: 10px;">🔍 Run Deep Hardware Diagnostics</button>
-            <button class="secondary" onclick="resetGPU()" style="margin-top: 10px; border-color: #f7768e; color: #f7768e;">☢️ Reset GPU Backend (Full Restart)</button>
-            <p style="font-size: 0.75em; margin-top: 10px; opacity: 0.8;">
-                Use this tab to verify that your remote Linux environment is correctly handling 1.7B parameters and network streaming.
-            </p>
-        </div>
-
-        <div id="upload-controls" class="section" style="display:none;">
-            <label>Remote Voice Mission Control</label>
-            <p style="font-size: 0.75em; margin-bottom: 10px; opacity: 0.8;">
-                The items below are the reference voices your Metanoia app is looking for. 
-                Upload the <code>.wav</code> files from your Mac to arm the remote server.
-            </p>
-            
-            <div id="voice-status-list" class="status-grid">
                 <!-- Dynamically populated -->
-                <p style="text-align:center; font-size: 0.8em; opacity: 0.5;">Loading voice status...</p>
+            </div>
+        </div>
+
+        <!-- Tab Content: Premium -->
+        <div id="custom-controls" class="section" style="display:none;">
+            <label><i data-lucide="award"></i> Base Professional Timbres</label>
+            <div class="toggle-grid" id="speaker-toggles">
+                <div class="toggle-btn active" onclick="selectSpeaker(this, 'Aiden')">Aiden <span>Natural Male</span></div>
+                <div class="toggle-btn" onclick="selectSpeaker(this, 'Serena')">Serena <span>Warm Female</span></div>
+                <div class="toggle-btn" onclick="selectSpeaker(this, 'Ryan')">Ryan <span>Dynamic Male</span></div>
+                <div class="toggle-btn" onclick="selectSpeaker(this, 'Chelsie')">Chelsie <span>Soft Female</span></div>
+                <div class="toggle-btn" onclick="selectSpeaker(this, 'Ethan')">Ethan <span>Deep Male</span></div>
+                <div class="toggle-btn" onclick="selectSpeaker(this, 'Vivian')">Vivian <span>Bright Female</span></div>
+            </div>
+        </div>
+
+        <!-- Tab Content: Voice Studio -->
+        <div id="manage-controls" class="section" style="display:none;">
+            <div class="studio-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="margin:0; font-family: 'Playfair Display', serif; display: flex; align-items: center; gap: 10px;"><i data-lucide="cpu" style="color:var(--accent)"></i> Neural Engineering Studio</h3>
+                    <span class="gold-badge"><i data-lucide="medal" style="width:12px"></i> 15s Neural Target</span>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                    <div style="background: var(--bg); padding: 15px; border-radius: 10px; border: 1px solid var(--border);">
+                        <label><i data-lucide="youtube" style="color:#ff0000"></i> YouTube Acquisition</label>
+                        <div class="compact-row">
+                            <input type="text" id="yt-url" placeholder="Paste YouTube Link...">
+                            <button class="secondary" style="width:auto; height: 44px;" onclick="downloadYouTube()"><i data-lucide="download"></i> Fetch</button>
+                        </div>
+                    </div>
+                    <div style="background: var(--bg); padding: 15px; border-radius: 10px; border: 1px solid var(--border);">
+                        <label><i data-lucide="file-audio"></i> Local Import</label>
+                        <div class="compact-row">
+                            <input type="file" id="studio-audio-file" accept="audio/*" onchange="loadAudioIntoStudio(this)">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="studio-visualizer" style="display:none;">
+                    <label><i data-lucide="waves"></i> Neural Region Extraction</label>
+                    <div class="wave-container">
+                        <div id="waveform"></div>
+                    </div>
+                    <div class="wave-controls">
+                        <button class="secondary" style="width:auto;" onclick="wavesurfer.playPause()"><i data-lucide="play-circle"></i> Preview</button>
+                        <button class="secondary" style="width:auto; border-color: var(--green); color: var(--green); font-weight: bold;" id="sandbox-transcribe-btn" onclick="autoTranscribe()"><i data-lucide="sparkles"></i> AI Auto-Transcribe</button>
+                    </div>
+                    <p class="hint">Isolate ~15 seconds of clean speech. The model needs a high-quality transcript to align.</p>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <label><i data-lucide="file-text"></i> Extracted Transcript</label>
+                    <textarea id="studio-ref-text" style="height:60px;" placeholder="What is being said in the selected clip?"></textarea>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-top: 25px; align-items: end;">
+                    <div style="grid-column: span 2;">
+                        <label><i data-lucide="tag"></i> Profile Label</label>
+                        <input type="text" id="studio-voice-name" placeholder="e.g. Morgan Freeman Clone">
+                    </div>
+                    <button id="studio-save-btn" onclick="saveStudioToLibrary()" style="background: var(--green); color:black;"><i data-lucide="save"></i> Save to Library</button>
+                </div>
+                <button class="secondary" id="studio-test-btn" onclick="generate('test')" style="margin-top: 15px;"><i data-lucide="beaker"></i> Run Sandbox Test Synthesis</button>
             </div>
 
-            <!-- Hidden file input for the logic -->
+            <div style="margin-top: 30px;">
+                <label><i data-lucide="folder-archive"></i> Archive Management</label>
+                <div id="voice-status-list" class="status-grid">
+                    <p style="text-align:center; font-size: 0.8em; opacity: 0.5;">Loading voice archive...</p>
+                </div>
+            </div>
+            
+            <!-- Hidden input for direct card uploads -->
             <input type="file" id="hidden-upload-input" accept="audio/wav" style="display:none;" onchange="handleFileSelected(this)">
         </div>
 
-        <button id="gen-btn" onclick="generate()">Generate High-Quality Audio</button>
-        
-        <div id="status" class="status"></div>
-        
-        <div id="error-container" class="error-container">
-            <div class="error-header">
-                <span>⚠️ SYSTEM ERROR</span>
-                <span class="copy-link" onclick="copyError()">Copy for Debug</span>
+        <!-- Tab Content: Telemetry -->
+        <div id="system-controls" class="section" style="display:none;">
+            <label><i data-lucide="terminal"></i> Real-Time Telemetry & Hardware State</label>
+            <pre id="sys-info-box">Linking to telemetry sensors...</pre>
+            <div class="btn-group" style="display:flex; gap:10px; margin-top:15px;">
+                <button class="secondary" onclick="refreshSystemInfo()"><i data-lucide="refresh-cw"></i> Refresh Telemetry</button>
+                <button class="secondary" onclick="runDiagnostics()"><i data-lucide="search"></i> Deep Diagnostics</button>
+                <button class="secondary" style="border-color: var(--error); color: var(--error);" onclick="resetGPU()"><i data-lucide="power"></i> Emergency GPU Reset</button>
             </div>
-            <div id="error-body" class="error-body"></div>
         </div>
 
+        <button id="gen-btn" onclick="generate()" style="margin-top: 25px;"><i data-lucide="zap"></i> Initiate Neural Synthesis</button>
+        
+        <div id="status" class="status" style="display:none; text-align:center; margin-top:15px; color: var(--accent); font-weight: bold;"></div>
+
         <div id="player-section" class="audio-player">
-            <label>Result</label>
-            <audio id="audio-output" controls></audio>
-            <p id="perf-info" style="font-size: 0.8em; opacity: 0.7; margin-top: 10px;"></p>
+            <label><i data-lucide="music"></i> Synthesized Waveform Output</label>
+            <audio id="audio-output" style="width:100%;" controls></audio>
+            <p id="perf-info"></p>
         </div>
     </div>
 
-    <div id="toast-container"></div>
-
     <script>
         let mode = 'preset';
-        let selectedVoice = 'lennox';
+        let selectedVoice = '';
         let selectedSpeaker = 'Aiden';
-
-        let currentUploadVoice = null;
+        let wavesurfer = null;
+        let activeRegion = null;
+        let regionsPlugin = null;
+        let currentSourceUrl = null;
+        let voiceLibrary = {};
 
         function showToast(msg, type = 'success') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.innerHTML = `<span>${type === 'success' ? '✅' : '❌'}</span> <span>${msg}</span>`;
+            toast.className = 'toast';
+            toast.style.background = type === 'success' ? 'var(--green)' : 'var(--error)';
+            const icon = type === 'success' ? 'check-circle' : 'alert-circle';
+            toast.innerHTML = `<i data-lucide="${icon}"></i> <span>${msg}</span>`;
             container.appendChild(toast);
+            lucide.createIcons();
+            void toast.offsetWidth; // Force reflow
+            toast.classList.add('visible');
             setTimeout(() => {
-                toast.style.opacity = '0';
-                toast.style.transform = 'translateX(100%)';
-                toast.style.transition = 'all 0.3s ease-in';
+                toast.classList.remove('visible');
                 setTimeout(() => toast.remove(), 300);
-            }, 3000);
+            }, 4000);
         }
 
         window.onload = async () => {
+            lucide.createIcons();
             await loadSystemInfo();
+            await refreshVoiceToggles();
         };
 
         async function loadSystemInfo() {
             try {
                 const response = await fetch('/system_info');
                 const data = await response.json();
-                const badge = document.getElementById('hw-status');
-                const text = document.getElementById('hw-text');
-                
-                text.textContent = `${data.backend} | ${data.gpu}`;
-                badge.style.display = 'inline-flex';
-            } catch (e) {
-                console.warn("Could not load system info", e);
-            }
-        }
-
-        async function resetGPU() {
-            if (!confirm("This will kill the remote server process to clear CUDA errors. It will auto-restart in a few seconds. Continue?")) return;
-            
-            const status = document.getElementById('status');
-            status.textContent = "Requesting GPU Reset... Please wait 5-10 seconds then refresh.";
-            status.style.display = "block";
-            
-            try {
-                // This call will likely fail or time out because the server is exiting
-                fetch('/reset_gpu').catch(() => {}); 
-                
-                setTimeout(() => {
-                    window.location.reload();
-                }, 8000);
-            } catch (e) {}
-        }
-
-        async function runDiagnostics() {
-            const status = document.getElementById('status');
-            status.textContent = "Running deep diagnostics...";
-            status.style.display = "block";
-            
-            try {
-                const response = await fetch('/diagnostics');
-                const data = await response.json();
-                showError(JSON.stringify(data, null, 4));
-                status.textContent = "Diagnostics complete. See results below.";
-            } catch (e) {
-                showError("Diagnostics failed: " + e.message);
-            }
-        }
-
-        function showError(msg) {
-            const container = document.getElementById('error-container');
-            const body = document.getElementById('error-body');
-            const status = document.getElementById('status');
-            
-            body.textContent = msg;
-            container.style.display = 'block';
-            status.style.display = 'none';
-        }
-
-        function copyError() {
-            const body = document.getElementById('error-body').textContent;
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(body).then(() => {
-                    showToast("Error copied to clipboard!");
-                });
-            } else {
-                // Fallback for non-secure contexts (LAN IPs)
-                const textArea = document.createElement("textarea");
-                textArea.value = body;
-                document.body.appendChild(textArea);
-                textArea.select();
-                try {
-                    document.execCommand('copy');
-                    showToast("Error copied to clipboard (fallback mode)!");
-                } catch (err) {
-                    console.error('Fallback copy failed', err);
-                    showToast("Copy failed", "error");
-                }
-                document.body.removeChild(textArea);
-            }
+                document.getElementById('hw-status').style.display = 'inline-flex';
+                document.getElementById('hw-text').textContent = `${data.backend} | ${data.gpu}`;
+            } catch (e) { console.warn("System info unavailable"); }
         }
 
         async function setMode(m) {
             mode = m;
-            document.getElementById('text-input-section').style.display = m === 'upload' ? 'none' : 'block';
-            document.getElementById('params-section').style.display = m === 'upload' ? 'none' : 'block';
-            document.getElementById('preset-controls').style.display = m === 'preset' ? 'block' : 'none';
-            document.getElementById('custom-controls').style.display = m === 'custom' ? 'block' : 'none';
-            document.getElementById('clone-controls').style.display = m === 'clone' ? 'block' : 'none';
-            document.getElementById('wsl-controls').style.display = m === 'wsl' ? 'block' : 'none';
-            document.getElementById('upload-controls').style.display = m === 'upload' ? 'block' : 'none';
-            document.getElementById('gen-btn').style.display = (m === 'wsl' || m === 'upload') ? 'none' : 'block';
-            
-            document.getElementById('tab-preset').className = 'tab' + (m === 'preset' ? ' active' : '');
-            document.getElementById('tab-custom').className = 'tab' + (m === 'custom' ? ' active' : '');
-            document.getElementById('tab-clone').className = 'tab' + (m === 'clone' ? ' active' : '');
-            document.getElementById('tab-wsl').className = 'tab' + (m === 'wsl' ? ' active' : '');
-            document.getElementById('tab-upload').className = 'tab' + (m === 'upload' ? ' active' : '');
-
-            document.getElementById('error-container').style.display = 'none';
-
-            if (m === 'upload') {
-                await refreshVoiceStatus();
+            const ui = {
+                'text-input-section': m !== 'system',
+                'params-section': m !== 'system',
+                'preset-controls': m === 'preset',
+                'custom-controls': m === 'custom',
+                'manage-controls': m === 'manage',
+                'system-controls': m === 'system',
+                'gen-btn': m !== 'system' && m !== 'manage'
+            };
+            for (const [id, show] of Object.entries(ui)) {
+                const el = document.getElementById(id);
+                if (el) el.style.display = show ? 'block' : 'none';
             }
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(`tab-${m}`).classList.add('active');
+            
+            if (m === 'manage') await refreshVoiceStatus();
+            if (m === 'preset') await refreshVoiceToggles();
+            if (m === 'custom') await refreshPremiumToggles();
+            if (m === 'system') await refreshSystemInfo();
+        }
+
+        async function refreshVoiceToggles() {
+            const grid = document.getElementById('voice-toggles');
+            try {
+                const response = await fetch('/voice_status');
+                voiceLibrary = await response.json();
+                grid.innerHTML = '';
+                let first = true;
+                for (const [key, info] of Object.entries(voiceLibrary)) {
+                    if (info.type !== 'cloned') continue;
+                    const btn = document.createElement('div');
+                    btn.className = 'toggle-btn' + (first && !selectedVoice ? ' active' : (selectedVoice === key ? ' active' : ''));
+                    btn.innerHTML = `<strong>${info.display_name}</strong><span>${info.mode === 'gold' ? 'Neural Gold' : 'Speedy'}</span>`;
+                    btn.onclick = () => selectVoice(btn, key);
+                    grid.appendChild(btn);
+                    if (first && !selectedVoice) { selectedVoice = key; first = false; }
+                }
+            } catch (e) { console.error("Library sync failed", e); }
+        }
+
+        async function refreshPremiumToggles() {
+            const grid = document.getElementById('speaker-toggles');
+            try {
+                const response = await fetch('/voice_status');
+                voiceLibrary = await response.json();
+                grid.innerHTML = '';
+                for (const [key, info] of Object.entries(voiceLibrary)) {
+                    if (info.type !== 'premium') continue;
+                    const btn = document.createElement('div');
+                    btn.className = 'toggle-btn' + (selectedSpeaker === key ? ' active' : '');
+                    btn.innerHTML = `<strong>${info.display_name}</strong><span>System Native</span>`;
+                    btn.onclick = () => selectSpeaker(btn, key);
+                    grid.appendChild(btn);
+                }
+            } catch (e) { console.error("Premium sync failed", e); }
         }
 
         async function refreshVoiceStatus() {
             const list = document.getElementById('voice-status-list');
             try {
                 const response = await fetch('/voice_status');
-                const data = await response.json();
-                
+                voiceLibrary = await response.json();
                 list.innerHTML = '';
-                for (const [key, info] of Object.entries(data)) {
+                for (const [key, info] of Object.entries(voiceLibrary)) {
+                    if (info.type === 'premium') continue;
                     const card = document.createElement('div');
-                    card.className = `voice-status-card ${info.exists ? 'ready' : 'missing'}`;
-                    
+                    card.className = `voice-status-card ${info.has_sample ? 'ready' : 'missing'}`;
                     card.innerHTML = `
                         <div class="voice-info">
                             <h4>${info.display_name}</h4>
-                            <p>Target: <code>data/${info.filename}</code></p>
+                            <p>${info.filename || (key + ".wav")}</p>
                         </div>
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <span class="status-badge ${info.exists ? 'ready' : 'missing'}">
-                                ${info.exists ? 'Ready' : 'Missing'}
-                            </span>
-                            <button class="upload-mini-btn" onclick="triggerUpload('${key}')">
-                                ${info.exists ? 'Replace' : 'Upload'}
-                            </button>
+                        <div class="action-btns">
+                            ${info.has_sample ? `<button class="mini-btn" title="Remaster" onclick="remasterVoice('${key}')"><i data-lucide="wand-2"></i></button>` : ''}
+                            <button class="mini-btn" title="Upload Sample" onclick="triggerUpload('${key}')"><i data-lucide="upload"></i></button>
+                            <button class="mini-btn danger" title="Delete" onclick="deleteVoice('${key}')"><i data-lucide="trash-2"></i></button>
                         </div>
                     `;
                     list.appendChild(card);
                 }
-            } catch (e) {
-                showError("Status Check Error: " + e.message);
+                lucide.createIcons();
+            } catch (e) { console.error("Archive sync failed", e); }
+        }
+
+        function remasterVoice(key) {
+            const voice = voiceLibrary[key];
+            if (!voice) return;
+            document.getElementById('studio-voice-name').value = voice.display_name;
+            document.getElementById('studio-ref-text').value = voice.text || "";
+            if (voice.exists) {
+                initStudio(`/${voice.path}`);
             }
+            document.getElementById('manage-controls').scrollIntoView({ behavior: 'smooth' });
         }
 
-        function triggerUpload(voiceKey) {
-            currentUploadVoice = voiceKey;
-            document.getElementById('hidden-upload-input').click();
+        async function downloadYouTube() {
+            const url = document.getElementById('yt-url').value;
+            if (!url) return alert("URL required");
+            const btn = event.target;
+            btn.disabled = true; btn.textContent = "Fetching...";
+            try {
+                const formData = new FormData();
+                formData.append('url', url);
+                const res = await fetch('/download_youtube', { method: 'POST', body: formData });
+                const data = await res.json();
+                currentSourceUrl = data.url;
+                initStudio(data.url);
+                showToast("Neural Audio Acquired from YouTube");
+            } catch (e) { alert("Acquisition failed"); }
+            finally { btn.disabled = false; btn.innerHTML = '<i data-lucide="download"></i> Fetch'; lucide.createIcons(); }
         }
 
-        async function handleFileSelected(input) {
-            if (!input.files[0] || !currentUploadVoice) return;
-            
+        function loadAudioIntoStudio(input) {
             const file = input.files[0];
-            const status = document.getElementById('status');
-            const container = document.getElementById('error-container');
+            if (!file) return;
+            initStudio(file);
+        }
 
-            status.textContent = `Uploading ${file.name} for ${currentUploadVoice}...`;
-            status.style.display = "block";
-            container.style.display = "none";
+        function initStudio(source) {
+            if (wavesurfer) wavesurfer.destroy();
+            document.getElementById('studio-visualizer').style.display = 'block';
+            wavesurfer = WaveSurfer.create({
+                container: '#waveform', waveColor: '#414868', progressColor: '#7aa2f7', cursorColor: '#7aa2f7',
+                barWidth: 2, barRadius: 3, height: 128
+            });
+            regionsPlugin = wavesurfer.registerPlugin(WaveSurfer.Regions.create());
+            
+            if (source instanceof File) {
+                const reader = new FileReader();
+                reader.onload = (e) => wavesurfer.load(e.target.result);
+                reader.readAsDataURL(source);
+            } else {
+                wavesurfer.load(source);
+            }
 
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('voice', currentUploadVoice);
-
-            try {
-                const response = await fetch('/upload_voice_sample', {
-                    method: 'POST',
-                    body: formData
+            wavesurfer.on('ready', () => {
+                activeRegion = regionsPlugin.addRegion({
+                    start: 0, end: Math.min(15, wavesurfer.getDuration()),
+                    color: 'rgba(122, 162, 247, 0.2)', drag: true, resize: true
                 });
-
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ detail: "Network request failed" }));
-                    const msg = errorData.traceback ? 
-                        `${errorData.detail}\n\n[Server Traceback]\n${errorData.traceback}` : 
-                        (errorData.detail || "Unknown Server Error");
-                    throw new Error(msg);
-                }
-                status.textContent = "Upload successful!";
-                await refreshVoiceStatus(); // Update the list
-            } catch (e) {
-                showError("Upload Failed: " + e.message);
-            } finally {
-                input.value = ''; // Reset
-                currentUploadVoice = null;
-            }
-        }
-
-        async function runWSLTest(type) {
-            const status = document.getElementById('status');
-            const container = document.getElementById('error-container');
-            const player = document.getElementById('player-section');
-            const audio = document.getElementById('audio-output');
-            const perf = document.getElementById('perf-info');
-            const text = document.getElementById('text-input').value || "Metanoia system check. RTX 4090 armaments engaged.";
-
-            status.textContent = `Running WSL Test: ${type}...`;
-            status.style.display = "block";
-            container.style.display = "none";
-            player.style.display = "none";
-
-            try {
-                let response;
-                if (type === 'custom_voice_1.7b') {
-                    // Force a call to the 1.7B model with a specific speaker
-                    response = await fetch('/generate', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ 
-                            text: text, 
-                            voice: 'Aiden', 
-                            mode: 'custom',
-                            emotion: 'A deep, confident male voice' 
-                        })
-                    });
-                } else if (type === 'network_stream') {
-                    // Test the streaming GET endpoint
-                    const url = `/stream?text=${encodeURIComponent(text)}&voice=lennox&speed=1.0`;
-                    audio.src = url;
-                    player.style.display = "block";
-                    status.textContent = "Streaming started directly from GET endpoint!";
-                    audio.play();
-                    return;
-                }
-
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ detail: "Network request failed" }));
-                    const msg = errorData.traceback ? 
-                        `${errorData.detail}\n\n[Server Traceback]\n${errorData.traceback}` : 
-                        (errorData.detail || "Unknown Server Error");
-                    throw new Error(msg);
-                }
-                const blob = await response.blob();
-                audio.src = URL.createObjectURL(blob);
-                player.style.display = "block";
-                status.textContent = "WSL Test Success!";
-                audio.play();
-                perf.textContent = "Render complete. Verified on Linux/WSL CUDA Backend.";
-            } catch (e) {
-                showError("WSL Test Failed: " + e.message);
-            }
-        }
-
-        function selectVoice(btn, v) {
-            document.querySelectorAll('#voice-toggles .toggle-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            selectedVoice = v;
-        }
-
-        function selectSpeaker(btn, s) {
-            document.querySelectorAll('#speaker-toggles .toggle-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            selectedSpeaker = s;
-        }
-
-        function updateExpectedFilename() {
-            const voice = document.getElementById('upload-voice-select').value;
-            const display = document.getElementById('expected-filename');
-            const maps = {
-                'lennox': 'lennox_ref.wav',
-                'tommy': 'tommy.wav',
-                'mari': 'mari_ref.wav',
-                'jordan': 'jordan_ref.wav',
-                'shamoun': 'shamoun_ref.wav',
-                'roumie': 'roumie_perfect_15s.wav'
-            };
-            display.textContent = maps[voice] || 'sample.wav';
+            });
         }
 
         async function autoTranscribe() {
-            const file = document.getElementById('audio-file').files[0];
-            const btn = document.getElementById('transcribe-btn');
-            const refTextArea = document.getElementById('ref-text');
-            const status = document.getElementById('status');
-
-            if (!file) { alert("Please select an audio file first"); return; }
-
-            btn.disabled = true;
-            status.textContent = "Transcribing with Whisper AI...";
-            status.style.display = "block";
-
+            if (!activeRegion) return;
+            const btn = document.getElementById('sandbox-transcribe-btn');
+            btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Transcribing...';
+            lucide.createIcons();
             try {
+                const buffer = await getRegionBuffer();
+                const blob = await bufferToWave(buffer);
                 const formData = new FormData();
-                formData.append('file', file);
-
-                const response = await fetch('/transcribe', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ detail: "Network request failed" }));
-                    const msg = errorData.traceback ? 
-                        `${errorData.detail}\n\n[Server Traceback]\n${errorData.traceback}` : 
-                        (errorData.detail || "Unknown Server Error");
-                    throw new Error(msg);
-                }
-                const result = await response.json();
-                
-                refTextArea.value = result.text;
-                status.textContent = "Transcription complete!";
-            } catch (e) {
-                alert("Transcription failed: " + e.message);
-                status.style.display = "none";
-            } finally {
-                btn.disabled = false;
-            }
+                formData.append('file', blob, 'clip.wav');
+                const res = await fetch('/transcribe', { method: 'POST', body: formData });
+                const data = await res.json();
+                document.getElementById('studio-ref-text').value = data.text;
+                showToast("AI Transcription Complete");
+            } catch (e) { alert("Transcription failed"); }
+            finally { btn.disabled = false; btn.innerHTML = '<i data-lucide="sparkles"></i> AI Auto-Transcribe'; lucide.createIcons(); }
         }
 
-        async function generate() {
-            const btn = document.getElementById('gen-btn');
+        async function saveStudioToLibrary() {
+            const name = document.getElementById('studio-voice-name').value;
+            if (!name) return alert("Profile Label required");
+            const btn = document.getElementById('studio-save-btn');
+            btn.disabled = true;
+            try {
+                const buffer = await getRegionBuffer();
+                const blob = await bufferToWave(buffer);
+                const formData = new FormData();
+                formData.append('name', name);
+                formData.append('text', document.getElementById('studio-ref-text').value);
+                formData.append('file', blob);
+                const res = await fetch('/upload_voice', { method: 'POST', body: formData });
+                if (!res.ok) throw new Error("Save failed");
+                showToast(`Profile '${name}' committed to Archive`);
+                await refreshVoiceStatus();
+                await refreshVoiceToggles();
+            } catch (e) { alert("Commit failed"); }
+            finally { btn.disabled = false; }
+        }
+
+        async function generate(intent) {
+            const text = document.getElementById('text-input').value || "Neural alignment check.";
             const status = document.getElementById('status');
-            const container = document.getElementById('error-container');
             const player = document.getElementById('player-section');
             const audio = document.getElementById('audio-output');
             const perf = document.getElementById('perf-info');
 
-            const text = document.getElementById('text-input').value;
-            if(!text) { alert("Please enter text"); return; }
-
-            const speed = parseFloat(document.getElementById('speed-input').value);
-            const emotion = document.getElementById('emotion-input').value;
-
-            btn.disabled = true;
-            status.textContent = "Processing... (Generating AI audio on GPU)";
+            status.textContent = "Initiating Neural Synthesis...";
             status.style.display = "block";
-            container.style.display = "none";
             player.style.display = "none";
 
             try {
-                let response;
-                if (mode === 'preset') {
-                    response = await fetch('/generate', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ text, voice: selectedVoice, speed, emotion, mode: 'base' })
-                    });
-                } else if (mode === 'custom') {
-                    response = await fetch('/generate', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ text, voice: selectedSpeaker, speed, emotion, mode: 'custom' })
-                    });
-                } else {
-                    const file = document.getElementById('audio-file').files[0];
-                    if(!file) throw new Error("Please select an audio file for cloning");
-                    const refText = document.getElementById('ref-text').value;
-                    
+                let res;
+                if (intent === 'test') {
+                    const buffer = await getRegionBuffer();
+                    const blob = await bufferToWave(buffer);
                     const formData = new FormData();
-                    formData.append('file', file);
+                    formData.append('file', blob);
                     formData.append('text', text);
-                    formData.append('ref_text', refText);
-                    formData.append('emotion', emotion);
-                    formData.append('speed', speed);
-
-                    response = await fetch('/clone_dynamic', {
-                        method: 'POST',
-                        body: formData
+                    formData.append('ref_text', document.getElementById('studio-ref-text').value);
+                    formData.append('speed', document.getElementById('speed-input').value);
+                    res = await fetch('/clone_dynamic', { method: 'POST', body: formData });
+                } else {
+                    const body = { 
+                        text, voice: mode === 'preset' ? selectedVoice : selectedSpeaker, 
+                        mode: mode === 'preset' ? document.getElementById('gen-mode-input').value : 'custom',
+                        speed: parseFloat(document.getElementById('speed-input').value),
+                        emotion: document.getElementById('emotion-input').value
+                    };
+                    res = await fetch('/generate', { 
+                        method: 'POST', headers: {'Content-Type': 'application/json'}, 
+                        body: JSON.stringify(body) 
                     });
                 }
 
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ detail: "Network request failed" }));
-                    const msg = errorData.traceback ? 
-                        `${errorData.detail}\n\n[Server Traceback]\n${errorData.traceback}` : 
-                        (errorData.detail || "Unknown Server Error");
-                    throw new Error(msg);
-                }
-                
-                const renderTime = response.headers.get("X-Render-Time") || "Unknown";
-                const backend = response.headers.get("X-Render-Backend") || "Unknown";
-                
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-                
-                audio.src = url;
+                if (!res.ok) throw new Error("Synthesis failed");
+                const renderTime = res.headers.get('X-Render-Time') || "N/A";
+                const outBlob = await res.blob();
+                audio.src = URL.createObjectURL(outBlob);
                 player.style.display = "block";
-                status.textContent = "Success!";
                 audio.play();
-                
-                perf.textContent = `Render: ${renderTime} | Backend: ${backend}`;
+                perf.textContent = `Neural Render: ${renderTime}`;
+                showToast("Synthesis Complete");
+            } catch (e) { alert(e.message); }
+            finally { status.style.display = "none"; }
+        }
 
-            } catch (e) {
-                showError("Generation Error: " + e.message);
-            } finally {
-                btn.disabled = false;
+        async function getRegionBuffer() {
+            const buffer = await wavesurfer.getDecodedData();
+            const start = Math.floor(activeRegion.start * buffer.sampleRate);
+            const end = Math.floor(activeRegion.end * buffer.sampleRate);
+            const isolated = new AudioContext().createBuffer(buffer.numberOfChannels, end - start, buffer.sampleRate);
+            for (let i = 0; i < buffer.numberOfChannels; i++) {
+                isolated.copyToChannel(buffer.getChannelData(i).slice(start, end), i);
             }
+            return isolated;
+        }
+
+        function bufferToWave(abuffer) {
+            let numOfChan = abuffer.numberOfChannels, length = abuffer.length * numOfChan * 2 + 44, buffer = new ArrayBuffer(length), view = new DataView(buffer), pos = 0;
+            const setU16 = (d) => { view.setUint16(pos, d, true); pos += 2; };
+            const setU32 = (d) => { view.setUint32(pos, d, true); pos += 4; };
+            setU32(0x46464952); setU32(length - 8); setU32(0x45564157); setU32(0x20746d66); setU32(16); setU16(1); setU16(numOfChan); setU32(abuffer.sampleRate); setU32(abuffer.sampleRate * 2 * numOfChan); setU16(numOfChan * 2); setU16(16); setU32(0x61746164); setU32(length - pos - 4);
+            for(let i = 0; i < abuffer.length; i++) { for(let ch = 0; ch < numOfChan; ch++) { let s = Math.max(-1, Math.min(1, abuffer.getChannelData(ch)[i])); view.setInt16(pos, s < 0 ? s * 32768 : s * 32767, true); pos += 2; } }
+            return new Blob([buffer], {type: "audio/wav"});
+        }
+
+        async function refreshSystemInfo() {
+            const box = document.getElementById('sys-info-box');
+            try {
+                const res = await fetch('/system_info');
+                box.textContent = JSON.stringify(await res.json(), null, 4);
+            } catch (e) { box.textContent = "Telemetry Offline"; }
+        }
+
+        async function runDiagnostics() {
+            const box = document.getElementById('sys-info-box');
+            box.textContent = "Running Deep Neural Diagnostics...";
+            try {
+                const res = await fetch('/diagnostics');
+                box.textContent = JSON.stringify(await res.json(), null, 4);
+            } catch (e) { box.textContent = "Diagnostics Failed"; }
+        }
+
+        async function resetGPU() {
+            if (!confirm("Initiate Emergency GPU Backend Reset?")) return;
+            fetch('/reset_gpu').catch(() => {});
+            showToast("Emergency Reset Requested. System restarting...", "error");
+            setTimeout(() => window.location.reload(), 8000);
+        }
+
+        function triggerUpload(key) { currentUploadVoice = key; document.getElementById('hidden-upload-input').click(); }
+        async function handleFileSelected(input) {
+            if (!input.files[0] || !currentUploadVoice) return;
+            const formData = new FormData();
+            formData.append('file', input.files[0]);
+            formData.append('voice', currentUploadVoice);
+            await fetch('/upload_voice_sample', { method: 'POST', body: formData });
+            showToast("Archive Sample Updated");
+            await refreshVoiceStatus();
+            input.value = '';
+        }
+
+        async function deleteVoice(key) {
+            if (!confirm(`Wipe '${key}' from Neural Archive?`)) return;
+            await fetch(`/voices/${key}`, { method: 'DELETE' });
+            showToast("Neural Profile Purged", "error");
+            await refreshVoiceStatus();
+            await refreshVoiceToggles();
+        }
+
+        function selectVoice(btn, v) { 
+            selectedVoice = v; 
+            document.querySelectorAll('#voice-toggles .toggle-btn').forEach(b => b.classList.remove('active')); 
+            btn.classList.add('active'); 
+        }
+        function selectSpeaker(btn, s) { 
+            selectedSpeaker = s; 
+            document.querySelectorAll('#speaker-toggles .toggle-btn').forEach(b => b.classList.remove('active')); 
+            btn.classList.add('active'); 
         }
     </script>
 </body>

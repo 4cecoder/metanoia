@@ -132,7 +132,9 @@ def get_engine():
 # Multi-threading helpers
 from concurrent.futures import ThreadPoolExecutor
 executor = ThreadPoolExecutor(max_workers=4)
-gpu_semaphore = asyncio.Semaphore(3) # 3 concurrent GPU tasks for maximum throughput
+# MLX/Metal on Apple Silicon is NOT thread-safe for concurrent encoding on a single command buffer.
+# We must serialize GPU access to prevent the "command encoder is already encoding" assertion failure.
+gpu_semaphore = asyncio.Semaphore(1) 
 
 async def check_git_updates():
     """Background task to poll for git updates on the master branch."""
@@ -225,49 +227,41 @@ def setup_system_deps():
             logger.warning("Some manual steps (like installing CUDA toolkit) might be required.")
 
 # Voice Configurations
-VOICE_CONFIGS = {
-    "tommy": {
-        "audio": "data/tommy.wav",
-        "text": "Okay, I do believe I am live"
-    },
-    "lennox": {
-        "audio": "data/lennox_ref.wav",
-        "text": "We need to be worried, first of all, about what the AI that's currently working about the ethical problems it leads to. And they are very scary, and the one that scares people most is deception."
-    },
-    "mari": {
-        "audio": "data/mari_ref.wav",
-        "text": "we all worship the same God each to their own way shame on you for denying your Lord Jesus the Lord said I am the way no other way no one",
-        "mode": "gold",
-        "temperature": 0.4,
-        "cfg_scale": 2.5
-    },
-    "jordan": {
-        "audio": "data/jordan_ref.wav",
-        "text": "Look around and see what bugs you in your room. Do I like this room? No, it bugs me. Why? It's dusty there and the carpet's dirty and that corner's kind of ugly and the light there isn't very good. Okay, pick a problem. Pick a solution to it that you know wouldn't help, that you could do."
-    },
-    "shamoun": {
-        "audio": "data/shamoun_ref.wav",
-        "text": "Okay, why didn't Jesus Christ come out and say, I am God? Why didn't Jesus Christ come out and say, I am God? Now, I already have dozens of sessions answering this, articles answering this, but we are creatures of repetition, and we need to hear something.",
-        "mode": "gold",
-        "temperature": 0.4,
-        "cfg_scale": 2.5
-    },
-    "roumie": {
-        "audio": "data/roumie_perfect_15s.wav",
-        "text": "I am the way, and the truth, and the life. No one comes to the Father except through me. Ah, there's that word. Soon.",
-        "mode": "speedy",
-        "temperature": 0.5,
-        "cfg_scale": 2.0
-    }
-    };
+VOICES_FILE = "data/voices.json"
 
+def load_voices() -> Dict[str, Any]:
+    if not os.path.exists(VOICES_FILE):
+        os.makedirs("data", exist_ok=True)
+        # Seed with initial data if missing
+        initial_voices = {
+            "tommy": {"audio": "data/tommy.wav", "text": "Okay, I do believe I am live", "mode": "speedy"},
+            "lennox": {"audio": "data/lennox_ref.wav", "text": "We need to be worried, first of all, about what the AI that's currently working...", "mode": "speedy"},
+        }
+        with open(VOICES_FILE, "w") as f:
+            import json
+            json.dump(initial_voices, f, indent=2)
+        return initial_voices
+    
+    with open(VOICES_FILE, "r") as f:
+        import json
+        return json.load(f)
+
+def save_voices(voices: Dict[str, Any]):
+    with open(VOICES_FILE, "w") as f:
+        import json
+        json.dump(voices, f, indent=2)
+
+VOICE_CONFIGS = load_voices()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global mlx_engine, torch_engine, whisper_model
+    global mlx_engine, torch_engine, whisper_model, VOICE_CONFIGS
     
     # Handle system dependencies on Linux
     setup_system_deps()
+    
+    # Reload voices on startup
+    VOICE_CONFIGS = load_voices()
     
     # Start git polling in the background
     update_task = asyncio.create_task(check_git_updates())
@@ -311,13 +305,14 @@ async def lifespan(app: FastAPI):
         # Pre-compute prompts for preset voices
         if engine:
             for name, cfg in VOICE_CONFIGS.items():
-                precompute_mode = cfg.get("mode", "speedy")
-                engine.precompute_voice_prompt(
-                    name=name,
-                    audio_path=cfg["audio"],
-                    ref_text=cfg["text"],
-                    mode=precompute_mode
-                )
+                if cfg.get("audio") and os.path.exists(cfg["audio"]):
+                    precompute_mode = cfg.get("mode", "speedy")
+                    engine.precompute_voice_prompt(
+                        name=name,
+                        audio_path=cfg["audio"],
+                        ref_text=cfg.get("text", ""),
+                        mode=precompute_mode
+                    )
 
         # Load whisper for auto-transcription support
         logger.info("Loading Faster Whisper (small) for web interface...")
@@ -338,6 +333,156 @@ async def lifespan(app: FastAPI):
     torch_engine = None
 
 app = FastAPI(lifespan=lifespan)
+
+class VoiceUpsertRequest(BaseModel):
+    name: str
+    text: Optional[str] = None
+    mode: str = "speedy"
+    audio: Optional[str] = None
+
+@app.post("/voices")
+async def upsert_voice(request: VoiceUpsertRequest):
+    global VOICE_CONFIGS
+    VOICE_CONFIGS = load_voices()
+    
+    key = request.name.lower().replace(" ", "_")
+    audio_path = request.audio or f"data/{key}.wav"
+    
+    VOICE_CONFIGS[key] = {
+        "audio": audio_path,
+        "text": request.text,
+        "mode": request.mode
+    }
+    save_voices(VOICE_CONFIGS)
+    
+    # Precompute if audio exists
+    engine = get_engine()
+    if engine and os.path.exists(audio_path):
+        engine.precompute_voice_prompt(
+            name=key,
+            audio_path=audio_path,
+            ref_text=request.text or "",
+            mode=request.mode
+        )
+        
+    return {"status": "success", "voice": key}
+
+@app.delete("/voices/{voice_name}")
+async def delete_voice_api(voice_name: str):
+    global VOICE_CONFIGS
+    VOICE_CONFIGS = load_voices()
+    key = voice_name.lower()
+    if key in VOICE_CONFIGS:
+        del VOICE_CONFIGS[key]
+        save_voices(VOICE_CONFIGS)
+        return {"status": "success"}
+    raise HTTPException(status_code=404, detail="Voice not found")
+
+@app.post("/delete_voice")
+async def delete_voice_post(name: str = Form(...)):
+    """Legacy compatibility for the old design's form-based delete."""
+    return await delete_voice_api(name)
+
+@app.post("/upload_voice")
+async def upload_voice_unified(
+    name: str = Form(...),
+    text: Optional[str] = Form(None),
+    file: UploadFile = File(...)
+):
+    """Unified upload for both metadata and audio sample."""
+    global VOICE_CONFIGS
+    VOICE_CONFIGS = load_voices()
+    key = name.lower().replace(" ", "_")
+    
+    target_path = f"data/{key}.wav"
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+    
+    try:
+        content = await file.read()
+        with open(target_path, "wb") as f:
+            f.write(content)
+            
+        VOICE_CONFIGS[key] = {
+            "audio": target_path,
+            "text": text,
+            "mode": "speedy" # Default
+        }
+        save_voices(VOICE_CONFIGS)
+        
+        # Invalidate cache and precompute
+        engine = get_engine()
+        if engine:
+            if hasattr(engine, "prompt_cache") and key in engine.prompt_cache:
+                del engine.prompt_cache[key]
+            engine.precompute_voice_prompt(
+                name=key,
+                audio_path=target_path,
+                ref_text=text or "",
+                mode="speedy"
+            )
+        return {"status": "success", "voice": key}
+    except Exception as e:
+        logger.error(f"Unified upload failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/download_youtube")
+async def download_youtube(url: str = Form(...)):
+    """Extracts audio from a YouTube video for cloning."""
+    temp_id = uuid.uuid4().hex
+    output_template = f"cache/yt_{temp_id}.%(ext)s"
+    final_wav = f"cache/yt_{temp_id}.wav"
+    os.makedirs("cache", exist_ok=True)
+    
+    try:
+        logger.info(f"Extracting YouTube audio: {url}")
+        
+        cmd = [
+            "yt-dlp", 
+            "-x", 
+            "--audio-format", "wav", 
+            "--audio-quality", "0",
+            "--no-playlist",
+            "-o", output_template,
+            url
+        ]
+        
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+        
+        if process.returncode != 0:
+            error_msg = stderr.decode().strip()
+            raise Exception(f"yt-dlp failed: {error_msg}")
+            
+        if not os.path.exists(final_wav):
+            import glob
+            matches = glob.glob(f"cache/yt_{temp_id}.*")
+            if matches:
+                os.replace(matches[0], final_wav)
+            else:
+                raise Exception("Audio extraction failed - output file missing")
+                
+        return {"status": "success", "url": f"static_cache/yt_{temp_id}.wav"}
+    except Exception as e:
+        logger.error(f"YouTube download failed: {e}")
+        return JSONResponse(status_code=500, content={"detail": str(e)})
+
+@app.post("/cleanup_temp")
+async def cleanup_temp(url: str = Form(...)):
+    """Removes temporary extracted audio files."""
+    if "static_cache/" in url:
+        local_path = url.replace("static_cache/", "cache/")
+        if os.path.exists(local_path):
+            os.remove(local_path)
+            return {"status": "success"}
+    return {"status": "ignored"}
+
+# Add Static Cache mounting for temporary studio files
+app.mount("/static_cache", StaticFiles(directory="cache"), name="static_cache")
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -487,14 +632,28 @@ async def generate_speech(request: TTSRequest):
 @app.get("/voice_status")
 async def get_voice_status():
     """Check which preset voice reference files exist on the server."""
+    global VOICE_CONFIGS
+    VOICE_CONFIGS = load_voices()
     status = {}
+    
     for name, cfg in VOICE_CONFIGS.items():
-        exists = os.path.exists(cfg["audio"])
+        audio_path = cfg.get("audio")
+        exists = os.path.exists(audio_path) if audio_path else False
+        
+        # Categorization:
+        # - Premium: System-native speakers (built-in, no audio file required)
+        # - Cloned: User profiles or HQ remasters (require a .wav file)
+        v_type = "premium" if not audio_path else "cloned"
+        
         status[name] = {
-            "exists": exists,
-            "path": cfg["audio"],
-            "filename": os.path.basename(cfg["audio"]),
-            "display_name": name.capitalize() if name != "roumie" else "Jonathan Roumie"
+            "exists": True if v_type == "premium" else exists,
+            "has_sample": exists, 
+            "path": audio_path,
+            "filename": os.path.basename(audio_path) if audio_path else None,
+            "display_name": name.replace("_", " ").title(),
+            "text": cfg.get("text"),
+            "mode": cfg.get("mode", "speedy"),
+            "type": v_type
         }
     return status
 
@@ -574,15 +733,20 @@ async def upload_voice_sample(
     file: UploadFile = File(...),
     voice: str = Form(...)
 ):
-    """Upload a reference WAV file for a preset voice (e.g. lennox, tommy)."""
+    """Upload a reference WAV file for a voice."""
+    global VOICE_CONFIGS
+    VOICE_CONFIGS = load_voices()
     voice = voice.lower()
     if voice not in VOICE_CONFIGS:
-        raise HTTPException(status_code=400, detail=f"Voice '{voice}' is not a recognized preset.")
+        raise HTTPException(status_code=400, detail=f"Voice '{voice}' is not recognized.")
     
     if not file.filename.endswith(".wav"):
         raise HTTPException(status_code=400, detail="Only .wav files are supported for voice samples.")
 
-    target_path = VOICE_CONFIGS[voice]["audio"]
+    target_path = VOICE_CONFIGS[voice].get("audio") or f"data/{voice}.wav"
+    VOICE_CONFIGS[voice]["audio"] = target_path
+    save_voices(VOICE_CONFIGS)
+    
     os.makedirs(os.path.dirname(target_path), exist_ok=True)
     
     try:
@@ -598,6 +762,15 @@ async def upload_voice_sample(
             if voice in engine.prompt_cache:
                 del engine.prompt_cache[voice]
                 logger.info(f"Invalidated prompt cache for {voice}")
+        
+        # Re-precompute
+        if engine:
+            engine.precompute_voice_prompt(
+                name=voice,
+                audio_path=target_path,
+                ref_text=VOICE_CONFIGS[voice].get("text", ""),
+                mode=VOICE_CONFIGS[voice].get("mode", "speedy")
+            )
                 
         return {"status": "success", "message": f"Uploaded sample for {voice}", "path": target_path}
     except Exception as e:

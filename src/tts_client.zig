@@ -1,4 +1,5 @@
 const std = @import("std");
+const gtk = @import("gtk.zig");
 
 pub const TTSRequest = struct {
     text: []const u8,
@@ -39,7 +40,7 @@ pub fn generate_speech(engine: std.Io, text: []const u8, voice: []const u8, spee
     
     // 0. Load server address from config
     var server_url: []const u8 = "http://127.0.0.1:8000";
-    if (std.Io.Dir.cwd().readFileAlloc(allocator, engine, "data/config.json", std.Io.Limit.limited(4096))) |config_data| {
+    if (std.Io.Dir.cwd().readFileAlloc(engine, "data/config.json", allocator, std.Io.Limit.limited(4096))) |config_data| {
         defer allocator.free(config_data);
         if (std.json.parseFromSlice(std.json.Value, allocator, config_data, .{})) |parsed| {
             defer parsed.deinit();
@@ -64,9 +65,6 @@ pub fn generate_speech(engine: std.Io, text: []const u8, voice: []const u8, spee
     }
 
     // 2. Cache Miss - Call Server
-    const tts_json_path = try std.fmt.allocPrint(allocator, "data/tts_req_{s}.json", .{cache_key});
-    defer allocator.free(tts_json_path);
-    
     const req = TTSRequest{
         .text = text,
         .voice = voice,
@@ -84,23 +82,44 @@ pub fn generate_speech(engine: std.Io, text: []const u8, voice: []const u8, spee
     try stringifier.write(req);
     const json_str = json_buf[0..json_writer.end];
 
-    const f = try std.Io.Dir.cwd().createFile(engine, tts_json_path, .{});
-    var fw = f.writer(engine, &.{});
-    try fw.interface.writeAll(json_str);
-    f.close(engine);
-
-    const data_arg = try std.fmt.allocPrint(allocator, "@{s}", .{tts_json_path});
-    defer allocator.free(data_arg);
-
     const full_endpoint = try std.fmt.allocPrint(allocator, "{s}/generate", .{server_url});
     defer allocator.free(full_endpoint);
 
-    var child = try std.process.spawn(engine, .{
-        .argv = &.{ "curl", "-s", "-f", "-X", "POST", full_endpoint, "-H", "Content-Type: application/json", "--data-binary", data_arg, "-o", out_audio_path },
-    });
-    const term = try child.wait(engine);
-    if (term == .exited and term.exited != 0) return error.TtsServerError;
+    const start_time = gtk.g_get_monotonic_time();
+    
+    // Add retry loop (up to 3 attempts) for network resilience
+    var attempt: u8 = 0;
+    while (attempt < 3) : (attempt += 1) {
+        var child = try std.process.spawn(engine, .{
+            .argv = &.{ 
+                "curl", "-4", "-s", "-f", 
+                "--connect-timeout", "5",
+                "--max-time", "60",
+                "-X", "POST", 
+                full_endpoint, 
+                "-H", "Content-Type: application/json", 
+                "--data-raw", json_str, 
+                "-o", out_audio_path 
+            },
+        });
+        const term = try child.wait(engine);
+        
+        if (term == .exited and term.exited == 0) break;
+        
+        if (attempt < 2) {
+            std.debug.print("TTS Attempt {d} failed, retrying in 1s...\n", .{attempt + 1});
+            gtk.g_usleep(1_000_000); // 1 second
+        } else {
+            const end_time = gtk.g_get_monotonic_time();
+            const elapsed_ms = @divTrunc(end_time - start_time, 1000);
+            std.debug.print("TTS Server Error: curl exited with {d} after 3 attempts in {d}ms\n", .{term.exited, elapsed_ms});
+            return error.TtsServerError;
+        }
+    }
 
+    const end_time = gtk.g_get_monotonic_time();
+    const elapsed_ms = @divTrunc(end_time - start_time, 1000);
+    std.debug.print("TTS generated in {d}ms: {s}\n", .{ elapsed_ms, out_audio_path });
     return try allocator.dupe(u8, out_audio_path);
 }
 

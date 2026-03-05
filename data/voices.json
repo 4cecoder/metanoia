@@ -1,0 +1,87 @@
+{
+  "tommy": {
+    "audio": "data/tommy.wav",
+    "text": "Okay, I do believe I am live.",
+    "mode": "speedy"
+  },
+  "lennox": {
+    "audio": "data/lennox_ref.wav",
+    "text": "We need to be worried, first of all, about what the AI that's currently",
+    "mode": "speedy"
+  },
+  "mari": {
+    "audio": "data/mari_ref.wav",
+    "text": "We all worship the same God, each to their own way.  Shame on you for denying your Lord Jesus.",
+    "mode": "gold"
+  },
+  "jordan": {
+    "audio": "data/jordan_ref.wav",
+    "text": "Look around and see what bugs you in your room.  Do I like this room?  No, it bugs me.  Why?  It's dusty there and the carpet's dirty  and that corner's kind of ugly  and the light there isn't very good.",
+    "mode": "speedy"
+  },
+  "shamoun": {
+    "audio": "data/shamoun_ref.wav",
+    "text": "Okay, why didn't Jesus Christ come out and say I am God?  Why didn't Jesus Christ come out and say I'm God now? I already have dozens of sessions answering this",
+    "mode": "gold"
+  },
+  "roumie": {
+    "audio": "data/roumie_perfect_15s.wav",
+    "text": "I am the way, and the truth, and the life, no one comes to the Father except through me.",
+    "mode": "speedy"
+  },
+  "ryan": {
+    "audio": null,
+    "text": null,
+    "mode": "custom"
+  },
+  "aiden": {
+    "audio": null,
+    "text": null,
+    "mode": "custom"
+  },
+  "vivian": {
+    "audio": null,
+    "text": null,
+    "mode": "custom"
+  },
+  "serena": {
+    "audio": null,
+    "text": null,
+    "mode": "custom"
+  },
+  "uncle_fu": {
+    "audio": null,
+    "text": null,
+    "mode": "custom"
+  },
+  "dylan": {
+    "audio": null,
+    "text": null,
+    "mode": "custom"
+  },
+  "eric": {
+    "audio": null,
+    "text": null,
+    "mode": "custom"
+  },
+  "sohee": {
+    "audio": null,
+    "text": null,
+    "mode": "custom"
+  },
+  "ono_anna": {
+    "audio": null,
+    "text": null,
+    "mode": "custom"
+  },
+  "shapiro": {
+    "audio": "data/shapiro.wav",
+    "text": "From America's point of view, we are all hoping and praying and rooting for the Iranian people to rise up and win, to take over the reins of government and install, again, a non-Islamist regime friendly to the United States and the rest of the region. The only failure would be a complete restoration of the Ayatollahs enshrined even for the future.",
+    "mode": "speedy"
+  },
+  "trump": {
+    "audio": "data/trump.wav",
+    "text": "Before I even arrive at the Oval Office, I will have the disastrous war between Russia and Ukraine settled.  It will be settled quickly, quickly.",
+    "mode": "speedy"
+  }
+}

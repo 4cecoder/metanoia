@@ -1,5 +1,7 @@
 const std = @import("std");
 const gtk = @import("gtk.zig");
+const sidebar_cmp = @import("ui/components/sidebar.zig");
+const status_bar_cmp = @import("ui/components/status_bar.zig");
 const bible = @import("bible_db.zig");
 const tts = @import("tts_client.zig");
 const ollama = @import("ollama_client.zig");
@@ -183,6 +185,7 @@ var db: ?*sqlite3 = null;
 var main_notebook: ?*GtkNotebook = null;
 var bible_view: ?*GtkBox = null;
 var main_window: ?*GtkWindow = null;
+var main_sidebar: ?*sidebar_cmp.Sidebar = null;
 var main_paned: ?*GtkPaned = null;
 var font_provider: ?*GtkCssProvider = null;
 var search_entry: ?*GtkWidget = null;
@@ -200,13 +203,13 @@ var study_right_scroll: ?*GtkWidget = null;
 var right_scroll_pane: ?*GtkWidget = null;
 var f_right_plus_btn: ?*GtkWidget = null;
 var f_right_minus_btn: ?*GtkWidget = null;
-var sidebar_widget: ?*GtkWidget = null;
-var word_study_label: ?*GtkLabel = null;
+var active_note_verse: ?struct { book: [64]u8, ch: i32, v: i32 } = null;
 var chapter_summary_label: ?*GtkLabel = null;
+var word_study_label: ?*GtkLabel = null;
+var llm_spinner: ?*GtkWidget = null;
 var note_view: ?*GtkWidget = null;
 var note_buffer: ?*anyopaque = null;
-var active_note_verse: ?struct { book: [64]u8, ch: i32, v: i32 } = null;
-var llm_spinner: ?*GtkWidget = null;
+var main_status_bar: ?*status_bar_cmp.StatusBar = null;
 
 var selection_dialog: ?*GtkWindow = null;
 var modal_stack: ?*GtkStack = null;
@@ -296,7 +299,7 @@ fn on_verse_long_press(gesture: ?*anyopaque, x: f64, y: f64, user_data: gpointer
     };
 
     // Open sidebar
-    gtk_widget_set_visible(sidebar_widget, true);
+    if (main_sidebar) |sb| gtk_widget_set_visible(sb.box.?, true);
 
     // Load note from DB
     const existing = bible.get_verse_note(allocator, db.?, book, cur_chapter, v_num) catch "";
@@ -481,7 +484,7 @@ fn on_full_chapter_tts_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.
 
     const s = allocator.dupeZ(u8, "Preparing Full Chapter Audio...") catch "";
     _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(s)));
-    gtk_widget_set_visible(sidebar_widget, true);
+    if (main_sidebar) |sb| gtk_widget_set_visible(sb.box.?, true);
 
     const w = allocator.create(Wrapper) catch return;
     w.* = .{ .text = allocator.dupe(u8, full_text.items) catch "", .engine = io };
@@ -506,7 +509,7 @@ fn on_llm_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
     }
     
     // Ensure sidebar is visible
-    gtk_widget_set_visible(sidebar_widget, true);
+    if (main_sidebar) |sb| gtk_widget_set_visible(sb.box.?, true);
 
     const Context = struct {
         text: []const u8,
@@ -637,7 +640,12 @@ fn on_llm_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
 
 fn status_update_idle(data: gpointer) callconv(.c) bool {
     const text: [*:0]u8 = @ptrCast(@alignCast(data));
-    defer std.heap.page_allocator.free(std.mem.span(text));
+    const span = std.mem.span(text);
+    defer std.heap.page_allocator.free(span);
+    
+    if (main_status_bar) |sb| sb.updateStatus(span, false);
+    if (main_sidebar) |ms| ms.log(span);
+    
     if (word_study_label) |lbl| {
         gtk_label_set_markup(lbl, text);
     }
@@ -646,7 +654,11 @@ fn status_update_idle(data: gpointer) callconv(.c) bool {
 
 fn update_summary_idle(data: gpointer) callconv(.c) bool {
     const text: [*:0]u8 = @ptrCast(@alignCast(data));
-    defer std.heap.page_allocator.free(std.mem.span(text));
+    const span = std.mem.span(text);
+    defer std.heap.page_allocator.free(span);
+    
+    if (main_sidebar) |ms| ms.log("Summary updated.");
+    
     if (chapter_summary_label) |lbl| {
         gtk_label_set_markup(lbl, text);
     }
@@ -655,7 +667,12 @@ fn update_summary_idle(data: gpointer) callconv(.c) bool {
 
 fn update_sidebar_idle(data: gpointer) callconv(.c) bool {
     const text: [*:0]u8 = @ptrCast(@alignCast(data));
-    defer std.heap.page_allocator.free(std.mem.span(text));
+    const span = std.mem.span(text);
+    defer std.heap.page_allocator.free(span);
+    
+    if (main_status_bar) |sb| sb.updateStatus("Analysis Complete", false);
+    if (main_sidebar) |ms| ms.log("Neural analysis finished.");
+
     if (word_study_label) |lbl| {
         gtk_label_set_markup(lbl, text);
     }
@@ -986,7 +1003,12 @@ const Config = struct {
     mode: []const u8 = "base",
     tts_mode: []const u8 = "speedy",
     sidebar_width: i32 = 300,
+    tts_server_url: []const u8 = "http://127.0.0.1:8000",
+    llm_server_url: []const u8 = "http://127.0.0.1:11434",
+    tts_timeout_ms: u32 = 5000,
+    tts_retry_count: u32 = 3,
 };
+
 var app_config = Config{};
 
 fn save_config() void {
@@ -1223,6 +1245,18 @@ fn update_font_styles() void {
         \\    transition: all 0.3s ease;
         \\}}
         \\
+        \\.status-bar {{
+        \\    background-color: #16161e;
+        \\    border-top: 1px solid #2f334d;
+        \\    padding: 4px 12px;
+        \\}}
+        \\
+        \\.status-bar-label {{
+        \\    font-family: "SF Pro Text", monospace;
+        \\    font-size: 11px;
+        \\    color: #565f89;
+        \\}}
+        \\
         \\/* Spotlight Search Window */
         \\.spotlight-window {{
         \\    background-color: #24283b;
@@ -1376,8 +1410,10 @@ fn on_parallel_toggled(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void 
 
 fn on_sidebar_toggled(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
     _ = btn; _ = user_data;
-    const is_visible = gtk_widget_get_visible(sidebar_widget);
-    gtk_widget_set_visible(sidebar_widget, !is_visible);
+    if (main_sidebar) |sb| {
+        const is_visible = gtk_widget_get_visible(sb.box);
+        gtk_widget_set_visible(sb.box, !is_visible);
+    }
 }
 
 fn on_interlinear_word_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
@@ -1667,6 +1703,36 @@ fn on_modal_back_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) voi
 }
 
 var persistent_book_names: [150][64]u8 = undefined;
+
+fn on_settings_save(config: gtk.settings_dialog.SettingsConfig) void {
+    app_config.tts_server_url = config.tts_url;
+    app_config.tts_timeout_ms = config.tts_timeout_ms;
+    app_config.tts_retry_count = config.tts_retry_count;
+    app_config.llm_server_url = config.llm_url;
+    save_config();
+}
+
+fn on_settings_btn_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
+    _ = btn;
+    _ = user_data;
+    const allocator = std.heap.page_allocator;
+    const dialog = gtk.settings_dialog.SettingsDialog.init(
+        allocator,
+        main_window,
+        .{
+            .onSave = on_settings_save,
+            .allocator = allocator,
+        },
+        .{
+            .tts_url = app_config.tts_server_url,
+            .tts_timeout_ms = app_config.tts_timeout_ms,
+            .tts_retry_count = @intCast(app_config.tts_retry_count),
+            .llm_url = app_config.llm_server_url,
+        },
+        main_io,
+    );
+    dialog.show();
+}
 
 fn on_passage_btn_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
     _ = btn; _ = user_data;
@@ -2093,6 +2159,10 @@ fn activate(app: ?*GtkApplication, user_data: gpointer) callconv(.c) void {
     _ = g_signal_connect_data(passage_btn, "clicked", @ptrCast(&on_passage_btn_clicked), null, null, 0);
     gtk_box_append(@ptrCast(top_bar), passage_btn);
 
+    const settings_btn = gtk_button_new_with_label("⚙️");
+    _ = g_signal_connect_data(settings_btn, "clicked", @ptrCast(&on_settings_btn_clicked), null, null, 0);
+    gtk_box_append(@ptrCast(top_bar), settings_btn);
+
     const llm_btn = gtk_button_new_with_label("LLM Study");
     _ = g_signal_connect_data(llm_btn, "clicked", @ptrCast(&on_llm_clicked), null, null, 0);
     gtk_box_append(@ptrCast(top_bar), llm_btn);
@@ -2112,131 +2182,25 @@ fn activate(app: ?*GtkApplication, user_data: gpointer) callconv(.c) void {
     _ = g_signal_connect_data(voice_drop, "notify::selected", @ptrCast(&on_voice_changed), null, null, 0);
     gtk_box_append(@ptrCast(top_bar), voice_drop);
 
-    main_paned = @ptrCast(gtk_paned_new(GTK_ORIENTATION_HORIZONTAL));
+    main_paned = @ptrCast(gtk_paned_new(gtk.GTK_ORIENTATION_HORIZONTAL));
     gtk_box_append(@ptrCast(main_layout), @ptrCast(main_paned));
     _ = g_signal_connect_data(main_paned, "notify::position", @ptrCast(&on_paned_notify_position), null, null, 0);
 
-    const sidebar_scroll = gtk_scrolled_window_new();
-    sidebar_widget = @ptrCast(sidebar_scroll);
-    gtk_widget_set_visible(sidebar_widget, false);
-    gtk_widget_set_vexpand(sidebar_scroll, true);
-    gtk_paned_set_start_child(@ptrCast(main_paned), sidebar_scroll);
+    main_status_bar = status_bar_cmp.StatusBar.init(std.heap.page_allocator);
+    gtk_box_append(@ptrCast(main_layout), main_status_bar.?.box);
 
-    const sidebar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 15);
-    gtk_widget_add_css_class(sidebar, "sidebar");
-    gtk_widget_set_size_request(sidebar, 250, -1);
-    gtk_scrolled_window_set_child(@ptrCast(sidebar_scroll), sidebar);
+    main_sidebar = sidebar_cmp.Sidebar.init(std.heap.page_allocator, main_io, on_color_clicked);
+    gtk_widget_set_visible(main_sidebar.?.box.?, false);
+    gtk_paned_set_start_child(@ptrCast(main_paned), main_sidebar.?.box);
     
     gtk_paned_set_position(@ptrCast(main_paned), app_config.sidebar_width);
 
-    const summary_expander = gtk_expander_new("Chapter Summary");
-    gtk_widget_add_css_class(summary_expander, "sidebar-expander");
-    gtk_expander_set_expanded(@ptrCast(summary_expander), true);
-    gtk_box_append(@ptrCast(sidebar), summary_expander);
-
-    chapter_summary_label = @ptrCast(gtk_label_new("No summary loaded"));
-    gtk_label_set_wrap(chapter_summary_label, true);
-    gtk_widget_add_css_class(@ptrCast(chapter_summary_label), "sidebar-label");
-    gtk_expander_set_child(@ptrCast(summary_expander), @ptrCast(chapter_summary_label));
-
-    const study_expander = gtk_expander_new("Word Study");
-    gtk_widget_add_css_class(study_expander, "sidebar-expander");
-    gtk_expander_set_expanded(@ptrCast(study_expander), true);
-    gtk_box_append(@ptrCast(sidebar), study_expander);
-
-    const word_study_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    gtk_expander_set_child(@ptrCast(study_expander), word_study_box);
-
-    llm_spinner = gtk_spinner_new();
-    gtk_widget_set_visible(llm_spinner, false);
-    gtk_widget_set_halign(llm_spinner, gtk.GTK_ALIGN_CENTER);
-    gtk_box_append(@ptrCast(word_study_box), @ptrCast(llm_spinner));
-
-    word_study_label = @ptrCast(gtk_label_new("Click a word to begin study"));
-    gtk_label_set_wrap(word_study_label, true);
-    gtk_widget_add_css_class(@ptrCast(word_study_label), "sidebar-label");
-    gtk_box_append(@ptrCast(word_study_box), @ptrCast(word_study_label));
-
-    const notes_expander = gtk_expander_new("Verse Notes");
-    gtk_widget_add_css_class(notes_expander, "sidebar-expander");
-    gtk_expander_set_expanded(@ptrCast(notes_expander), true);
-    gtk_box_append(@ptrCast(sidebar), notes_expander);
-
-    const notes_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_expander_set_child(@ptrCast(notes_expander), notes_box);
-
-    note_view = gtk_text_view_new();
-    gtk_widget_set_size_request(note_view, -1, 200);
-    gtk_widget_add_css_class(note_view, "note-editor");
-    note_buffer = gtk_text_view_get_buffer(note_view);
-    gtk_box_append(@ptrCast(notes_box), note_view);
-
-    const save_note_btn = gtk_button_new_with_label("Save Note");
-    gtk_widget_add_css_class(save_note_btn, "m3-button");
-    _ = g_signal_connect_data(save_note_btn, "clicked", @ptrCast(&on_save_note_clicked), null, null, 0);
-    gtk_box_append(@ptrCast(notes_box), save_note_btn);
-
-    const regen_tts_btn = gtk_button_new_with_label("Regenerate Verse TTS");
-    gtk_widget_add_css_class(regen_tts_btn, "m3-button");
-    _ = g_signal_connect_data(regen_tts_btn, "clicked", @ptrCast(&on_regenerate_tts_clicked), null, null, 0);
-    gtk_box_append(@ptrCast(notes_box), regen_tts_btn);
-
-    const tts_settings_expander = gtk_expander_new("TTS Settings");
-    gtk_widget_add_css_class(tts_settings_expander, "sidebar-expander");
-    gtk_expander_set_expanded(@ptrCast(tts_settings_expander), true);
-    gtk_box_append(@ptrCast(sidebar), tts_settings_expander);
-
-    const tts_settings_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_expander_set_child(@ptrCast(tts_settings_expander), tts_settings_box);
-
-    const mode_label = gtk_label_new("Full Chapter Audio Quality:");
-    gtk_widget_set_halign(mode_label, gtk.GTK_ALIGN_START);
-    gtk_box_append(@ptrCast(tts_settings_box), mode_label);
-
-    const modes = [_]?[*:0]const u8{ "Speedy (8-bit)", "Gold Standard (bf16)", null };
-    const mode_drop = gtk_drop_down_new_from_strings(&modes);
-    if (std.mem.eql(u8, app_config.tts_mode, "gold")) {
-        gtk_drop_down_set_selected(mode_drop, 1);
-    } else {
-        gtk_drop_down_set_selected(mode_drop, 0);
-    }
-    _ = g_signal_connect_data(mode_drop, "notify::selected", @ptrCast(&on_tts_mode_changed), null, null, 0);
-    gtk_box_append(@ptrCast(tts_settings_box), mode_drop);
-
-    const master_btn = gtk_button_new_with_label("Generate Full Chapter Audio");
-    gtk_widget_add_css_class(master_btn, "m3-button");
-    _ = g_signal_connect_data(master_btn, "clicked", @ptrCast(&on_full_chapter_tts_clicked), null, null, 0);
-    gtk_box_append(@ptrCast(tts_settings_box), master_btn);
-
-    const highlight_expander = gtk_expander_new("Permanent Highlight");
-    gtk_widget_add_css_class(highlight_expander, "sidebar-expander");
-    gtk_expander_set_expanded(@ptrCast(highlight_expander), true);
-    gtk_box_append(@ptrCast(sidebar), highlight_expander);
-
-    const colors_grid = gtk_flow_box_new();
-    gtk_flow_box_set_min_children_per_line(@ptrCast(colors_grid), 4);
-    gtk_flow_box_set_selection_mode(@ptrCast(colors_grid), 0);
-    gtk_widget_set_halign(colors_grid, gtk.GTK_ALIGN_CENTER);
-    gtk_expander_set_child(@ptrCast(highlight_expander), colors_grid);
-
-    const color_list = [_]struct { name: [*:0]const u8, hex: [*:0]const u8, class: [*:0]const u8 }{
-        .{ .name = "", .hex = "#ffdfa344", .class = "h-yellow" },
-        .{ .name = "", .hex = "#b9f27c44", .class = "h-green" },
-        .{ .name = "", .hex = "#7da6ff44", .class = "h-blue" },
-        .{ .name = "", .hex = "#ff7a9344", .class = "h-red" },
-        .{ .name = "", .hex = "#d0b3ff44", .class = "h-purple" },
-        .{ .name = "", .hex = "#89ddff44", .class = "h-cyan" },
-        .{ .name = "", .hex = "#ffc0b944", .class = "h-orange" },
-        .{ .name = "Clear", .hex = "none", .class = "h-clear" },
-    };
-
-    for (color_list) |c| {
-        const c_btn = gtk_button_new_with_label(c.name);
-        gtk_widget_add_css_class(c_btn, "candy-btn");
-        gtk_widget_add_css_class(c_btn, c.class);
-        _ = g_signal_connect_data(c_btn, "clicked", @ptrCast(&on_color_clicked), @constCast(@ptrCast(c.hex)), null, 0);
-        gtk_flow_box_insert(@ptrCast(colors_grid), c_btn, -1);
-    }
+    // Link global pointers to modular component fields
+    chapter_summary_label = main_sidebar.?.summary_label;
+    word_study_label = main_sidebar.?.word_study_label;
+    llm_spinner = main_sidebar.?.llm_spinner;
+    note_view = main_sidebar.?.note_view;
+    note_buffer = main_sidebar.?.note_buffer;
 
     main_notebook = @ptrCast(gtk_notebook_new());
     gtk_widget_add_css_class(@ptrCast(main_notebook), "main-content");

@@ -28,6 +28,13 @@ pub const GTK_TEXT_DIR_RTL = 2;
 
 pub const GTK_STACK_TRANSITION_TYPE_SLIDE_LEFT_RIGHT = 7;
 
+pub const GTK_ALIGN_FILL = 0;
+pub const GTK_ALIGN_START = 1;
+pub const GTK_ALIGN_END = 2;
+pub const GTK_ALIGN_CENTER = 3;
+pub const GTK_ALIGN_BASELINE = 4;
+
+// Standard GTK/GLib Exports
 pub extern fn gtk_application_new(application_id: ?[*:0]const u8, flags: i32) ?*GtkApplication;
 pub extern fn g_application_run(application: ?*GApplication, argc: i32, argv: ?[*]?[*:0]u8) i32;
 pub extern fn g_object_unref(object: gpointer) void;
@@ -106,21 +113,23 @@ pub extern fn gtk_gesture_long_press_new() ?*anyopaque;
 
 pub extern fn gtk_text_view_new() ?*GtkWidget;
 pub extern fn gtk_text_view_get_buffer(text_view: ?*anyopaque) ?*anyopaque;
+pub extern fn gtk_text_view_set_editable(text_view: ?*anyopaque, setting: bool) void;
+pub extern fn gtk_text_view_set_cursor_visible(text_view: ?*anyopaque, setting: bool) void;
+pub extern fn gtk_text_view_scroll_to_iter(text_view: ?*anyopaque, iter: *anyopaque, within_margin: f64, use_align: bool, xalign: f64, yalign: f64) void;
+
 pub extern fn gtk_text_buffer_set_text(buffer: ?*anyopaque, text: [*:0]const u8, len: i32) void;
+pub extern fn gtk_text_buffer_insert(buffer: ?*anyopaque, iter: *anyopaque, text: [*:0]const u8, len: i32) void;
 pub extern fn gtk_text_buffer_get_start_iter(buffer: ?*anyopaque, iter: *anyopaque) void;
 pub extern fn gtk_text_buffer_get_end_iter(buffer: ?*anyopaque, iter: *anyopaque) void;
 pub extern fn gtk_text_buffer_get_text(buffer: ?*anyopaque, start: *anyopaque, end: *anyopaque, include_hidden_chars: bool) [*:0]u8;
 
 pub extern fn gtk_event_controller_get_widget(controller: ?*anyopaque) ?*GtkWidget;
-
 pub extern fn gtk_event_controller_key_new() ?*anyopaque;
 pub extern fn gdk_event_get_modifier_state(event: ?*anyopaque) u32;
 pub extern fn gdk_event_get_keyval(event: ?*anyopaque) u32;
-pub const GDK_MODIFIER_MASK_COMMAND = 1 << 28;
-pub const GDK_KEY_k = 107;
-pub const GDK_KEY_K = 75;
 
 pub extern fn gtk_search_entry_new() ?*GtkWidget;
+pub extern fn gtk_entry_new() ?*GtkWidget;
 pub extern fn gtk_editable_get_text(editable: ?*anyopaque) [*:0]const u8;
 pub extern fn gtk_editable_set_text(editable: ?*anyopaque, text: [*:0]const u8) void;
 pub extern fn gtk_search_entry_set_key_capture_widget(entry: ?*anyopaque, widget: ?*GtkWidget) void;
@@ -135,6 +144,7 @@ pub extern fn gtk_popover_set_pointing_to(popover: ?*anyopaque, rect: *anyopaque
 pub extern fn gtk_popover_set_offset(popover: ?*anyopaque, x: i32, y: i32) void;
 pub extern fn gtk_popover_set_autohide(popover: ?*anyopaque, autohide: bool) void;
 pub extern fn gtk_popover_menu_new_from_model(model: ?*anyopaque) ?*GtkWidget;
+
 pub extern fn gtk_list_box_new() ?*GtkWidget;
 pub extern fn gtk_list_box_append(list_box: ?*anyopaque, child: ?*GtkWidget) void;
 pub extern fn gtk_list_box_remove_all(list_box: ?*anyopaque) void;
@@ -153,6 +163,7 @@ pub extern fn gtk_spinner_stop(spinner: ?*anyopaque) void;
 pub extern fn gtk_button_new_with_label(label: [*:0]const u8) ?*GtkWidget;
 pub extern fn gtk_button_set_label(button: ?*GtkButton, label: [*:0]const u8) void;
 pub extern fn gtk_button_set_child(button: ?*anyopaque, child: ?*GtkWidget) void;
+
 pub extern fn gtk_notebook_new() ?*GtkWidget;
 pub extern fn gtk_notebook_append_page(notebook: ?*GtkNotebook, child: ?*GtkWidget, tab_label: ?*GtkWidget) i32;
 pub extern fn gtk_notebook_set_current_page(notebook: ?*GtkNotebook, page_num: i32) void;
@@ -177,11 +188,6 @@ pub extern fn gtk_expander_set_expanded(expander: ?*GtkExpander, expanded: bool)
 
 pub extern fn gtk_widget_set_halign(widget: ?*GtkWidget, alignment: i32) void;
 pub extern fn gtk_widget_set_valign(widget: ?*GtkWidget, alignment: i32) void;
-pub const GTK_ALIGN_FILL = 0;
-pub const GTK_ALIGN_START = 1;
-pub const GTK_ALIGN_END = 2;
-pub const GTK_ALIGN_CENTER = 3;
-pub const GTK_ALIGN_BASELINE = 4;
 
 pub extern fn g_strdup(str: ?[*:0]const u8) ?[*:0]u8;
 pub extern fn g_free(ptr: gpointer) void;
@@ -205,3 +211,5 @@ pub const GActionEntry = extern struct {
     padding: [3]usize = [_]usize{ 0, 0, 0 },
 };
 pub extern fn g_action_map_add_action_entries(action_map: ?*anyopaque, entries: [*]const GActionEntry, n_entries: i32, user_data: gpointer) void;
+
+pub const settings_dialog = @import("ui/settings_dialog.zig");
