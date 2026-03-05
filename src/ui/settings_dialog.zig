@@ -338,7 +338,7 @@ fn applyStyles() void {
         \\  border: 1px solid #414868; 
         \\  border-radius: 6px; 
         \\  padding: 4px 8px;
-        \\  max-width: 80px;
+        \\  min-width: 80px;
         \\}
         \\
         \\.text-dim { color: #565f89; font-size: 12px; }
