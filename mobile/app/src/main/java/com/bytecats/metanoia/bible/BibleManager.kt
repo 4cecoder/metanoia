@@ -7,42 +7,13 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
 import java.io.File
+import com.bytecats.metanoia.models.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-data class BibleBook(val name: String, val chapters: Int, val testament: String)
-data class InterlinearWord(val original: String, val strongs: String, val translation: String)
-data class Favorite(val strongs: String, val lemma: String, val definition: String)
-data class Highlight(val book: String, val chapter: Int, val verse: Int, val color: Int)
-data class Note(val id: Int = 0, val book: String, val chapter: Int, val verse: Int, val content: String, val timestamp: Long)
-data class SearchResult(val book: String, val chapter: Int, val verse: Int, val text: String)
-
-data class LibraryStats(
-    val versesOt: Int, val versesNt: Int, 
-    val lexiconHeb: Int, val lexiconGk: Int, 
-    val notesCount: Int, val highlightsCount: Int,
-    val interlinearCount: Int,
-    val dbSizeMb: Double
-)
 
 class BibleManager(private val context: Context) {
     private val dbFile = File(context.filesDir, "bible.db")
     private val client = OkHttpClient()
-
-    private val abbreviations = mapOf(
-        "gen" to "Genesis", "ex" to "Exodus", "lev" to "Leviticus", "num" to "Numbers", "deut" to "Deuteronomy",
-        "josh" to "Joshua", "judg" to "Judges", "ruth" to "Ruth", "1sam" to "1Samuel", "2sam" to "2Samuel",
-        "1ki" to "1Kings", "2ki" to "2Kings", "1chr" to "1Chronicles", "2chr" to "2Chronicles", "ezr" to "Ezra",
-        "neh" to "Nehemiah", "ps" to "Psalms", "prov" to "Proverbs", "eccl" to "Ecclesiastes", "song" to "SongofSolomon",
-        "isa" to "Isaiah", "jer" to "Jeremiah", "lam" to "Lamentations", "eze" to "Ezekiel", "dan" to "Daniel",
-        "hos" to "Hosea", "joe" to "Joel", "am" to "Amos", "oba" to "Obadiah", "jon" to "Jonah", "mic" to "Micah",
-        "nah" to "Nahum", "hab" to "Habakkuk", "zep" to "Zephaniah", "hag" to "Haggai", "zec" to "Zechariah", "mal" to "Malachi",
-        "matt" to "Matthew", "mk" to "Mark", "lk" to "Luke", "jn" to "John", "act" to "Acts", "rom" to "Romans",
-        "1cor" to "1Corinthians", "2cor" to "2Corinthians", "gal" to "Galatians", "eph" to "Ephesians", "phi" to "Philippians",
-        "col" to "Colossians", "1the" to "1Thessalonians", "2the" to "2Thessalonians", "1tim" to "1Timothy", "2tim" to "2Timothy",
-        "tit" to "Titus", "phm" to "Philemon", "heb" to "Hebrews", "jam" to "James", "1pet" to "1Peter", "2pet" to "2Peter",
-        "1jn" to "1John", "2jn" to "2John", "3jn" to "3John", "jud" to "Jude", "rev" to "Revelation"
-    )
 
     private fun getDb(readOnly: Boolean = true): SQLiteDatabase {
         return SQLiteDatabase.openDatabase(dbFile.absolutePath, null, if (readOnly) SQLiteDatabase.OPEN_READONLY else SQLiteDatabase.OPEN_READWRITE)
@@ -90,7 +61,7 @@ class BibleManager(private val context: Context) {
         val match = refRegex.find(query.trim())
         if (match != null) {
             val bookPart = match.groupValues[1].lowercase().replace(" ", "")
-            val resolvedBook = abbreviations[bookPart] ?: books.find { it.name.lowercase() == bookPart }?.name
+            val resolvedBook = BIBLE_ABBREVIATIONS[bookPart] ?: books.find { it.name.lowercase() == bookPart }?.name
             if (resolvedBook != null) {
                 val ch = match.groupValues[2]
                 val vs = match.groupValues.getOrNull(3)
@@ -178,19 +149,34 @@ class BibleManager(private val context: Context) {
             val db = getDb(false); db.beginTransaction()
             try {
                 var currentVerse = 0; var wordIdx = 0
-                doc.select("table[class*=tablefloat]").forEach { table ->
-                    val vSpan = table.select("span.reftop3, span.reftop").first()
+                // BibleHub uses different structures. tablefloat is common, but let's check for tr.interlinear too
+                val tables = doc.select("table[class*=tablefloat], div.interlinear")
+                tables.forEach { element ->
+                    // Verse detection
+                    val vSpan = element.select("span.reftop3, span.reftop, a.vref").first()
                     if (vSpan != null) {
                         val vTxt = vSpan.text().filter { it.isDigit() }
-                        if (vTxt.isNotEmpty()) { val nV = vTxt.toInt(); if (nV != currentVerse) { currentVerse = nV; wordIdx = 0 } }
+                        if (vTxt.isNotEmpty()) { 
+                            val nV = vTxt.toInt()
+                            if (nV != currentVerse) { 
+                                currentVerse = nV
+                                wordIdx = 0 
+                            } 
+                        }
                     }
+                    
                     if (currentVerse > 0) {
-                        val orig = table.select("span.greek, span.heb, span.hebrew").first()?.text()?.trim()
+                        // Word extraction
+                        val orig = element.select("span.greek, span.heb, span.hebrew").first()?.text()?.trim()
                         if (orig != null && orig.isNotEmpty()) {
-                            var strongs = table.select("span.pos, span.strongs").first()?.text()?.trim() ?: ""
-                            if (strongs.isNotEmpty()) strongs = "$prefix${strongs.filter { it.isDigit() }}"
-                            val trans = table.select("span.eng").first()?.text()?.trim() ?: ""
-                            db.execSQL("INSERT OR REPLACE INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs) VALUES (?, ?, ?, ?, ?, ?, ?)", arrayOf(book, chapter, currentVerse, wordIdx, orig, trans, strongs))
+                            var strongs = element.select("span.pos, span.strongs, a[href*='/strongs/']").first()?.text()?.trim() ?: ""
+                            if (strongs.isNotEmpty()) {
+                                // Sometimes it's like [G1234] or just 1234
+                                strongs = "$prefix${strongs.filter { it.isDigit() }}"
+                            }
+                            val trans = element.select("span.eng").first()?.text()?.trim() ?: ""
+                            db.execSQL("INSERT OR REPLACE INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                                arrayOf(book, chapter, currentVerse, wordIdx, orig, trans, strongs))
                             wordIdx++
                         }
                     }

@@ -12,7 +12,7 @@ class SettingsManager(context: Context) {
         set(value) = prefs.edit().putBoolean("use_experimental_tts", value).apply()
 
     var selectedVoice: String
-        get() = prefs.getString("selected_voice", "John Lennox") ?: "John Lennox"
+        get() = prefs.getString("selected_voice", "lennox") ?: "lennox"
         set(value) = prefs.edit().putString("selected_voice", value).apply()
 
     var tpuEnabled: Boolean
@@ -44,4 +44,8 @@ class SettingsManager(context: Context) {
     var scraperUserAgent: String
         get() = prefs.getString("scraper_user_agent", "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro)") ?: "Mozilla/5.0"
         set(value) = prefs.edit().putString("scraper_user_agent", value).apply()
+
+    var ttsServerUrl: String
+        get() = prefs.getString("tts_server_url", "http://10.0.2.2:8000") ?: "http://10.0.2.2:8000"
+        set(value) = prefs.edit().putString("tts_server_url", value).apply()
 }

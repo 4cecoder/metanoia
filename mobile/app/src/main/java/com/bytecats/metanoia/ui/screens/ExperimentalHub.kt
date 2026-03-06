@@ -20,7 +20,7 @@ fun ExperimentalHub(navController: NavController) {
             ModuleCard("GRANITE-4 AI", "IBM 350M Ultra-Fast", Icons.Default.AutoAwesome, Color(0xFF7aa2f7)) { 
                 navController.navigate("ai_lab") 
             }
-            ModuleCard("VOICE LAB", "TPU Voice & Cloning", Icons.Default.GraphicEq, Color(0xFF9ece6a)) { 
+            ModuleCard("NEURAL STUDIO", "Remote Voice Engineering", Icons.Default.GraphicEq, Color(0xFF9ece6a)) { 
                 navController.navigate("voice_lab") 
             }
         }

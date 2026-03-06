@@ -23,7 +23,14 @@ fun MainMenu(navController: NavController, viewModel: MainViewModel) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("METANOIA", fontWeight = FontWeight.Black, letterSpacing = 4.sp) },
+                title = { 
+                    Text(
+                        "METANOIA", 
+                        style = MaterialTheme.typography.displayLarge,
+                        letterSpacing = 6.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    ) 
+                },
                 actions = {
                     IconButton({ navController.navigate("settings_main") }) {
                         Icon(Icons.Default.Settings, null)

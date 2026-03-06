@@ -254,8 +254,14 @@ fn on_voice_changed(self: ?*anyopaque, pspec: ?*anyopaque, user_data: gpointer) 
     const selected = gtk_drop_down_get_selected(self);
     const voices = [_][]const u8{ "lennox", "tommy", "mari", "jordan", "shamoun", "roumie" };
     if (selected < voices.len) {
-        app_config.selected_voice = voices[selected];
+        const voice_name = voices[selected];
+        app_config.selected_voice = voice_name;
         save_config();
+        
+        const msg = std.fmt.allocPrint(std.heap.page_allocator, "Voice changed to {s}", .{voice_name}) catch "Voice changed";
+        if (main_status_bar) |sb| sb.updateStatus(msg, false);
+        if (!std.mem.eql(u8, msg, "Voice changed")) std.heap.page_allocator.free(msg);
+
         std.debug.print("Voice changed to: {s}\n", .{app_config.selected_voice});
     }
 }
@@ -268,10 +274,13 @@ fn on_color_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
         const book = std.mem.span(@as([*:0]const u8, @ptrCast(&av.book)));
         if (std.mem.eql(u8, color_span, "none")) {
             bible.delete_verse_highlight(db.?, book, av.ch, av.v) catch {};
+            if (main_status_bar) |sb| sb.updateStatus("Highlight removed", false);
         } else {
             bible.set_verse_highlight(db.?, book, av.ch, av.v, color_span) catch |err| {
                 std.debug.print("Failed to save highlight: {any}\n", .{err});
+                if (main_status_bar) |sb| sb.updateStatus("Failed to save highlight", true);
             };
+            if (main_status_bar) |sb| sb.updateStatus("Verse highlighted", false);
         }
         // Immediate full re-render to show highlights correctly
         load_chapter_into_study(book, av.ch, av.v);
@@ -335,8 +344,11 @@ fn on_save_note_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void
         const book = std.mem.span(@as([*:0]const u8, @ptrCast(&av.book)));
         bible.save_verse_note(db.?, book, av.ch, av.v, std.mem.span(text)) catch |err| {
             std.debug.print("Failed to save note: {any}\n", .{err});
+            if (main_status_bar) |sb| sb.updateStatus("Failed to save note", true);
             return;
         };
+
+        if (main_status_bar) |sb| sb.updateStatus("Note saved successfully", false);
 
         // Provide feedback
         if (btn) |b| {
@@ -361,12 +373,19 @@ fn on_regenerate_tts_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c)
     if (sqlite3_prepare_v2(db.?, sql, -1, @ptrCast(&stmt), null) == SQLITE_OK) {
         if (sqlite3_step(stmt.?) == SQLITE_ROW) {
             const text_raw = sqlite3_column_text(stmt.?, 0) orelse "";
-            const text = allocator.dupe(u8, std.mem.span(text_raw)) catch "";
+            const text = allocator.dupe(u8, std.mem.span(text_raw)) catch {
+                _ = sqlite3_finalize(stmt.?);
+                return;
+            };
             
             if (btn) |b| {
                 gtk_button_set_label(b, "Generating...");
                 gtk_widget_set_sensitive(@ptrCast(b), false);
             }
+
+            const msg = std.fmt.allocPrint(allocator, "Generating TTS for {s} {d}:{d}...", .{ book, av.ch, av.v }) catch "Generating TTS...";
+            if (main_status_bar) |sb| sb.updateStatus(msg, false);
+            if (!std.mem.eql(u8, msg, "Generating TTS...")) allocator.free(msg);
 
             const Wrapper = struct {
                 btn: ?*GtkButton,
@@ -380,6 +399,7 @@ fn on_regenerate_tts_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c)
                     if (path) |pa| inner_allocator.free(pa);
 
                     _ = g_idle_add(&reset_tts_btn_idle, self.btn);
+                    if (main_status_bar) |sb| sb.updateStatus("TTS Generated", false);
                     
                     inner_allocator.free(self.text);
                     inner_allocator.destroy(self);
@@ -387,7 +407,11 @@ fn on_regenerate_tts_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c)
                 }
             };
 
-            const w = allocator.create(Wrapper) catch return;
+            const w = allocator.create(Wrapper) catch {
+                allocator.free(text);
+                _ = sqlite3_finalize(stmt.?);
+                return;
+            };
             w.* = .{ .btn = btn, .text = text, .engine = main_io };
             _ = g_thread_new("single_tts_gen", &Wrapper.thread, w);
         }
@@ -431,8 +455,10 @@ const MasterPlayContext = struct {
             if (tts_process == &play_child) tts_process = null;
         }
 
-        const s = allocator.dupeZ(u8, "Full Chapter Playback Finished.") catch "";
-        _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(s)));
+        const s = allocator.dupeZ(u8, "Full Chapter Playback Finished.");
+        if (s) |str| {
+            _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(str.ptr)));
+        } else |_| {}
 
         allocator.free(self.path);
         allocator.destroy(self);
@@ -471,7 +497,12 @@ fn on_full_chapter_tts_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.
             const path = tts.generate_speech(self.engine, self.text, app_config.selected_voice, app_config.speed, app_config.emotion, app_config.tts_mode, false) catch null;
             
             if (path) |pa| {
-                const ctx = inner_allocator.create(MasterPlayContext) catch return null;
+                const ctx = inner_allocator.create(MasterPlayContext) catch {
+                    inner_allocator.free(pa);
+                    inner_allocator.free(self.text);
+                    inner_allocator.destroy(self);
+                    return null;
+                };
                 ctx.* = .{ .path = pa, .engine = self.engine };
                 _ = g_thread_new("master_play", &MasterPlayContext.run, ctx);
             }
@@ -482,12 +513,18 @@ fn on_full_chapter_tts_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.
         }
     };
 
-    const s = allocator.dupeZ(u8, "Preparing Full Chapter Audio...") catch "";
-    _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(s)));
+    const s = allocator.dupeZ(u8, "Preparing Full Chapter Audio...");
+    if (s) |str| {
+        _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(str.ptr)));
+    } else |_| {}
     if (main_sidebar) |sb| gtk_widget_set_visible(sb.box.?, true);
 
     const w = allocator.create(Wrapper) catch return;
-    w.* = .{ .text = allocator.dupe(u8, full_text.items) catch "", .engine = io };
+    const text_dupe = allocator.dupe(u8, full_text.items) catch {
+        allocator.destroy(w);
+        return;
+    };
+    w.* = .{ .text = text_dupe, .engine = io };
     _ = g_thread_new("full_chapter_gen", &Wrapper.thread, w);
 }
 
@@ -521,24 +558,27 @@ fn on_llm_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
             const self: *@This() = @ptrCast(@alignCast(p));
             const inner_allocator = std.heap.page_allocator;
             
-            const s0 = inner_allocator.dupeZ(u8, "<span color='#7aa2f7'>Step 0/4: Checking for factual data...</span>") catch "";
-            _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(s0)));
+            if (inner_allocator.dupeZ(u8, "<span color='#7aa2f7'>Step 0/4: Checking for factual data...</span>")) |s0| {
+                _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(s0.ptr)));
+            } else |_| {}
 
             // 1. Check if we have lexicon data, if not, try to scrape it
             {
                 const test_lex = bible.get_verse_lexicon_context(inner_allocator, db.?, self.book, self.ch, self.v + 1) catch "";
                 defer if (test_lex.len > 0) inner_allocator.free(test_lex);
                 if (test_lex.len == 0) {
-                    const s_tool = inner_allocator.dupeZ(u8, "<span color='#e0af68'>Auto-Tooling: Fetching Interlinear Data from BibleHub...</span>") catch "";
-                    _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(s_tool)));
+                    if (inner_allocator.dupeZ(u8, "<span color='#e0af68'>Auto-Tooling: Fetching Interlinear Data from BibleHub...</span>")) |s_tool| {
+                        _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(s_tool.ptr)));
+                    } else |_| {}
                     
                     scraper.scrape_interlinear(self.engine, self.book, self.ch) catch {};
                     scraper.scrape_lexicon(self.engine) catch {};
                 }
             }
 
-            const s1 = inner_allocator.dupeZ(u8, "<span color='#7aa2f7'>Step 1/4: Gathering Historical &amp; Lexical Facts...</span>") catch "";
-            _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(s1)));
+            if (inner_allocator.dupeZ(u8, "<span color='#7aa2f7'>Step 1/4: Gathering Historical &amp; Lexical Facts...</span>")) |s1| {
+                _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(s1.ptr)));
+            } else |_| {}
 
             // Fetch factual context from DB
             const lex_context = bible.get_verse_lexicon_context(inner_allocator, db.?, self.book, self.ch, self.v + 1) catch "";
@@ -554,8 +594,9 @@ fn on_llm_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
             const summary_was_missing = std.mem.containsAtLeast(u8, summary_context, 1, "No literary summary found");
             
             if (summary_was_missing) {
-                const s2 = inner_allocator.dupeZ(u8, "<span color='#7aa2f7'>Step 2/4: Creating Literary Context (Summarizing)...</span>") catch "";
-                _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(s2)));
+                if (inner_allocator.dupeZ(u8, "<span color='#7aa2f7'>Step 2/4: Creating Literary Context (Summarizing)...</span>")) |s2| {
+                    _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(s2.ptr)));
+                } else |_| {}
 
                 inner_allocator.free(summary_context);
                 const chapter_verses = bible.get_chapter_verses(inner_allocator, db.?, self.book, self.ch) catch null;
@@ -590,11 +631,13 @@ fn on_llm_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
             defer if (summary_context.len > 0) inner_allocator.free(summary_context);
 
             // Update the Summary UI label
-            const final_summary = inner_allocator.dupeZ(u8, summary_context) catch "";
-            _ = g_idle_add(&update_summary_idle, @ptrCast(@constCast(final_summary)));
+            if (inner_allocator.dupeZ(u8, summary_context)) |final_summary| {
+                _ = g_idle_add(&update_summary_idle, @ptrCast(@constCast(final_summary.ptr)));
+            } else |_| {}
 
-            const s3 = inner_allocator.dupeZ(u8, "<span color='#7aa2f7'>Step 3/4: Synthesizing Scholarly Insight...</span>") catch "";
-            _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(s3)));
+            if (inner_allocator.dupeZ(u8, "<span color='#7aa2f7'>Step 3/4: Synthesizing Scholarly Insight...</span>")) |s3| {
+                _ = g_idle_add(&status_update_idle, @ptrCast(@constCast(s3.ptr)));
+            } else |_| {}
 
             const prompt = std.fmt.allocPrint(inner_allocator, 
                 "System: You are a precise biblical scholar. Use ONLY the provided data to explain the verse.\n\n" ++
@@ -612,15 +655,17 @@ fn on_llm_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
             const response = ollama.generate_response(inner_allocator, self.engine, prompt) catch |err| {
                 const err_msg = std.fmt.allocPrint(inner_allocator, "LLM Error: {any}", .{err}) catch return null;
                 defer inner_allocator.free(err_msg);
-                const final_err = inner_allocator.dupeZ(u8, err_msg) catch return null;
-                _ = g_idle_add(&update_sidebar_idle, @ptrCast(@constCast(final_err)));
+                if (inner_allocator.dupeZ(u8, err_msg)) |final_err| {
+                    _ = g_idle_add(&update_sidebar_idle, @ptrCast(@constCast(final_err.ptr)));
+                } else |_| {}
                 return null;
             };
             defer inner_allocator.free(response);
 
             // Pass response to UI thread
-            const final_res = inner_allocator.dupeZ(u8, response) catch return null;
-            _ = g_idle_add(&update_sidebar_idle, @ptrCast(@constCast(final_res)));
+            if (inner_allocator.dupeZ(u8, response)) |final_res| {
+                _ = g_idle_add(&update_sidebar_idle, @ptrCast(@constCast(final_res.ptr)));
+            } else |_| {}
             
             inner_allocator.destroy(self);
             return null;
@@ -1332,6 +1377,7 @@ fn on_font_adjust(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
     }
     update_font_styles();
     save_config();
+    if (main_status_bar) |sb| sb.updateStatus("Font size adjusted", false);
 }
 
 fn clear_box(box: ?*GtkBox) void {
@@ -1464,6 +1510,11 @@ fn add_interactive_word(flow: ?*GtkFlowBox, word: [*:0]const u8, strongs: [*:0]c
 
 fn load_chapter_into_study(book: []const u8, chapter: i32, start_verse: i32) void {
     const allocator = std.heap.page_allocator;
+
+    const loading_msg = std.fmt.allocPrint(allocator, "Loading {s} {d}...", .{ book, chapter }) catch "Loading...";
+    if (main_status_bar) |sb| sb.updateStatus(loading_msg, false);
+    if (!std.mem.eql(u8, loading_msg, "Loading...")) allocator.free(loading_msg);
+
     const sql = std.fmt.allocPrintSentinel(allocator, "SELECT verse, text FROM verses WHERE book='{s}' AND chapter={d} ORDER BY verse ASC", .{ book, chapter }, 0) catch return;
     defer allocator.free(sql);
     var stmt: ?*sqlite3_stmt = null;
@@ -1573,6 +1624,12 @@ fn load_chapter_into_study(book: []const u8, chapter: i32, start_verse: i32) voi
             }
         }
         _ = sqlite3_finalize(stmt.?);
+
+        const verse_count = if (current_chapter_verses) |v| v.items.len else 0;
+        const loaded_msg = std.fmt.allocPrint(allocator, "Loaded {s} {d} ({d} verses)", .{ book, chapter, verse_count }) catch "Loaded.";
+        if (main_status_bar) |sb| sb.updateStatus(loaded_msg, false);
+        if (!std.mem.eql(u8, loaded_msg, "Loaded.")) allocator.free(loaded_msg);
+
         if (book.ptr != &cur_book_name) { @memcpy(cur_book_name[0..book.len], book); cur_book_name[book.len] = 0; }
         cur_chapter = chapter;
 
@@ -1586,6 +1643,10 @@ fn load_chapter_into_study(book: []const u8, chapter: i32, start_verse: i32) voi
         save_config();
 
         gtk_notebook_set_current_page(main_notebook, 1);
+    } else {
+        const failed_msg = std.fmt.allocPrint(allocator, "Failed to load {s} {d}", .{ book, chapter }) catch "Failed to load.";
+        if (main_status_bar) |sb| sb.updateStatus(failed_msg, true);
+        if (!std.mem.eql(u8, failed_msg, "Failed to load.")) allocator.free(failed_msg);
     }
 }
 
@@ -1710,6 +1771,7 @@ fn on_settings_save(config: gtk.settings_dialog.SettingsConfig) void {
     app_config.tts_retry_count = config.tts_retry_count;
     app_config.llm_server_url = config.llm_url;
     save_config();
+    if (main_status_bar) |sb| sb.updateStatus("Settings saved", false);
 }
 
 fn on_settings_btn_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
@@ -1853,7 +1915,13 @@ fn on_search_result_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) 
 fn perform_search(span: []const u8) void {
     if (span.len < 2) return;
     const allocator = std.heap.page_allocator;
+
+    const searching_msg = std.fmt.allocPrint(allocator, "Searching for '{s}'...", .{span}) catch "Searching...";
+    if (main_status_bar) |sb| sb.updateStatus(searching_msg, false);
+    if (!std.mem.eql(u8, searching_msg, "Searching...")) allocator.free(searching_msg);
+
     gtk_list_box_remove_all(search_results_list);
+    var total_results: usize = 0;
 
     // 1. Try Reference Parsing
     var it = std.mem.tokenizeAny(u8, span, " :");
@@ -1885,7 +1953,7 @@ fn perform_search(span: []const u8) void {
         if (book_end_idx > 0 and chapter != null) {
             const book_query = std.mem.join(allocator, "", parts.items[0..book_end_idx]) catch "";
             defer allocator.free(book_query);
-            
+
             var resolved_book: ?[]const u8 = null;
             for (BIBLE_ABBREVIATIONS) |abbr| {
                 if (std.ascii.eqlIgnoreCase(abbr.abbr, book_query)) {
@@ -1909,7 +1977,7 @@ fn perform_search(span: []const u8) void {
             if (resolved_book) |rb| {
                 const label_text = std.fmt.allocPrintSentinel(allocator, "<b>Go to: {s} {d}:{d}</b>", .{rb, chapter.?, verse orelse 1}, 0) catch "Err";
                 defer allocator.free(label_text);
-                
+
                 const res = &persistent_search_results[0];
                 @memset(&res.book, 0);
                 @memcpy(res.book[0..rb.len], rb);
@@ -1922,14 +1990,18 @@ fn perform_search(span: []const u8) void {
                 gtk_button_set_child(@ptrCast(row_btn), lbl);
                 _ = g_signal_connect_data(row_btn, "clicked", @ptrCast(&on_search_result_clicked), res, null, 0);
                 gtk_list_box_append(search_results_list, row_btn);
+                total_results += 1;
             }
         }
     }
 
     // 2. Keyword Search
-    const sql = std.fmt.allocPrintSentinel(allocator, "SELECT book, chapter, verse, text FROM verses WHERE text LIKE '%{s}%' LIMIT 40", .{span}, 0) catch return;
+    const sql = std.fmt.allocPrintSentinel(allocator, "SELECT book, chapter, verse, text FROM verses WHERE text LIKE '%{s}%' LIMIT 40", .{span}, 0) catch {
+        if (main_status_bar) |sb| sb.updateStatus("Search failed", true);
+        return;
+    };
     defer allocator.free(sql);
-    
+
     var stmt: ?*sqlite3_stmt = null;
     if (sqlite3_prepare_v2(db.?, sql, -1, @ptrCast(&stmt), null) == SQLITE_OK) {
         var count: usize = 0;
@@ -1939,7 +2011,7 @@ fn perform_search(span: []const u8) void {
             const v = sqlite3_column_int(stmt.?, 2);
             const t = sqlite3_column_text(stmt.?, 3);
 
-            const res = &persistent_search_results[count + 1]; // +1 because 0 might be reference result
+            const res = &persistent_search_results[total_results]; 
             const b_span = std.mem.span(b.?);
             @memset(&res.book, 0);
             @memcpy(res.book[0..b_span.len], b_span);
@@ -1965,22 +2037,30 @@ fn perform_search(span: []const u8) void {
 
             const label_text = std.fmt.allocPrintSentinel(allocator, "<b>{s} {d}:{d}</b> - {s}", .{b.?, c, v, highlighted.items}, 0) catch "Err";
             defer allocator.free(label_text);
-            
+
             const row_btn = gtk_button_new_with_label("");
             const lbl = gtk_label_new(null);
             gtk_label_set_markup(@ptrCast(lbl), label_text);
             gtk_label_set_xalign(@ptrCast(lbl), 0.0);
             gtk_label_set_wrap(@ptrCast(lbl), true);
             gtk_button_set_child(@ptrCast(row_btn), lbl);
-            
+
             _ = g_signal_connect_data(row_btn, "clicked", @ptrCast(&on_search_result_clicked), res, null, 0);
             gtk_list_box_append(search_results_list, row_btn);
             count += 1;
+            total_results += 1;
         }
         _ = sqlite3_finalize(stmt.?);
     }
-}
 
+    if (total_results > 0) {
+        const found_msg = std.fmt.allocPrint(allocator, "Found {d} results", .{total_results}) catch "Found results";
+        if (main_status_bar) |sb| sb.updateStatus(found_msg, false);
+        if (!std.mem.eql(u8, found_msg, "Found results")) allocator.free(found_msg);
+    } else {
+        if (main_status_bar) |sb| sb.updateStatus("No results found", false);
+    }
+}
 fn on_search_activated(entry: ?*anyopaque, user_data: gpointer) callconv(.c) void {
     _ = user_data;
     const text = gtk_editable_get_text(entry);

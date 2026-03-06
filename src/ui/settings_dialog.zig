@@ -445,8 +445,15 @@ fn on_discover_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void 
 
         fn run(p: gpointer) callconv(.c) gpointer {
             const self: *@This() = @ptrCast(@alignCast(p));
-            var disc = network_discovery.NetworkDiscovery.init(self.allocator, self.dialog.io, .{});
-            if (disc.discoverSync()) |result| {
+            const allocator = self.allocator;
+            const d = self.dialog;
+            const b = self.btn;
+            defer allocator.destroy(self);
+
+            var disc = network_discovery.NetworkDiscovery.init(allocator, d.io, .{});
+            if (disc.discoverSync()) |res| {
+                var result = res;
+                defer result.deinit();
                 const UpdateUI = struct {
                     url: [*:0]u8,
                     d: *SettingsDialog,
@@ -461,22 +468,29 @@ fn on_discover_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void 
                         return false;
                     }
                 };
-                const u_ctx = self.allocator.create(UpdateUI) catch return null;
-                u_ctx.* = .{ .url = self.allocator.dupeZ(u8, result.url) catch return null, .d = self.dialog, .b = self.btn };
-                _ = g_idle_add(&UpdateUI.update, u_ctx);
+                if (allocator.create(UpdateUI)) |u_ctx| {
+                    u_ctx.* = .{ 
+                        .url = allocator.dupeZ(u8, result.url) catch {
+                            allocator.destroy(u_ctx);
+                            return null;
+                        }, 
+                        .d = d, 
+                        .b = b 
+                    };
+                    _ = g_idle_add(&UpdateUI.update, u_ctx);
+                } else |_| {}
             } else {
                 const ResetUI = struct {
                     b: ?*GtkButton,
                     fn reset(b_p: gpointer) callconv(.c) bool {
-                        const b: ?*GtkButton = @ptrCast(b_p);
-                        gtk_widget_set_sensitive(b, true);
-                        gtk_button_set_label(b, "Find Server");
+                        const b_res: ?*GtkButton = @ptrCast(b_p);
+                        gtk_widget_set_sensitive(b_res, true);
+                        gtk_button_set_label(b_res, "Find Server");
                         return false;
                     }
                 };
-                _ = g_idle_add(&ResetUI.reset, self.btn);
+                _ = g_idle_add(&ResetUI.reset, b);
             }
-            self.allocator.destroy(self);
             return null;
         }
     };
@@ -496,16 +510,25 @@ fn on_test_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
         d: *SettingsDialog,
         fn run(p: gpointer) callconv(.c) gpointer {
             const self: *@This() = @ptrCast(@alignCast(p));
-            const test_url = std.fmt.allocPrint(self.d.allocator, "{s}/system_info", .{self.url}) catch "";
-            defer self.d.allocator.free(test_url);
+            const allocator = self.d.allocator;
+            const io = self.d.io;
+            const url = self.url;
+            
+            defer allocator.destroy(self);
+            defer allocator.free(url);
 
-            var child = std.process.spawn(self.d.io, .{
+            if (url.len == 0) return null;
+
+            const test_url = std.fmt.allocPrint(allocator, "{s}/system_info", .{url}) catch return null;
+            defer allocator.free(test_url);
+
+            var child = std.process.spawn(io, .{
                 .argv = &.{ "curl", "-s", "--connect-timeout", "2", "-f", test_url },
                 .stdout = .pipe,
             }) catch {
                 return null;
             };
-            const term = child.wait(self.d.io) catch std.process.Child.Term{ .exited = 1 };
+            const term = child.wait(io) catch std.process.Child.Term{ .exited = 1 };
             const success = term == .exited and term.exited == 0;
 
             const Update = struct {
@@ -521,17 +544,21 @@ fn on_test_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
                     return false;
                 }
             };
-            const u = self.d.allocator.create(Update) catch return null;
-            u.* = .{ .ok = success, .d = self.d };
-            _ = g_idle_add(&Update.update, u);
-            self.d.allocator.free(self.url);
-            self.d.allocator.destroy(self);
+            if (allocator.create(Update)) |u| {
+                u.* = .{ .ok = success, .d = self.d };
+                _ = g_idle_add(&Update.update, u);
+            } else |_| {}
+
             return null;
         }
     };
     const task = dialog.allocator.create(TestTask) catch return;
     const url = gtk_editable_get_text(dialog.tts_url_entry.?);
-    task.* = .{ .url = dialog.allocator.dupe(u8, std.mem.span(url)) catch "", .d = dialog };
+    const url_dupe = dialog.allocator.dupe(u8, std.mem.span(url)) catch {
+        dialog.allocator.destroy(task);
+        return;
+    };
+    task.* = .{ .url = url_dupe, .d = dialog };
     _ = g_thread_new("test", &TestTask.run, task);
 }
 

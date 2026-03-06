@@ -54,11 +54,25 @@ fun SettingsLink(title: String, subtitle: String, icon: ImageVector, onClick: ()
 fun AudioSettingsPage(settings: SettingsManager) {
     var exp by remember { mutableStateOf(settings.useExperimentalTTS) }
     var talkTap by remember { mutableStateOf(settings.speakDefinitionsOnTap) }
+    var serverUrl by remember { mutableStateOf(settings.ttsServerUrl) }
+    
     Scaffold(topBar = { TopAppBar(title = { Text("AUDIO ENGINE") }) }) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            SettingToggle("Experimental TPU TTS", "Enable Qwen3-TTS NPU Engine", exp) { 
+            SettingToggle("Experimental Remote TTS", "Enable Qwen3-TTS Neural Engine", exp) { 
                 exp = it; settings.useExperimentalTTS = it 
             }
+            
+            if (exp) {
+                OutlinedTextField(
+                    value = serverUrl,
+                    onValueChange = { serverUrl = it; settings.ttsServerUrl = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("TTS Server URL") },
+                    placeholder = { Text("http://192.168.1.xxx:8000") }
+                )
+                Text("Specify the remote server address or use auto-discovery.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+            }
+            
             SettingToggle("Speak on Tap", "Narration for lexicon entries", talkTap) { 
                 talkTap = it; settings.speakDefinitionsOnTap = it 
             }

@@ -4,19 +4,18 @@ import android.app.Application
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
-import androidx.compose.runtime.State
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.*
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bytecats.metanoia.bible.BibleManager
 import com.bytecats.metanoia.llm.LLMManager
+import com.bytecats.metanoia.models.*
 import com.bytecats.metanoia.settings.SettingsManager
+import com.bytecats.metanoia.tts.RemoteVoice
 import com.bytecats.metanoia.tts.TTSManager
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -37,6 +36,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
 
     val voiceLogs = mutableStateListOf<String>()
     val aiLogs = mutableStateListOf<String>()
+    
+    // Detailed voice state
+    var serverVoices = mutableStateListOf<RemoteVoice>()
+    var isDiscovering by mutableStateOf(false)
     
     private val _narrationState = mutableStateOf(NarrationState())
     val narrationState: State<NarrationState> = _narrationState
@@ -61,6 +64,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
                 llmManager = LLMManager(context) { msg -> 
                     aiLogs.add("[${currentTime()}] $msg")
                 }
+                
+                // Initial load
+                refreshServerVoices()
             } catch (e: Exception) {
                 Log.e("VM", "Hardware fail: ${e.message}")
             }
@@ -73,11 +79,66 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
         if (status == TextToSpeech.SUCCESS) systemTts?.language = Locale.US
     }
 
+    fun discoverServer() {
+        if (isDiscovering) return
+        isDiscovering = true
+        viewModelScope.launch {
+            ttsManager?.discoverServer()?.let { url ->
+                settingsManager.ttsServerUrl = url
+                refreshServerVoices()
+            }
+            isDiscovering = false
+        }
+    }
+
+    fun refreshServerVoices() {
+        viewModelScope.launch {
+            val voices = ttsManager?.fetchFullStatus() ?: emptyList()
+            serverVoices.clear()
+            serverVoices.addAll(voices)
+        }
+    }
+
+    fun deleteServerVoice(key: String) {
+        viewModelScope.launch {
+            if (ttsManager?.deleteVoice(key) == true) {
+                voiceLogs.add("[${currentTime()}] Voice '$key' deleted.")
+                refreshServerVoices()
+            }
+        }
+    }
+
+    fun createServerVoice(name: String, text: String) {
+        viewModelScope.launch {
+            if (ttsManager?.upsertVoice(name, text) == true) {
+                voiceLogs.add("[${currentTime()}] Voice '$name' created.")
+                refreshServerVoices()
+            }
+        }
+    }
+
+    fun uploadVoiceSample(key: String, file: File) {
+        viewModelScope.launch {
+            if (ttsManager?.uploadSample(key, file) == true) {
+                voiceLogs.add("[${currentTime()}] Audio for '$key' updated.")
+                refreshServerVoices()
+            }
+        }
+    }
+
     fun speak(text: String) {
-        if (settingsManager.useExperimentalTTS) {
+        if (settingsManager.useExperimentalTTS && ttsManager != null) {
             viewModelScope.launch {
-                ttsManager?.generateSpeech(text, settingsManager.selectedVoice)?.let {
-                    ttsManager?.playAudio(it)
+                val voice = settingsManager.selectedVoice
+                voiceLogs.add("[${currentTime()}] Synthesis request ($voice): ${text.take(15)}...")
+                
+                ttsManager?.generateSpeech(text, voice)?.let { file ->
+                    ttsManager?.playAudio(file)
+                    if (_narrationState.value.isPlaying) advanceNarration()
+                } ?: run {
+                    val url = settingsManager.ttsServerUrl
+                    voiceLogs.add("[${currentTime()}] ERROR: Remote engine fail at $url. Check server or IP.")
+                    systemTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "metanoia_utterance")
                 }
             }
         } else {

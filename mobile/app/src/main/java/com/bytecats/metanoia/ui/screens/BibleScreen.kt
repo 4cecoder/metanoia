@@ -30,9 +30,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.bytecats.metanoia.bible.BibleBook
-import com.bytecats.metanoia.bible.InterlinearWord
-import com.bytecats.metanoia.bible.SearchResult
+import com.bytecats.metanoia.models.BibleBook
+import com.bytecats.metanoia.models.InterlinearWord
+import com.bytecats.metanoia.models.SearchResult
 import com.bytecats.metanoia.ui.components.HighlightedText
 import com.bytecats.metanoia.viewmodel.MainViewModel
 import kotlinx.coroutines.Dispatchers

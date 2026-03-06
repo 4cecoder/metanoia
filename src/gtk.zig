@@ -17,6 +17,8 @@ pub const GtkFlowBox = anyopaque;
 pub const GtkStack = anyopaque;
 pub const GtkAdjustment = anyopaque;
 pub const GtkExpander = anyopaque;
+pub const GtkProgressBar = anyopaque;
+pub const GtkSeparator = anyopaque;
 
 pub const GTK_ORIENTATION_HORIZONTAL = 0;
 pub const GTK_ORIENTATION_VERTICAL = 1;
@@ -75,6 +77,9 @@ pub extern fn gtk_label_new(str: ?[*:0]const u8) ?*GtkWidget;
 pub extern fn gtk_label_set_markup(label: ?*GtkLabel, str: [*:0]const u8) void;
 pub extern fn gtk_label_set_wrap(label: ?*GtkLabel, setting: bool) void;
 pub extern fn gtk_label_set_xalign(label: ?*GtkLabel, xalign: f32) void;
+
+pub extern fn gtk_image_new_from_icon_name(icon_name: [*:0]const u8) ?*GtkWidget;
+pub extern fn gtk_image_set_from_icon_name(image: ?*anyopaque, icon_name: [*:0]const u8) void;
 
 pub extern fn gtk_scrolled_window_new() ?*GtkWidget;
 pub extern fn gtk_scrolled_window_set_child(sw: ?*GtkScrolledWindow, child: ?*GtkWidget) void;
@@ -159,6 +164,13 @@ pub extern fn gtk_search_bar_set_search_mode(bar: ?*anyopaque, search_mode: bool
 pub extern fn gtk_spinner_new() ?*GtkWidget;
 pub extern fn gtk_spinner_start(spinner: ?*anyopaque) void;
 pub extern fn gtk_spinner_stop(spinner: ?*anyopaque) void;
+
+pub extern fn gtk_progress_bar_new() ?*GtkWidget;
+pub extern fn gtk_progress_bar_set_fraction(pbar: ?*GtkProgressBar, fraction: f64) void;
+pub extern fn gtk_progress_bar_set_pulse_step(pbar: ?*GtkProgressBar, step: f64) void;
+pub extern fn gtk_progress_bar_pulse(pbar: ?*GtkProgressBar) void;
+
+pub extern fn gtk_separator_new(orientation: i32) ?*GtkWidget;
 
 pub extern fn gtk_button_new_with_label(label: [*:0]const u8) ?*GtkWidget;
 pub extern fn gtk_button_set_label(button: ?*GtkButton, label: [*:0]const u8) void;

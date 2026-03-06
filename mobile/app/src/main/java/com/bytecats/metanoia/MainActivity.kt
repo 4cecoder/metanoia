@@ -43,13 +43,7 @@ class MainActivity : ComponentActivity() {
                         GraniteLabScreen(viewModel.aiLogs, viewModel.llmManager!!) 
                     }
                     composable("voice_lab") { 
-                        VoiceLabScreen(viewModel.voiceLogs, { text: String, voice: String -> 
-                            viewModel.ttsManager?.let { mgr ->
-                                MainScope().launch {
-                                    mgr.generateSpeech(text, voice)?.let { mgr.playAudio(it) }
-                                }
-                            }
-                        }, { viewModel.ttsManager?.clearCache() }) 
+                        VoiceLabScreen(viewModel) 
                     }
                     composable("data_management") { 
                         DataManagementScreen(navController, viewModel) 
