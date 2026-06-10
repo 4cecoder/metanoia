@@ -12,8 +12,6 @@ import com.bytecats.metanoia.ui.screens.*
 import com.bytecats.metanoia.ui.theme.MetanoiaTheme
 import com.bytecats.metanoia.viewmodel.MainViewModel
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.MainScope
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -24,7 +22,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val viewModel: MainViewModel = viewModel()
             val navController = rememberNavController()
-            
+
             MetanoiaTheme {
                 NavHost(navController = navController, startDestination = "menu") {
                     composable("menu") { MainMenu(navController, viewModel) }
@@ -36,30 +34,33 @@ class MainActivity : ComponentActivity() {
                     composable("stats") {
                         LibraryStatsScreen(viewModel.bibleManager)
                     }
-                    composable("experimental_hub") { 
-                        ExperimentalHub(navController) 
+                    composable("experimental_hub") {
+                        ExperimentalHub(navController)
                     }
-                    composable("ai_lab") { 
-                        GraniteLabScreen(viewModel.aiLogs, viewModel.llmManager!!) 
+                    composable("ai_lab") {
+                        GraniteLabScreen(viewModel.aiLogs, viewModel.llmManager!!)
                     }
-                    composable("voice_lab") { 
-                        VoiceLabScreen(viewModel) 
+                    composable("voice_lab") {
+                        VoiceLabScreen(viewModel)
                     }
-                    composable("data_management") { 
-                        DataManagementScreen(navController, viewModel) 
+                    composable("data_management") {
+                        DataManagementScreen(navController, viewModel)
                     }
-                    composable("table_inspector/{tableName}") { backStack -> 
+                    composable("table_inspector/{tableName}") { backStack ->
                         val name = backStack.arguments?.getString("tableName") ?: "unknown"
                         TableInspectorScreen(name, viewModel.bibleManager)
                     }
-                    composable("settings_main") { 
-                        SettingsDashboard(navController) 
+                    composable("settings_main") {
+                        SettingsDashboard(navController)
                     }
-                    composable("settings_audio") { 
-                        AudioSettingsPage(viewModel.settingsManager) 
+                    composable("settings_gateway") {
+                        GatewaySettingsPage(viewModel.settingsManager)
                     }
-                    composable("settings_reader") { 
-                        ReaderSettingsPage(viewModel.settingsManager) 
+                    composable("settings_audio") {
+                        AudioSettingsPage(viewModel.settingsManager)
+                    }
+                    composable("settings_reader") {
+                        ReaderSettingsPage(viewModel.settingsManager)
                     }
                 }
             }

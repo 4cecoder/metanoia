@@ -8,13 +8,16 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bytecats.metanoia.bible.BibleManager
+import com.bytecats.metanoia.gateway.GatewayClient
 import com.bytecats.metanoia.llm.LLMManager
 import com.bytecats.metanoia.models.*
 import com.bytecats.metanoia.settings.SettingsManager
+import com.bytecats.metanoia.stt.STTManager
 import com.bytecats.metanoia.tts.RemoteVoice
 import com.bytecats.metanoia.tts.TTSManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -27,24 +30,32 @@ data class NarrationState(
 
 class MainViewModel(application: Application) : AndroidViewModel(application), TextToSpeech.OnInitListener {
     private val context = application.applicationContext
-    
+
     val settingsManager = SettingsManager(context)
     val bibleManager = BibleManager(context)
     var ttsManager: TTSManager? = null
+    var sttManager: STTManager? = null
     var llmManager: LLMManager? = null
+    var gateway: GatewayClient? = null
     private var systemTts: TextToSpeech? = null
 
     val voiceLogs = mutableStateListOf<String>()
     val aiLogs = mutableStateListOf<String>()
-    
+
     // Detailed voice state
     var serverVoices = mutableStateListOf<RemoteVoice>()
     var isDiscovering by mutableStateOf(false)
-    
+
+    // Gateway status
+    var gatewayOnline by mutableStateOf(false)
+    var isTestingGateway by mutableStateOf(false)
+
     private val _narrationState = mutableStateOf(NarrationState())
     val narrationState: State<NarrationState> = _narrationState
 
     init {
+        gateway = bibleManager.gateway
+
         systemTts = TextToSpeech(context, this)
         systemTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(id: String?) {}
@@ -58,13 +69,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
 
         viewModelScope.launch {
             try {
-                ttsManager = TTSManager(context) { msg -> 
+                ttsManager = TTSManager(context) { msg ->
                     voiceLogs.add("[${currentTime()}] $msg")
                 }
-                llmManager = LLMManager(context) { msg -> 
+                sttManager = STTManager(context)
+                llmManager = LLMManager(context) { msg ->
                     aiLogs.add("[${currentTime()}] $msg")
                 }
-                
+
+                // Check gateway on startup
+                checkGatewayConnection()
+
                 // Initial load
                 refreshServerVoices()
             } catch (e: Exception) {
@@ -78,6 +93,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) systemTts?.language = Locale.US
     }
+
+    // -----------------------------------------------------------------------
+    // Gateway connection
+    // -----------------------------------------------------------------------
+
+    fun checkGatewayConnection() {
+        viewModelScope.launch {
+            isTestingGateway = true
+            gatewayOnline = withContext(Dispatchers.IO) {
+                gateway?.health() ?: false
+            }
+            isTestingGateway = false
+            voiceLogs.add("[${currentTime()}] Gateway ${settingsManager.gatewayUrl}: ${if (gatewayOnline) "ONLINE" else "OFFLINE"}")
+        }
+    }
+
+    fun testGatewayConnection(onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            isTestingGateway = true
+            val result = withContext(Dispatchers.IO) {
+                gateway?.health() ?: false
+            }
+            gatewayOnline = result
+            isTestingGateway = false
+            onResult(result)
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // TTS / Voice
+    // -----------------------------------------------------------------------
 
     fun discoverServer() {
         if (isDiscovering) return
@@ -131,12 +177,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
             viewModelScope.launch {
                 val voice = settingsManager.selectedVoice
                 voiceLogs.add("[${currentTime()}] Synthesis request ($voice): ${text.take(15)}...")
-                
+
                 ttsManager?.generateSpeech(text, voice)?.let { file ->
                     ttsManager?.playAudio(file)
                     if (_narrationState.value.isPlaying) advanceNarration()
                 } ?: run {
-                    val url = settingsManager.ttsServerUrl
+                    val url = settingsManager.gatewayUrl
                     voiceLogs.add("[${currentTime()}] ERROR: Remote engine fail at $url. Check server or IP.")
                     systemTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "metanoia_utterance")
                 }
@@ -145,6 +191,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
             systemTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "metanoia_utterance")
         }
     }
+
+    // -----------------------------------------------------------------------
+    // STT (Speech-to-Text)
+    // -----------------------------------------------------------------------
+
+    fun transcribeAudio(file: File, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                sttManager?.transcribe(file)
+            }
+            onResult(text)
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Narration
+    // -----------------------------------------------------------------------
 
     fun startChapterNarration(queue: List<Pair<Int, String>>) {
         if (queue.isEmpty()) return

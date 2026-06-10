@@ -6,6 +6,37 @@ import android.content.SharedPreferences
 class SettingsManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("metanoia_settings", Context.MODE_PRIVATE)
 
+    // --- Gateway Connection ---
+    var gatewayIp: String
+        get() = prefs.getString("gateway_ip", "192.168.122.2") ?: "192.168.122.2"
+        set(value) = prefs.edit().putString("gateway_ip", value).apply()
+
+    var gatewayPort: String
+        get() = prefs.getString("gateway_port", "8000") ?: "8000"
+        set(value) = prefs.edit().putString("gateway_port", value).apply()
+
+    val gatewayUrl: String
+        get() = "http://${gatewayIp}:${gatewayPort}"
+
+    /** Legacy compat — delegates to gatewayUrl */
+    var ttsServerUrl: String
+        get() = gatewayUrl
+        set(value) {
+            // Parse "http://ip:port" back into components
+            val cleaned = value.removePrefix("http://").removePrefix("https://").trimEnd('/')
+            val parts = cleaned.split(":")
+            if (parts.size >= 2) {
+                gatewayIp = parts[0]
+                gatewayPort = parts[1]
+            } else if (parts.size == 1 && parts[0].isNotEmpty()) {
+                gatewayIp = parts[0]
+            }
+        }
+
+    var useGatewayBible: Boolean
+        get() = prefs.getBoolean("use_gateway_bible", true)
+        set(value) = prefs.edit().putBoolean("use_gateway_bible", value).apply()
+
     // --- Audio & TPU ---
     var useExperimentalTTS: Boolean
         get() = prefs.getBoolean("use_experimental_tts", false)
@@ -44,8 +75,4 @@ class SettingsManager(context: Context) {
     var scraperUserAgent: String
         get() = prefs.getString("scraper_user_agent", "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro)") ?: "Mozilla/5.0"
         set(value) = prefs.edit().putString("scraper_user_agent", value).apply()
-
-    var ttsServerUrl: String
-        get() = prefs.getString("tts_server_url", "http://10.0.2.2:8000") ?: "http://10.0.2.2:8000"
-        set(value) = prefs.edit().putString("tts_server_url", value).apply()
 }

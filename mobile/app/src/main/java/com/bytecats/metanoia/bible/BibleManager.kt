@@ -7,13 +7,17 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
 import java.io.File
+import com.bytecats.metanoia.gateway.GatewayClient
 import com.bytecats.metanoia.models.*
+import com.bytecats.metanoia.settings.SettingsManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class BibleManager(private val context: Context) {
     private val dbFile = File(context.filesDir, "bible.db")
     private val client = OkHttpClient()
+    private val settings = SettingsManager(context)
+    val gateway: GatewayClient = GatewayClient { settings.gatewayUrl }
 
     private fun getDb(readOnly: Boolean = true): SQLiteDatabase {
         return SQLiteDatabase.openDatabase(dbFile.absolutePath, null, if (readOnly) SQLiteDatabase.OPEN_READONLY else SQLiteDatabase.OPEN_READWRITE)
@@ -115,6 +119,178 @@ class BibleManager(private val context: Context) {
     fun getChapter(book: String, chapter: Int): List<Pair<Int, String>> { if (!dbFile.exists()) return emptyList(); val db = getDb(); val cursor = db.rawQuery("SELECT verse, text FROM verses WHERE book = ? AND chapter = ? ORDER BY verse ASC", arrayOf(book, chapter.toString())); val verses = mutableListOf<Pair<Int, String>>(); while (cursor.moveToNext()) verses.add(Pair(cursor.getInt(0), cursor.getString(1))); cursor.close(); db.close(); return verses }
     fun getInterlinear(book: String, chapter: Int, verse: Int): List<InterlinearWord> { if (!dbFile.exists()) return emptyList(); val db = getDb(); val cursor = db.rawQuery("SELECT original_text, strongs, translation FROM interlinear WHERE book = ? AND chapter = ? AND verse = ? ORDER BY word_index ASC", arrayOf(book, chapter.toString(), verse.toString())); val words = mutableListOf<InterlinearWord>(); while (cursor.moveToNext()) words.add(InterlinearWord(cursor.getString(0), cursor.getString(1), cursor.getString(2))); cursor.close(); db.close(); return words }
     fun getLexiconDetail(strongs: String): Pair<String, String> { if (!dbFile.exists()) return Pair("", ""); val db = getDb(); val cursor = db.rawQuery("SELECT lemma, definition FROM lexicon WHERE strongs = ?", arrayOf(strongs)); var res = Pair("", ""); if (cursor.moveToFirst()) res = Pair(cursor.getString(0) ?: "", cursor.getString(1) ?: ""); cursor.close(); db.close(); return res }
+
+    // -----------------------------------------------------------------------
+    // GATEWAY-BACKED METHODS (try gateway first, fall back to local)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Fetch a chapter from the gateway API, cache locally, then return.
+     * Falls back to local DB if gateway is unreachable.
+     */
+    suspend fun fetchChapter(book: String, chapter: Int, version: String = "NKJV"): List<Pair<Int, String>> {
+        // Try local DB first (instant)
+        val local = getChapter(book, chapter)
+        if (local.isNotEmpty()) return local
+
+        // Try gateway
+        if (settings.useGatewayBible) {
+            try {
+                val json = gateway.bibleChapter(book, chapter, version)
+                if (json != null) {
+                    val versesArr = json.optJSONArray("verses") ?: json.optJSONArray("data")
+                    if (versesArr != null && versesArr.length() > 0) {
+                        val verses = mutableListOf<Pair<Int, String>>()
+                        val db = getDb(false)
+                        db.beginTransaction()
+                        try {
+                            for (i in 0 until versesArr.length()) {
+                                val v = versesArr.getJSONObject(i)
+                                val verseNum = v.optInt("verse", v.optInt("v", 0))
+                                val text = v.optString("text", v.optString("t", ""))
+                                if (verseNum > 0 && text.isNotEmpty()) {
+                                    verses.add(Pair(verseNum, text))
+                                    db.execSQL(
+                                        "INSERT OR REPLACE INTO verses (book, chapter, verse, text, version) VALUES (?, ?, ?, ?, ?)",
+                                        arrayOf(book, chapter, verseNum, text, version)
+                                    )
+                                }
+                            }
+                            db.setTransactionSuccessful()
+                        } finally { db.endTransaction(); db.close() }
+                        return verses
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("BibleManager", "Gateway chapter fetch failed, falling back to scrape: ${e.message}")
+            }
+        }
+
+        // Fall back to scraping
+        scrapeChapter(book, chapter, version)
+        return getChapter(book, chapter)
+    }
+
+    /**
+     * Fetch interlinear from gateway, cache locally, return.
+     */
+    suspend fun fetchInterlinear(book: String, chapter: Int, verse: Int? = null): Map<Int, List<InterlinearWord>> {
+        // Try local first
+        if (verse != null) {
+            val local = getInterlinear(book, chapter, verse)
+            if (local.isNotEmpty()) return mapOf(verse to local)
+        }
+
+        if (settings.useGatewayBible) {
+            try {
+                val json = gateway.bibleInterlinear(book, chapter, verse)
+                if (json != null) {
+                    val result = mutableMapOf<Int, List<InterlinearWord>>()
+                    val wordsArr = json.optJSONArray("words") ?: json.optJSONArray("interlinear")
+                    if (wordsArr != null) {
+                        val db = getDb(false)
+                        db.beginTransaction()
+                        try {
+                            for (i in 0 until wordsArr.length()) {
+                                val w = wordsArr.getJSONObject(i)
+                                val vNum = w.optInt("verse", w.optInt("v", verse ?: 1))
+                                val orig = w.optString("original", w.optString("hebrew", w.optString("greek", "")))
+                                val strongs = w.optString("strongs", "")
+                                val trans = w.optString("translation", w.optString("english", ""))
+                                val wordIdx = w.optInt("word_index", i)
+                                if (orig.isNotEmpty()) {
+                                    db.execSQL(
+                                        "INSERT OR REPLACE INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                        arrayOf(book, chapter, vNum, wordIdx, orig, trans, strongs)
+                                    )
+                                    result.getOrPut(vNum) { mutableListOf() }
+                                    (result[vNum] as MutableList).add(InterlinearWord(orig, strongs, trans))
+                                }
+                            }
+                            db.setTransactionSuccessful()
+                        } finally { db.endTransaction(); db.close() }
+                        if (result.isNotEmpty()) return result
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("BibleManager", "Gateway interlinear fetch failed: ${e.message}")
+            }
+        }
+
+        // Fall back to scraping
+        scrapeInterlinear(book, chapter)
+        return if (verse != null) mapOf(verse to getInterlinear(book, chapter, verse))
+               else emptyMap()
+    }
+
+    /**
+     * Fetch lexicon entry from gateway, cache locally, return.
+     */
+    suspend fun fetchLexicon(strongs: String, bookName: String? = null): Pair<String, String> {
+        // Try local first
+        val local = getLexiconDetail(strongs)
+        if (local.first.isNotEmpty() || local.second.isNotEmpty()) return local
+
+        if (settings.useGatewayBible) {
+            try {
+                val json = gateway.bibleLexicon(strongs)
+                if (json != null) {
+                    val lemma = json.optString("lemma", json.optString("word", ""))
+                    val def = json.optString("definition", json.optString("def", ""))
+                    val lang = json.optString("language", if (strongs.startsWith("G")) "greek" else "hebrew")
+                    if (lemma.isNotEmpty() || def.isNotEmpty()) {
+                        val db = getDb(false)
+                        db.execSQL(
+                            "INSERT OR REPLACE INTO lexicon (strongs, language, lemma, transliteration, definition) VALUES (?, ?, ?, ?, ?)",
+                            arrayOf(strongs, lang, lemma, json.optString("transliteration", ""), def)
+                        )
+                        db.close()
+                        return Pair(lemma, def)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("BibleManager", "Gateway lexicon fetch failed: ${e.message}")
+            }
+        }
+
+        // Fall back to scraping
+        scrapeStrong(strongs, bookName)
+        return getLexiconDetail(strongs)
+    }
+
+    /**
+     * Search via gateway (much faster than local LIKE query for large datasets).
+     */
+    suspend fun searchGateway(query: String): List<SearchResult> {
+        if (!settings.useGatewayBible) return withContext(Dispatchers.IO) { searchVerses(query) }
+        try {
+            val json = gateway.bibleSearch(query, 50)
+            if (json != null) {
+                val arr = json.optJSONArray("results") ?: json.optJSONArray("matches")
+                if (arr != null) {
+                    val results = mutableListOf<SearchResult>()
+                    for (i in 0 until arr.length()) {
+                        val r = arr.getJSONObject(i)
+                        results.add(SearchResult(
+                            r.optString("book"),
+                            r.optInt("chapter"),
+                            r.optInt("verse"),
+                            r.optString("text")
+                        ))
+                    }
+                    return results
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("BibleManager", "Gateway search failed, using local: ${e.message}")
+        }
+        return withContext(Dispatchers.IO) { searchVerses(query) }
+    }
+
+    /**
+     * Check if gateway is reachable.
+     */
+    fun isGatewayAvailable(): Boolean = gateway.health()
 
     suspend fun scrapeChapter(book: String, chapter: Int, version: String = "NKJV") = withContext(Dispatchers.IO) {
         val url = "https://www.biblegateway.com/passage/?search=$book+$chapter&version=$version&interface=print"
