@@ -32,7 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bytecats.metanoia.models.BibleBook
 import com.bytecats.metanoia.models.InterlinearWord
+import com.bytecats.metanoia.models.LexiconEntry
 import com.bytecats.metanoia.models.SearchResult
+import com.bytecats.metanoia.models.Verse
 import com.bytecats.metanoia.ui.components.HighlightedText
 import com.bytecats.metanoia.viewmodel.MainViewModel
 import kotlinx.coroutines.Dispatchers
@@ -49,14 +51,14 @@ fun BibleScreen(viewModel: MainViewModel) {
     var step by remember { mutableStateOf("book") } 
     var selectedBook by remember { mutableStateOf<BibleBook?>(null) }
     var selectedChapter by remember { mutableStateOf(1) }
-    var currentChapterContent by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
+    var currentChapterContent by remember { mutableStateOf<List<Verse>>(emptyList()) }
     var interlinearData by remember(selectedBook, selectedChapter) { mutableStateOf<Map<Int, List<InterlinearWord>>>(emptyMap()) }
     var highlights by remember(selectedBook, selectedChapter) { mutableStateOf<Map<Int, Int>>(emptyMap()) }
     var expandedVerses by remember(selectedBook, selectedChapter) { mutableStateOf<Set<Int>>(emptySet()) }
     
     var studyVerse by remember { mutableStateOf<Int?>(null) }
     var lexiconWord by remember { mutableStateOf<InterlinearWord?>(null) }
-    var lexiconDetail by remember { mutableStateOf(Pair("", "Loading...")) }
+    var lexiconDetail by remember { mutableStateOf(LexiconEntry("", "Loading...")) }
     var showStudySheet by remember { mutableStateOf(false) }
     var showLexiconSheet by remember { mutableStateOf(false) }
     var showVoiceSheet by remember { mutableStateOf(false) }
@@ -84,7 +86,7 @@ fun BibleScreen(viewModel: MainViewModel) {
 
     LaunchedEffect(narration.currentVerse) { 
         if (narration.isPlaying && narration.currentVerse != -1) { 
-            val idx = currentChapterContent.indexOfFirst { it.first == narration.currentVerse }
+            val idx = currentChapterContent.indexOfFirst { it.number == narration.currentVerse }
             if (idx != -1) listState.animateScrollToItem(idx) 
         } 
     }
@@ -197,7 +199,9 @@ fun BibleScreen(viewModel: MainViewModel) {
                 }
                 "read" -> {
                     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-                        items(currentChapterContent) { (vs, text) ->
+                        items(currentChapterContent) { verse ->
+                            val vs = verse.number
+                            val text = verse.text
                             val isExpanded = expandedVerses.contains(vs)
                             val hl = highlights[vs] ?: 0
                             val isCurrent = narration.isPlaying && narration.currentVerse == vs
@@ -218,7 +222,7 @@ fun BibleScreen(viewModel: MainViewModel) {
                                     CompositionLocalProvider(LocalLayoutDirection provides (if (isHebrew) LayoutDirection.Rtl else LayoutDirection.Ltr)) {
                                         FlowRow(modifier = Modifier.fillMaxWidth().padding(top = 8.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(0.3f), RoundedCornerShape(12.dp)).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                             interlinearData[vs]?.forEach { word ->
-                                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { lexiconWord = word; showLexiconSheet = true; scope.launch { val det = bibleManager.getLexiconDetail(word.strongs); lexiconDetail = if (det.second.isEmpty()) { bibleManager.scrapeStrong(word.strongs, selectedBook?.name); bibleManager.getLexiconDetail(word.strongs) } else det; if (settings.speakDefinitionsOnTap) viewModel.speak(lexiconDetail.second) } }) {
+                                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { lexiconWord = word; showLexiconSheet = true; scope.launch { val det = bibleManager.getLexiconDetail(word.strongs); lexiconDetail = if (det.definition.isEmpty()) { bibleManager.scrapeStrong(word.strongs, selectedBook?.name); bibleManager.getLexiconDetail(word.strongs) } else det; if (settings.speakDefinitionsOnTap) viewModel.speak(lexiconDetail.definition) } }) {
                                                     Text(word.original, color = if (word.strongs.startsWith("G")) Color(0xFF7aa2f7) else Color(0xFFe0af68), fontSize = settings.ancientFontSize.sp, fontWeight = FontWeight.Bold)
                                                     Text(word.translation, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                                                 }
@@ -256,15 +260,15 @@ fun BibleScreen(viewModel: MainViewModel) {
     }
 
     if (showLexiconSheet && lexiconWord != null) {
-        ModalBottomSheet(onDismissRequest = { showLexiconSheet = false; lexiconDetail = Pair("", "Loading...") }) {
+        ModalBottomSheet(onDismissRequest = { showLexiconSheet = false; lexiconDetail = LexiconEntry("", "Loading...") }) {
             Column(modifier = Modifier.padding(24.dp).fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { Text(lexiconDetail.first.ifEmpty { lexiconWord!!.original }, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary); Text(lexiconWord!!.strongs, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline) }
-                    IconButton({ viewModel.speak(lexiconDetail.second) }) { Icon(Icons.AutoMirrored.Filled.VolumeUp, "Speak", tint = MaterialTheme.colorScheme.primary) }
-                    IconButton({ bibleManager.saveFavorite(lexiconWord!!.strongs, lexiconDetail.first, lexiconDetail.second) }) { Icon(Icons.Default.Diamond, "Pin", tint = Color(0xFFbb9af7)) }
+                    Column(Modifier.weight(1f)) { Text(lexiconDetail.lemma.ifEmpty { lexiconWord!!.original }, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary); Text(lexiconWord!!.strongs, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline) }
+                    IconButton({ viewModel.speak(lexiconDetail.definition) }) { Icon(Icons.AutoMirrored.Filled.VolumeUp, "Speak", tint = MaterialTheme.colorScheme.primary) }
+                    IconButton({ bibleManager.saveFavorite(lexiconWord!!.strongs, lexiconDetail.lemma, lexiconDetail.definition) }) { Icon(Icons.Default.Diamond, "Pin", tint = Color(0xFFbb9af7)) }
                 }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                Text(lexiconDetail.second, style = MaterialTheme.typography.bodyLarge, lineHeight = 24.sp); Spacer(modifier = Modifier.height(40.dp))
+                Text(lexiconDetail.definition, style = MaterialTheme.typography.bodyLarge, lineHeight = 24.sp); Spacer(modifier = Modifier.height(40.dp))
             }
         }
     }

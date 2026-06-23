@@ -1,21 +1,17 @@
 package com.bytecats.metanoia.tts
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioManager
-import android.media.AudioTrack
-import android.media.MediaPlayer
+import android.speech.tts.TextToSpeech
 import android.util.Log
 import com.bytecats.metanoia.gateway.GatewayClient
+import com.bytecats.metanoia.models.RemoteVoice
 import com.bytecats.metanoia.settings.SettingsManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import java.util.Locale
 
 /**
  * TTS Manager — routes all synthesis through the AI VM Gateway.
@@ -35,17 +31,15 @@ class TTSManager(
 ) {
     private val settings = SettingsManager(context)
     private val gateway = GatewayClient { settings.gatewayUrl }
+    private val audioPlayer = TTSAudioPlayer()
     private val tag = "TTSManager"
 
-    private var mediaPlayer: MediaPlayer? = null
-    private var audioTrack: AudioTrack? = null
+    private var systemTts: TextToSpeech? = null
 
-    // Android system TTS fallback
-    private var systemTts: android.speech.tts.TextToSpeech? = null
     init {
-        systemTts = android.speech.tts.TextToSpeech(context) { status ->
-            if (status == android.speech.tts.TextToSpeech.SUCCESS) {
-                systemTts?.language = java.util.Locale.US
+        systemTts = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                systemTts?.language = Locale.US
             }
         }
     }
@@ -54,22 +48,16 @@ class TTSManager(
     // Voice discovery & management
     // ------------------------------------------------------------------
 
-    /**
-     * Try to auto-discover the gateway on the local network.
-     * Returns the URL if found, null otherwise.
-     */
     suspend fun discoverServer(): String? = withContext(Dispatchers.IO) {
-        // Check the currently configured URL first
         val current = settings.gatewayUrl
         if (gateway.health()) {
             logger("Gateway found at $current")
             return@withContext current
         }
-        // Try common local network addresses
         val candidates = listOf(
             "http://192.168.122.2:8000",
             "http://192.168.1.100:8000",
-            "http://10.0.2.2:8000", // Android emulator → host
+            "http://10.0.2.2:8000",
             "http://localhost:8000"
         )
         for (url in candidates) {
@@ -85,9 +73,6 @@ class TTSManager(
         null
     }
 
-    /**
-     * Fetch the full list of registered voice profiles from the gateway.
-     */
     suspend fun fetchFullStatus(): List<RemoteVoice> = withContext(Dispatchers.IO) {
         if (!gateway.health()) return@withContext emptyList()
         try {
@@ -110,9 +95,6 @@ class TTSManager(
         }
     }
 
-    /**
-     * Delete a voice profile from the gateway.
-     */
     suspend fun deleteVoice(key: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val res = gateway.delete("/tts/clone/voices/$key")
@@ -124,9 +106,6 @@ class TTSManager(
         }
     }
 
-    /**
-     * Create or update a voice profile (placeholder — audio uploaded separately).
-     */
     suspend fun upsertVoice(name: String, refText: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val body = JSONObject().apply {
@@ -143,16 +122,9 @@ class TTSManager(
         }
     }
 
-    /**
-     * Upload reference audio for a voice profile.
-     */
     suspend fun uploadSample(key: String, file: File): Boolean = withContext(Dispatchers.IO) {
         try {
-            val res = gateway.uploadFile(
-                "/tts/clone/voices/$key/audio",
-                file,
-                "audio/wav"
-            )
+            val res = gateway.uploadFile("/tts/clone/voices/$key/audio", file, "audio/wav")
             logger("Upload audio for '$key': ${if (res) "OK" else "FAIL"}")
             res
         } catch (e: Exception) {
@@ -165,10 +137,6 @@ class TTSManager(
     // Speech generation
     // ------------------------------------------------------------------
 
-    /**
-     * Generate speech from text using a registered voice profile.
-     * Returns a temp File containing WAV audio, or null on failure.
-     */
     suspend fun generateSpeech(text: String, voiceKey: String): File? = withContext(Dispatchers.IO) {
         if (text.isBlank()) return@withContext null
         try {
@@ -189,9 +157,6 @@ class TTSManager(
         }
     }
 
-    /**
-     * Clone from arbitrary reference audio (no registered profile needed).
-     */
     suspend fun cloneDynamic(text: String, refAudio: ByteArray, refText: String = ""): File? =
         withContext(Dispatchers.IO) {
             try {
@@ -208,40 +173,11 @@ class TTSManager(
         }
 
     // ------------------------------------------------------------------
-    // Audio playback
+    // Audio playback (delegated to TTSAudioPlayer)
     // ------------------------------------------------------------------
 
-    /**
-     * Play a WAV file via MediaPlayer (handles long audio well).
-     */
-    fun playAudio(file: File) {
-        stop()
-        try {
-            mediaPlayer = MediaPlayer().apply {
-                setDataSource(file.absolutePath)
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build()
-                )
-                prepare()
-                start()
-            }
-            logger("Playing ${file.name}")
-        } catch (e: Exception) {
-            Log.e(tag, "playAudio failed: ${e.message}")
-            // Try AudioTrack fallback for raw WAV
-            playPcmAudio(file.readBytes())
-        }
-    }
-
-    fun stop() {
-        mediaPlayer?.let { it.stop(); it.release() }
-        mediaPlayer = null
-        audioTrack?.let { it.stop(); it.release() }
-        audioTrack = null
-    }
+    fun playAudio(file: File) = audioPlayer.play(file)
+    fun stop() { audioPlayer.stop() }
 
     fun shutdown() {
         stop()
@@ -249,55 +185,4 @@ class TTSManager(
     }
 
     fun isGatewayAvailable(): Boolean = gateway.health()
-
-    // ------------------------------------------------------------------
-    // Internal: raw PCM playback via AudioTrack
-    // ------------------------------------------------------------------
-
-    private fun playPcmAudio(wavBytes: ByteArray) {
-        if (wavBytes.size < 44) return
-        try {
-            val sampleRate = ByteBuffer.wrap(wavBytes, 24, 4).order(ByteOrder.LITTLE_ENDIAN).int
-            val channels = ByteBuffer.wrap(wavBytes, 22, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
-            val bitsPerSample = ByteBuffer.wrap(wavBytes, 34, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
-
-            var dataOffset = 44
-            for (i in 36 until wavBytes.size - 4) {
-                if (wavBytes[i] == 'd'.code.toByte() && wavBytes[i + 1] == 'a'.code.toByte() &&
-                    wavBytes[i + 2] == 't'.code.toByte() && wavBytes[i + 3] == 'a'.code.toByte()) {
-                    dataOffset = i + 8
-                    break
-                }
-            }
-
-            val pcmData = wavBytes.copyOfRange(dataOffset, wavBytes.size)
-            val channelConfig = if (channels == 2) AudioFormat.CHANNEL_OUT_STEREO else AudioFormat.CHANNEL_OUT_MONO
-            val encoding = if (bitsPerSample == 16) AudioFormat.ENCODING_PCM_16BIT else AudioFormat.ENCODING_PCM_8BIT
-
-            val minBuf = AudioTrack.getMinBufferSize(sampleRate, channelConfig, encoding)
-            val bufSize = maxOf(minBuf, pcmData.size)
-
-            audioTrack = AudioTrack(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build(),
-                AudioFormat.Builder()
-                    .setSampleRate(sampleRate)
-                    .setChannelMask(channelConfig)
-                    .setEncoding(encoding)
-                    .build(),
-                bufSize,
-                AudioTrack.MODE_STATIC,
-                AudioManager.AUDIO_SESSION_ID_GENERATE
-            )
-
-            audioTrack?.let { track ->
-                track.write(pcmData, 0, pcmData.size)
-                track.play()
-            }
-        } catch (e: Exception) {
-            Log.e(tag, "AudioTrack playback failed: ${e.message}")
-        }
-    }
 }

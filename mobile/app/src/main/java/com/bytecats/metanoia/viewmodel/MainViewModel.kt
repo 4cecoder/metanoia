@@ -13,7 +13,7 @@ import com.bytecats.metanoia.llm.LLMManager
 import com.bytecats.metanoia.models.*
 import com.bytecats.metanoia.settings.SettingsManager
 import com.bytecats.metanoia.stt.STTManager
-import com.bytecats.metanoia.tts.RemoteVoice
+import com.bytecats.metanoia.models.RemoteVoice
 import com.bytecats.metanoia.tts.TTSManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -25,7 +25,7 @@ import java.util.*
 data class NarrationState(
     val isPlaying: Boolean = false,
     val currentVerse: Int = -1,
-    val queue: List<Pair<Int, String>> = emptyList()
+    val queue: List<Verse> = emptyList()
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application), TextToSpeech.OnInitListener {
@@ -49,6 +49,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     // Gateway status
     var gatewayOnline by mutableStateOf(false)
     var isTestingGateway by mutableStateOf(false)
+
+    val isRemoteTtsActive: Boolean get() = settingsManager.useExperimentalTTS && gatewayOnline
 
     private val _narrationState = mutableStateOf(NarrationState())
     val narrationState: State<NarrationState> = _narrationState
@@ -209,22 +211,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     // Narration
     // -----------------------------------------------------------------------
 
-    fun startChapterNarration(queue: List<Pair<Int, String>>) {
+    fun startChapterNarration(queue: List<Verse>) {
         if (queue.isEmpty()) return
-        _narrationState.value = NarrationState(isPlaying = true, currentVerse = queue.first().first, queue = queue)
+        _narrationState.value = NarrationState(isPlaying = true, currentVerse = queue.first().number, queue = queue)
         narrateCurrentVerse()
     }
 
     private fun narrateCurrentVerse() {
-        val verse = _narrationState.value.queue.find { it.first == _narrationState.value.currentVerse }
-        verse?.let { speak(it.second) }
+        val verse = _narrationState.value.queue.find { it.number == _narrationState.value.currentVerse }
+        verse?.let { speak(it.text) }
     }
 
     private suspend fun advanceNarration() {
-        val currentIndex = _narrationState.value.queue.indexOfFirst { it.first == _narrationState.value.currentVerse }
+        val currentIndex = _narrationState.value.queue.indexOfFirst { it.number == _narrationState.value.currentVerse }
         if (currentIndex != -1 && currentIndex < _narrationState.value.queue.size - 1) {
             val nV = _narrationState.value.queue[currentIndex + 1]
-            _narrationState.value = _narrationState.value.copy(currentVerse = nV.first)
+            _narrationState.value = _narrationState.value.copy(currentVerse = nV.number)
             narrateCurrentVerse()
         } else {
             stopNarration()

@@ -1,12 +1,7 @@
 package com.bytecats.metanoia.bible
 
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
 import android.util.Log
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.jsoup.Jsoup
-import java.io.File
 import com.bytecats.metanoia.gateway.GatewayClient
 import com.bytecats.metanoia.models.*
 import com.bytecats.metanoia.settings.SettingsManager
@@ -14,170 +9,123 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class BibleManager(private val context: Context) {
-    private val dbFile = File(context.filesDir, "bible.db")
-    private val client = OkHttpClient()
+    val db = BibleDatabase(context)
+    private val scraper = BibleScraper()
     private val settings = SettingsManager(context)
     val gateway: GatewayClient = GatewayClient { settings.gatewayUrl }
 
-    private fun getDb(readOnly: Boolean = true): SQLiteDatabase {
-        return SQLiteDatabase.openDatabase(dbFile.absolutePath, null, if (readOnly) SQLiteDatabase.OPEN_READONLY else SQLiteDatabase.OPEN_READWRITE)
-    }
+    val books: List<BibleBook> get() = BOOKS
 
-    init {
-        try {
-            val db = getDb(false)
-            db.execSQL("CREATE TABLE IF NOT EXISTS favorites (strongs TEXT PRIMARY KEY, lemma TEXT, definition TEXT)")
-            db.execSQL("CREATE TABLE IF NOT EXISTS lexicon (strongs TEXT PRIMARY KEY, language TEXT, lemma TEXT, transliteration TEXT, definition TEXT)")
-            db.execSQL("CREATE TABLE IF NOT EXISTS interlinear (book TEXT, chapter INTEGER, verse INTEGER, word_index INTEGER, original_text TEXT, translation TEXT, strongs TEXT, PRIMARY KEY(book, chapter, verse, word_index))")
-            db.execSQL("CREATE TABLE IF NOT EXISTS highlights (book TEXT, chapter INTEGER, verse INTEGER, color INTEGER, PRIMARY KEY(book, chapter, verse))")
-            db.execSQL("CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY AUTOINCREMENT, book TEXT, chapter INTEGER, verse INTEGER, content TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
-            db.execSQL("CREATE TABLE IF NOT EXISTS verses (book TEXT, chapter INTEGER, verse INTEGER, text TEXT, version TEXT, PRIMARY KEY(book, chapter, verse))")
-            db.close()
-        } catch (e: Exception) { e.printStackTrace() }
-    }
+    // --- Local DB passthroughs ---
 
-    // --- NEW: TABLE INSPECTOR ENGINE ---
-    fun getTableRows(tableName: String, limit: Int = 100): List<Map<String, String>> {
-        val list = mutableListOf<Map<String, String>>()
-        if (!dbFile.exists()) return list
-        val db = getDb()
-        try {
-            val cursor = db.rawQuery("SELECT * FROM $tableName LIMIT $limit", null)
-            val columns = cursor.columnNames
-            while (cursor.moveToNext()) {
-                val row = mutableMapOf<String, String>()
-                columns.forEachIndexed { i, name ->
-                    row[name] = cursor.getString(i) ?: "NULL"
-                }
-                list.add(row)
-            }
-            cursor.close()
-        } catch (e: Exception) { Log.e("DB", "Inspect fail: ${e.message}") }
-        finally { db.close() }
-        return list
-    }
+    fun getTableRows(tableName: String, limit: Int = 100): List<Map<String, String>> =
+        db.getTableRows(tableName, limit)
 
-    fun searchVerses(query: String): List<SearchResult> {
-        if (!dbFile.exists() || query.length < 2) return emptyList()
-        val list = mutableListOf<SearchResult>()
-        val db = getDb()
-        val refRegex = Regex("^([1-3]?\\s?[a-zA-Z]+)\\s?(\\d+)(?::(\\d+))?$", RegexOption.IGNORE_CASE)
-        val match = refRegex.find(query.trim())
-        if (match != null) {
-            val bookPart = match.groupValues[1].lowercase().replace(" ", "")
-            val resolvedBook = BIBLE_ABBREVIATIONS[bookPart] ?: books.find { it.name.lowercase() == bookPart }?.name
-            if (resolvedBook != null) {
-                val ch = match.groupValues[2]
-                val vs = match.groupValues.getOrNull(3)
-                val sql = if (vs.isNullOrEmpty()) "SELECT book, chapter, verse, text FROM verses WHERE book=? AND chapter=? LIMIT 100"
-                          else "SELECT book, chapter, verse, text FROM verses WHERE book=? AND chapter=? AND verse=?"
-                val args = if (vs.isNullOrEmpty()) arrayOf(resolvedBook, ch) else arrayOf(resolvedBook, ch, vs)
-                val cursor = db.rawQuery(sql, args)
-                while (cursor.moveToNext()) { list.add(SearchResult(cursor.getString(0), cursor.getInt(1), cursor.getInt(2), cursor.getString(3))) }
-                cursor.close()
-                if (list.isNotEmpty()) { db.close(); return list }
+    fun getStats(): LibraryStats = db.getStats()
+
+    fun clearTable(tableName: String) = db.clearTable(tableName)
+    fun factoryReset() = db.factoryReset()
+    fun checkIntegrity(): String = db.checkIntegrity()
+    fun vacuumDatabase() = db.vacuum()
+
+    fun searchVerses(query: String): List<SearchResult> = db.searchVerses(query)
+
+    fun getChapter(book: String, chapter: Int): List<Verse> = db.getChapter(book, chapter)
+
+    fun getInterlinear(book: String, chapter: Int, verse: Int): List<InterlinearWord> =
+        db.getInterlinear(book, chapter, verse)
+
+    fun getLexiconDetail(strongs: String): LexiconEntry = db.getLexiconDetail(strongs)
+
+    fun saveFavorite(strongs: String, lemma: String, definition: String) =
+        db.saveFavorite(strongs, lemma, definition)
+
+    fun getFavorites(): List<Favorite> = db.getFavorites()
+    fun deleteFavorite(strongs: String) = db.deleteFavorite(strongs)
+
+    fun setHighlight(book: String, chapter: Int, verse: Int, color: Int) =
+        db.setHighlight(book, chapter, verse, color)
+
+    fun getHighlights(book: String, chapter: Int): Map<Int, Int> =
+        db.getHighlights(book, chapter)
+
+    fun saveNote(book: String, chapter: Int, verse: Int, content: String) =
+        db.saveNote(book, chapter, verse, content)
+
+    fun getNotes(book: String, chapter: Int, verse: Int): List<Note> =
+        db.getNotes(book, chapter, verse)
+
+    fun getBookCompletion(): Map<String, Float> = db.getBookCompletion()
+
+    // --- Scraper passthroughs ---
+
+    suspend fun scrapeChapter(book: String, chapter: Int, version: String = "NKJV") {
+        scraper.scrapeChapter(book, chapter, version) { vNum, text ->
+            db.open(false).apply {
+                execSQL(
+                    "INSERT OR REPLACE INTO verses (book, chapter, verse, text, version) VALUES (?, ?, ?, ?, ?)",
+                    arrayOf(book, chapter, vNum, text, version)
+                )
+                close()
             }
         }
-        val cursor = db.rawQuery("SELECT book, chapter, verse, text FROM verses WHERE text LIKE ? LIMIT 50", arrayOf("%$query%"))
-        while (cursor.moveToNext()) { list.add(SearchResult(cursor.getString(0), cursor.getInt(1), cursor.getInt(2), cursor.getString(3))) }
-        cursor.close(); db.close(); return list
     }
 
-    fun getStats(): LibraryStats {
-        if (!dbFile.exists()) return LibraryStats(0, 0, 0, 0, 0, 0, 0, 0.0)
-        val db = getDb()
-        val otList = books.filter { it.testament == "Old" }.joinToString(",") { "'${it.name}'" }
-        val ntList = books.filter { it.testament == "New" }.joinToString(",") { "'${it.name}'" }
-        val vOt = if (otList.isEmpty()) 0 else db.rawQuery("SELECT COUNT(*) FROM verses WHERE book IN ($otList)", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
-        val vNt = if (ntList.isEmpty()) 0 else db.rawQuery("SELECT COUNT(*) FROM verses WHERE book IN ($ntList)", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
-        val lHeb = db.rawQuery("SELECT COUNT(*) FROM lexicon WHERE language = 'hebrew'", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
-        val lGk = db.rawQuery("SELECT COUNT(*) FROM lexicon WHERE language = 'greek'", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
-        val n = db.rawQuery("SELECT COUNT(*) FROM notes", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
-        val h = db.rawQuery("SELECT COUNT(*) FROM highlights", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
-        val i = db.rawQuery("SELECT COUNT(*) FROM interlinear", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
-        db.close()
-        return LibraryStats(vOt, vNt, lHeb, lGk, n, h, i, dbFile.length() / (1024.0 * 1024.0))
+    suspend fun scrapeInterlinear(book: String, chapter: Int) {
+        scraper.scrapeInterlinear(book, chapter) { verse, wordIdx, orig, trans, strongs ->
+            db.open(false).apply {
+                execSQL(
+                    "INSERT OR REPLACE INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    arrayOf(book, chapter, verse, wordIdx, orig, trans, strongs)
+                )
+                close()
+            }
+        }
     }
 
-    fun clearTable(tableName: String) { val db = getDb(false); db.execSQL("DELETE FROM $tableName"); db.execSQL("VACUUM"); db.close() }
-    fun factoryReset() { val db = getDb(false); db.execSQL("DELETE FROM verses"); db.execSQL("DELETE FROM lexicon"); db.execSQL("DELETE FROM interlinear"); db.execSQL("DELETE FROM highlights"); db.execSQL("DELETE FROM notes"); db.execSQL("DELETE FROM favorites"); db.execSQL("VACUUM"); db.close() }
-    fun checkIntegrity(): String { if (!dbFile.exists()) return "DB Missing"; val db = getDb(); val cursor = db.rawQuery("PRAGMA integrity_check", null); var result = "Unknown"; if (cursor.moveToFirst()) result = cursor.getString(0); cursor.close(); db.close(); return result }
-    fun vacuumDatabase() { val db = getDb(false); db.execSQL("VACUUM"); db.close() }
+    suspend fun scrapeStrong(strongs: String, bookName: String? = null) {
+        scraper.scrapeLexicon(strongs, bookName) { lang, lemma, translit, def ->
+            db.insertLexicon(strongs, lang, lemma, translit, def)
+        }
+    }
 
-    fun saveFavorite(strongs: String, lemma: String, definition: String) { val db = getDb(false); db.execSQL("INSERT OR REPLACE INTO favorites (strongs, lemma, definition) VALUES (?, ?, ?)", arrayOf(strongs, lemma, definition)); db.close() }
-    fun getFavorites(): List<Favorite> { val list = mutableListOf<Favorite>(); if (!dbFile.exists()) return list; val db = getDb(); val cursor = db.rawQuery("SELECT strongs, lemma, definition FROM favorites", null); while (cursor.moveToNext()) list.add(Favorite(cursor.getString(0), cursor.getString(1), cursor.getString(2))); cursor.close(); db.close(); return list }
-    fun deleteFavorite(strongs: String) { val db = getDb(false); db.execSQL("DELETE FROM favorites WHERE strongs = ?", arrayOf(strongs)); db.close() }
+    // --- Gateway-backed methods ---
 
-    fun setHighlight(book: String, chapter: Int, verse: Int, color: Int) { val db = getDb(false); if (color == 0) db.execSQL("DELETE FROM highlights WHERE book=? AND chapter=? AND verse=?", arrayOf(book, chapter, verse)); else db.execSQL("INSERT OR REPLACE INTO highlights (book, chapter, verse, color) VALUES (?, ?, ?, ?)", arrayOf(book, chapter, verse, color)); db.close() }
-    fun getHighlights(book: String, chapter: Int): Map<Int, Int> { val map = mutableMapOf<Int, Int>(); if (!dbFile.exists()) return map; val db = getDb(); val cursor = db.rawQuery("SELECT verse, color FROM highlights WHERE book=? AND chapter=?", arrayOf(book, chapter.toString())); while (cursor.moveToNext()) map[cursor.getInt(0)] = cursor.getInt(1); cursor.close(); db.close(); return map }
-
-    fun saveNote(book: String, chapter: Int, verse: Int, content: String) { val db = getDb(false); db.execSQL("INSERT INTO notes (book, chapter, verse, content) VALUES (?, ?, ?)", arrayOf(book, chapter, verse, content)); db.close() }
-    fun getNotes(book: String, chapter: Int, verse: Int): List<Note> { val list = mutableListOf<Note>(); if (!dbFile.exists()) return list; val db = getDb(); val cursor = db.rawQuery("SELECT id, content, timestamp FROM notes WHERE book=? AND chapter=? AND verse=? ORDER BY timestamp DESC", arrayOf(book, chapter.toString(), verse.toString())); while (cursor.moveToNext()) list.add(Note(cursor.getInt(0), book, chapter, verse, cursor.getString(1), cursor.getLong(2))); cursor.close(); db.close(); return list }
-
-    fun getBookCompletion(): Map<String, Float> { val completion = mutableMapOf<String, Float>(); if (!dbFile.exists()) return completion; val db = getDb(); val cursor = db.rawQuery("SELECT book, COUNT(DISTINCT chapter) FROM verses GROUP BY book", null); while (cursor.moveToNext()) { val name = cursor.getString(0); val cachedChapters = cursor.getInt(1); val totalChapters = books.find { it.name == name }?.chapters ?: 1; completion[name] = cachedChapters.toFloat() / totalChapters.toFloat() }; cursor.close(); db.close(); return completion }
-
-    fun getChapter(book: String, chapter: Int): List<Pair<Int, String>> { if (!dbFile.exists()) return emptyList(); val db = getDb(); val cursor = db.rawQuery("SELECT verse, text FROM verses WHERE book = ? AND chapter = ? ORDER BY verse ASC", arrayOf(book, chapter.toString())); val verses = mutableListOf<Pair<Int, String>>(); while (cursor.moveToNext()) verses.add(Pair(cursor.getInt(0), cursor.getString(1))); cursor.close(); db.close(); return verses }
-    fun getInterlinear(book: String, chapter: Int, verse: Int): List<InterlinearWord> { if (!dbFile.exists()) return emptyList(); val db = getDb(); val cursor = db.rawQuery("SELECT original_text, strongs, translation FROM interlinear WHERE book = ? AND chapter = ? AND verse = ? ORDER BY word_index ASC", arrayOf(book, chapter.toString(), verse.toString())); val words = mutableListOf<InterlinearWord>(); while (cursor.moveToNext()) words.add(InterlinearWord(cursor.getString(0), cursor.getString(1), cursor.getString(2))); cursor.close(); db.close(); return words }
-    fun getLexiconDetail(strongs: String): Pair<String, String> { if (!dbFile.exists()) return Pair("", ""); val db = getDb(); val cursor = db.rawQuery("SELECT lemma, definition FROM lexicon WHERE strongs = ?", arrayOf(strongs)); var res = Pair("", ""); if (cursor.moveToFirst()) res = Pair(cursor.getString(0) ?: "", cursor.getString(1) ?: ""); cursor.close(); db.close(); return res }
-
-    // -----------------------------------------------------------------------
-    // GATEWAY-BACKED METHODS (try gateway first, fall back to local)
-    // -----------------------------------------------------------------------
-
-    /**
-     * Fetch a chapter from the gateway API, cache locally, then return.
-     * Falls back to local DB if gateway is unreachable.
-     */
-    suspend fun fetchChapter(book: String, chapter: Int, version: String = "NKJV"): List<Pair<Int, String>> {
-        // Try local DB first (instant)
-        val local = getChapter(book, chapter)
+    suspend fun fetchChapter(book: String, chapter: Int, version: String = "NKJV"): List<Verse> {
+        val local = db.getChapter(book, chapter)
         if (local.isNotEmpty()) return local
 
-        // Try gateway
         if (settings.useGatewayBible) {
             try {
                 val json = gateway.bibleChapter(book, chapter, version)
                 if (json != null) {
                     val versesArr = json.optJSONArray("verses") ?: json.optJSONArray("data")
                     if (versesArr != null && versesArr.length() > 0) {
-                        val verses = mutableListOf<Pair<Int, String>>()
-                        val db = getDb(false)
-                        db.beginTransaction()
-                        try {
-                            for (i in 0 until versesArr.length()) {
-                                val v = versesArr.getJSONObject(i)
-                                val verseNum = v.optInt("verse", v.optInt("v", 0))
-                                val text = v.optString("text", v.optString("t", ""))
-                                if (verseNum > 0 && text.isNotEmpty()) {
-                                    verses.add(Pair(verseNum, text))
-                                    db.execSQL(
-                                        "INSERT OR REPLACE INTO verses (book, chapter, verse, text, version) VALUES (?, ?, ?, ?, ?)",
-                                        arrayOf(book, chapter, verseNum, text, version)
-                                    )
-                                }
+                        val verses = mutableListOf<Verse>()
+                        for (i in 0 until versesArr.length()) {
+                            val v = versesArr.getJSONObject(i)
+                            val verseNum = v.optInt("verse", v.optInt("v", 0))
+                            val text = v.optString("text", v.optString("t", ""))
+                            if (verseNum > 0 && text.isNotEmpty()) {
+                                verses.add(Verse(verseNum, text))
                             }
-                            db.setTransactionSuccessful()
-                        } finally { db.endTransaction(); db.close() }
+                        }
+                        db.insertVerses(book, chapter, verses, version)
                         return verses
                     }
                 }
             } catch (e: Exception) {
-                Log.w("BibleManager", "Gateway chapter fetch failed, falling back to scrape: ${e.message}")
+                Log.w("BibleManager", "Gateway chapter fetch failed: ${e.message}")
             }
         }
 
-        // Fall back to scraping
         scrapeChapter(book, chapter, version)
-        return getChapter(book, chapter)
+        return db.getChapter(book, chapter)
     }
 
-    /**
-     * Fetch interlinear from gateway, cache locally, return.
-     */
     suspend fun fetchInterlinear(book: String, chapter: Int, verse: Int? = null): Map<Int, List<InterlinearWord>> {
-        // Try local first
         if (verse != null) {
-            val local = getInterlinear(book, chapter, verse)
+            val local = db.getInterlinear(book, chapter, verse)
             if (local.isNotEmpty()) return mapOf(verse to local)
         }
 
@@ -188,27 +136,20 @@ class BibleManager(private val context: Context) {
                     val result = mutableMapOf<Int, List<InterlinearWord>>()
                     val wordsArr = json.optJSONArray("words") ?: json.optJSONArray("interlinear")
                     if (wordsArr != null) {
-                        val db = getDb(false)
-                        db.beginTransaction()
-                        try {
-                            for (i in 0 until wordsArr.length()) {
-                                val w = wordsArr.getJSONObject(i)
-                                val vNum = w.optInt("verse", w.optInt("v", verse ?: 1))
-                                val orig = w.optString("original", w.optString("hebrew", w.optString("greek", "")))
-                                val strongs = w.optString("strongs", "")
-                                val trans = w.optString("translation", w.optString("english", ""))
-                                val wordIdx = w.optInt("word_index", i)
-                                if (orig.isNotEmpty()) {
-                                    db.execSQL(
-                                        "INSERT OR REPLACE INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                                        arrayOf(book, chapter, vNum, wordIdx, orig, trans, strongs)
-                                    )
-                                    result.getOrPut(vNum) { mutableListOf() }
-                                    (result[vNum] as MutableList).add(InterlinearWord(orig, strongs, trans))
-                                }
+                        val words = mutableListOf<InterlinearWordWithVerse>()
+                        for (i in 0 until wordsArr.length()) {
+                            val w = wordsArr.getJSONObject(i)
+                            val vNum = w.optInt("verse", w.optInt("v", verse ?: 1))
+                            val orig = w.optString("original", w.optString("hebrew", w.optString("greek", "")))
+                            val strongs = w.optString("strongs", "")
+                            val trans = w.optString("translation", w.optString("english", ""))
+                            if (orig.isNotEmpty()) {
+                                words.add(InterlinearWordWithVerse(vNum, i, orig, trans, strongs))
+                                result.getOrPut(vNum) { mutableListOf() }
+                                (result[vNum] as MutableList).add(InterlinearWord(orig, strongs, trans))
                             }
-                            db.setTransactionSuccessful()
-                        } finally { db.endTransaction(); db.close() }
+                        }
+                        db.insertInterlinearWords(book, chapter, words)
                         if (result.isNotEmpty()) return result
                     }
                 }
@@ -217,19 +158,13 @@ class BibleManager(private val context: Context) {
             }
         }
 
-        // Fall back to scraping
         scrapeInterlinear(book, chapter)
-        return if (verse != null) mapOf(verse to getInterlinear(book, chapter, verse))
-               else emptyMap()
+        return if (verse != null) mapOf(verse to db.getInterlinear(book, chapter, verse)) else emptyMap()
     }
 
-    /**
-     * Fetch lexicon entry from gateway, cache locally, return.
-     */
-    suspend fun fetchLexicon(strongs: String, bookName: String? = null): Pair<String, String> {
-        // Try local first
-        val local = getLexiconDetail(strongs)
-        if (local.first.isNotEmpty() || local.second.isNotEmpty()) return local
+    suspend fun fetchLexicon(strongs: String, bookName: String? = null): LexiconEntry {
+        val local = db.getLexiconDetail(strongs)
+        if (local.lemma.isNotEmpty() || local.definition.isNotEmpty()) return local
 
         if (settings.useGatewayBible) {
             try {
@@ -239,13 +174,8 @@ class BibleManager(private val context: Context) {
                     val def = json.optString("definition", json.optString("def", ""))
                     val lang = json.optString("language", if (strongs.startsWith("G")) "greek" else "hebrew")
                     if (lemma.isNotEmpty() || def.isNotEmpty()) {
-                        val db = getDb(false)
-                        db.execSQL(
-                            "INSERT OR REPLACE INTO lexicon (strongs, language, lemma, transliteration, definition) VALUES (?, ?, ?, ?, ?)",
-                            arrayOf(strongs, lang, lemma, json.optString("transliteration", ""), def)
-                        )
-                        db.close()
-                        return Pair(lemma, def)
+                        db.insertLexicon(strongs, lang, lemma, json.optString("transliteration", ""), def)
+                        return LexiconEntry(lemma, def)
                     }
                 }
             } catch (e: Exception) {
@@ -253,16 +183,12 @@ class BibleManager(private val context: Context) {
             }
         }
 
-        // Fall back to scraping
         scrapeStrong(strongs, bookName)
-        return getLexiconDetail(strongs)
+        return db.getLexiconDetail(strongs)
     }
 
-    /**
-     * Search via gateway (much faster than local LIKE query for large datasets).
-     */
     suspend fun searchGateway(query: String): List<SearchResult> {
-        if (!settings.useGatewayBible) return withContext(Dispatchers.IO) { searchVerses(query) }
+        if (!settings.useGatewayBible) return withContext(Dispatchers.IO) { db.searchVerses(query) }
         try {
             val json = gateway.bibleSearch(query, 50)
             if (json != null) {
@@ -272,10 +198,7 @@ class BibleManager(private val context: Context) {
                     for (i in 0 until arr.length()) {
                         val r = arr.getJSONObject(i)
                         results.add(SearchResult(
-                            r.optString("book"),
-                            r.optInt("chapter"),
-                            r.optInt("verse"),
-                            r.optString("text")
+                            r.optString("book"), r.optInt("chapter"), r.optInt("verse"), r.optString("text")
                         ))
                     }
                     return results
@@ -284,120 +207,8 @@ class BibleManager(private val context: Context) {
         } catch (e: Exception) {
             Log.w("BibleManager", "Gateway search failed, using local: ${e.message}")
         }
-        return withContext(Dispatchers.IO) { searchVerses(query) }
+        return withContext(Dispatchers.IO) { db.searchVerses(query) }
     }
 
-    /**
-     * Check if gateway is reachable.
-     */
     fun isGatewayAvailable(): Boolean = gateway.health()
-
-    suspend fun scrapeChapter(book: String, chapter: Int, version: String = "NKJV") = withContext(Dispatchers.IO) {
-        val url = "https://www.biblegateway.com/passage/?search=$book+$chapter&version=$version&interface=print"
-        val request = Request.Builder().url(url).header("User-Agent", "Mozilla/5.0").build()
-        try {
-            val response = client.newCall(request).execute()
-            val doc = Jsoup.parse(response.body?.string() ?: return@withContext)
-            doc.select("h1, h2, h3, h4, h5, h6").remove()
-            val db = getDb(false); db.beginTransaction()
-            try {
-                doc.select("div.passage-text span.text").forEach { span ->
-                    val verseNum = Regex("-(\\d+)$").find(span.className())?.groupValues?.get(1)?.toInt()
-                    if (verseNum != null) {
-                        span.select("sup, span.chapternum, span.versenum").remove()
-                        db.execSQL("INSERT OR REPLACE INTO verses (book, chapter, verse, text, version) VALUES (?, ?, ?, ?, ?)", arrayOf(book, chapter, verseNum, span.text().trim(), version))
-                    }
-                }
-                db.setTransactionSuccessful()
-            } finally { db.endTransaction(); db.close() }
-        } catch (e: Exception) { e.printStackTrace() }
-    }
-
-    suspend fun scrapeInterlinear(book: String, chapter: Int) = withContext(Dispatchers.IO) {
-        val bookUrl = book.lowercase().replace(" ", "")
-        val url = "https://biblehub.com/interlinear/$bookUrl/$chapter.htm"
-        val isNT = books.find { it.name == book }?.testament == "New"
-        val prefix = if (isNT) "G" else "H"
-        val request = Request.Builder().url(url).header("User-Agent", "Mozilla/5.0").build()
-        try {
-            val response = client.newCall(request).execute()
-            val doc = Jsoup.parse(response.body?.string() ?: return@withContext)
-            val db = getDb(false); db.beginTransaction()
-            try {
-                var currentVerse = 0; var wordIdx = 0
-                // BibleHub uses different structures. tablefloat is common, but let's check for tr.interlinear too
-                val tables = doc.select("table[class*=tablefloat], div.interlinear")
-                tables.forEach { element ->
-                    // Verse detection
-                    val vSpan = element.select("span.reftop3, span.reftop, a.vref").first()
-                    if (vSpan != null) {
-                        val vTxt = vSpan.text().filter { it.isDigit() }
-                        if (vTxt.isNotEmpty()) { 
-                            val nV = vTxt.toInt()
-                            if (nV != currentVerse) { 
-                                currentVerse = nV
-                                wordIdx = 0 
-                            } 
-                        }
-                    }
-                    
-                    if (currentVerse > 0) {
-                        // Word extraction
-                        val orig = element.select("span.greek, span.heb, span.hebrew").first()?.text()?.trim()
-                        if (orig != null && orig.isNotEmpty()) {
-                            var strongs = element.select("span.pos, span.strongs, a[href*='/strongs/']").first()?.text()?.trim() ?: ""
-                            if (strongs.isNotEmpty()) {
-                                // Sometimes it's like [G1234] or just 1234
-                                strongs = "$prefix${strongs.filter { it.isDigit() }}"
-                            }
-                            val trans = element.select("span.eng").first()?.text()?.trim() ?: ""
-                            db.execSQL("INSERT OR REPLACE INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                                arrayOf(book, chapter, currentVerse, wordIdx, orig, trans, strongs))
-                            wordIdx++
-                        }
-                    }
-                }
-                db.setTransactionSuccessful()
-            } finally { db.endTransaction(); db.close() }
-        } catch (e: Exception) { e.printStackTrace() }
-    }
-
-    suspend fun scrapeStrong(strongs: String, bookName: String? = null) = withContext(Dispatchers.IO) {
-        val isG = if (bookName != null) books.find { it.name == bookName }?.testament == "New" else strongs.startsWith("G")
-        if (isG) scrapeGreekStrong(strongs) else scrapeHebrewStrong(strongs)
-    }
-
-    private fun scrapeGreekStrong(strongs: String) {
-        val num = strongs.filter { it.isDigit() }
-        val request = Request.Builder().url("https://biblehub.com/greek/$num.htm").header("User-Agent", "Mozilla/5.0").build()
-        try {
-            val response = client.newCall(request).execute()
-            val doc = Jsoup.parse(response.body?.string() ?: return)
-            val lemma = doc.select("span.greek").first()?.text()?.trim() ?: ""
-            val tr = doc.select("span.translit").first()?.text()?.trim() ?: ""
-            var def = doc.select("div.strongsnt").text().trim()
-            if (def.isEmpty()) { val lb = doc.select("div#leftbox").first(); lb?.select("iframe, script, ins, .vheading")?.remove(); def = lb?.text()?.trim()?.take(3000) ?: "" }
-            if (def.isNotEmpty()) { val db = getDb(false); db.execSQL("INSERT OR REPLACE INTO lexicon (strongs, language, lemma, transliteration, definition) VALUES (?, 'greek', ?, ?, ?)", arrayOf(strongs, lemma, tr, def)); db.close() }
-        } catch (e: Exception) { e.printStackTrace() }
-    }
-
-    private fun scrapeHebrewStrong(strongs: String) {
-        val num = strongs.filter { it.isDigit() }
-        val request = Request.Builder().url("https://biblehub.com/hebrew/$num.htm").header("User-Agent", "Mozilla/5.0").build()
-        try {
-            val response = client.newCall(request).execute()
-            val doc = Jsoup.parse(response.body?.string() ?: return)
-            val lemma = doc.select("span.hebrew").first()?.text()?.trim() ?: ""
-            val tr = doc.select("span.translit").first()?.text()?.trim() ?: ""
-            var def = doc.select("div.strongsnt").text().trim()
-            if (def.isEmpty()) { val lb = doc.select("div#leftbox").first(); lb?.select("iframe, script, ins, .vheading")?.remove(); def = lb?.text()?.trim()?.take(3000) ?: "" }
-            if (def.isNotEmpty()) { val db = getDb(false); db.execSQL("INSERT OR REPLACE INTO lexicon (strongs, language, lemma, transliteration, definition) VALUES (?, 'hebrew', ?, ?, ?)", arrayOf(strongs, lemma, tr, def)); db.close() }
-        } catch (e: Exception) { e.printStackTrace() }
-    }
-
-    val books = listOf(
-        BibleBook("Genesis", 50, "Old"), BibleBook("Exodus", 40, "Old"), BibleBook("Leviticus", 27, "Old"), BibleBook("Numbers", 36, "Old"), BibleBook("Deuteronomy", 34, "Old"), BibleBook("Joshua", 24, "Old"), BibleBook("Judges", 21, "Old"), BibleBook("Ruth", 4, "Old"), BibleBook("1Samuel", 31, "Old"), BibleBook("2Samuel", 24, "Old"), BibleBook("1Kings", 22, "Old"), BibleBook("2Kings", 25, "Old"), BibleBook("1Chronicles", 29, "Old"), BibleBook("2Chronicles", 36, "Old"), BibleBook("Ezra", 10, "Old"), BibleBook("Nehemiah", 13, "Old"), BibleBook("Tobit", 14, "Old"), BibleBook("Judith", 16, "Old"), BibleBook("Esther", 10, "Old"), BibleBook("1Meqabyan", 36, "Old"), BibleBook("2Meqabyan", 21, "Old"), BibleBook("3Meqabyan", 15, "Old"), BibleBook("Job", 42, "Old"), BibleBook("Psalms", 150, "Old"), BibleBook("Proverbs", 31, "Old"), BibleBook("Tegsas", 31, "Old"), BibleBook("Wisdom", 19, "Old"), BibleBook("Ecclesiastes", 12, "Old"), BibleBook("SongofSolomon", 8, "Old"), BibleBook("Sirach", 51, "Old"), BibleBook("Isaiah", 66, "Old"), BibleBook("Jeremiah", 52, "Old"), BibleBook("Lamentations", 5, "Old"), BibleBook("Ezekiel", 48, "Old"), BibleBook("Daniel", 12, "Old"), BibleBook("Hosea", 14, "Old"), BibleBook("Amos", 9, "Old"), BibleBook("Micah", 7, "Old"), BibleBook("Joel", 3, "Old"), BibleBook("Obadiah", 1, "Old"), BibleBook("Jonah", 4, "Old"), BibleBook("Nahum", 3, "Old"), BibleBook("Habakkuk", 3, "Old"), BibleBook("Zephaniah", 3, "Old"), BibleBook("Haggai", 2, "Old"), BibleBook("Zechariah", 14, "Old"), BibleBook("Malachi", 4, "Old"), BibleBook("Enoch", 108, "Old"), BibleBook("Jubilees", 50, "Old"),
-        BibleBook("Matthew", 28, "New"), BibleBook("Mark", 16, "New"), BibleBook("Luke", 24, "New"), BibleBook("John", 21, "New"), BibleBook("Acts", 28, "New"), BibleBook("Romans", 16, "New"), BibleBook("1Corinthians", 16, "New"), BibleBook("2Corinthians", 13, "New"), BibleBook("Galatians", 6, "New"), BibleBook("Ephesians", 6, "New"), BibleBook("Philippians", 4, "New"), BibleBook("Colossians", 4, "New"), BibleBook("1Thessalonians", 5, "New"), BibleBook("2Thessalonians", 3, "New"), BibleBook("1Timothy", 6, "New"), BibleBook("2Timothy", 4, "New"), BibleBook("Titus", 3, "New"), BibleBook("Philemon", 1, "New"), BibleBook("Hebrews", 13, "New"), BibleBook("1Peter", 5, "New"), BibleBook("2Peter", 3, "New"), BibleBook("1John", 5, "New"), BibleBook("2John", 1, "New"), BibleBook("3John", 1, "New"), BibleBook("James", 5, "New"), BibleBook("Jude", 1, "New"), BibleBook("Revelation", 22, "New"),
-        BibleBook("SirateTsion", 1, "Eth"), BibleBook("Tizaz", 1, "Eth"), BibleBook("Gitsiw", 1, "Eth"), BibleBook("Abtilis", 1, "Eth"), BibleBook("1Dominos", 1, "Eth"), BibleBook("2Dominos", 1, "Eth"), BibleBook("Qalementos", 1, "Eth"), BibleBook("Didasqalia", 1, "Eth")
-    )
 }
