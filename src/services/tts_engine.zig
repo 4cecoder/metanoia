@@ -328,9 +328,10 @@ pub const TTSEngine = struct {
     fn cleanupPipeline(self: *TTSEngine) void {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
+        const page_allocator = std.heap.page_allocator;
         for (&self.pipeline_paths) |*p| {
             if (p.*) |path| {
-                self.allocator.free(path);
+                page_allocator.free(path);
                 p.* = null;
             }
         }

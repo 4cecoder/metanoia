@@ -427,54 +427,77 @@ dropdown:hover {
     border-color: #7aa2f7;
 }
 
-dropdown > button {
+dropdown button {
     background: #1a1b26;
     border: none;
     color: #c0caf5;
     padding: 4px 8px;
 }
 
-dropdown > button:hover {
+dropdown button:hover {
     background: #24283b;
     color: #7dcfff;
 }
 
-dropdown popover {
+dropdown arrow {
+    color: #565f89;
+}
+
+/* Global popover / context menu theming */
+popover {
     background: #24283b;
     border: 1px solid #414868;
     border-radius: 8px;
 }
 
-dropdown popover contents,
-dropdown popover scrolledwindow,
-dropdown popover viewport,
-dropdown popover listview,
-dropdown popover list {
+popover > contents,
+popover listview,
+popover list,
+popover scrolledwindow,
+popover viewport {
     background: #24283b;
 }
 
-dropdown popover row,
-dropdown popover listviewitem,
-dropdown popover list > row {
+popover > contents > listview,
+popover > contents > list {
+    background: #24283b;
+}
+
+popover listview > row,
+popover list > row,
+popover row {
     background: #24283b;
     color: #c0caf5;
     padding: 8px 12px;
 }
 
-dropdown popover row:hover,
-dropdown popover listviewitem:hover,
-dropdown popover list > row:hover {
+popover listview > row:hover,
+popover list > row:hover,
+popover row:hover {
     background: #2f334d;
     color: #7dcfff;
 }
 
-dropdown popover row:selected,
-dropdown popover listviewitem:selected,
-dropdown popover list > row:selected {
+popover listview > row:selected,
+popover list > row:selected,
+popover row:selected {
     background: #3d59a1;
     color: #ffffff;
 }
 
-dropdown arrow {
-    color: #565f89;
+/* Menu styling for context menus */
+menu {
+    background: #24283b;
+    border: 1px solid #414868;
+}
+
+menu > menuitem {
+    background: #24283b;
+    color: #c0caf5;
+    padding: 6px 12px;
+}
+
+menu > menuitem:hover {
+    background: #2f334d;
+    color: #7dcfff;
 }

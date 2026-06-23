@@ -394,7 +394,7 @@ fn load_chapter_into_study(book: []const u8, chapter: i32, start_verse: i32) voi
             const verse_num = bible.sqlite3_column_int(stmt.?, 0);
             const text = bible.sqlite3_column_text(stmt.?, 1);
             const v_text = std.mem.span(text.?);
-            chapter_verses.append(allocator, allocator.dupe(u8, v_text) catch "") catch {};
+            chapter_verses.append(allocator, allocator.dupe(u8, v_text) catch continue) catch continue;
 
             const v_num_color = if (verse_num == start_verse) "#e0af68" else "#7aa2f7";
             const bg_color = highlights.get(verse_num);
