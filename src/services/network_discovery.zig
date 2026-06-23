@@ -171,7 +171,7 @@ test "DiscoveryResult deinit" {
 }
 
 test "NetworkDiscovery URL formatting" {
-    var discovery = NetworkDiscovery.init(std.testing.allocator, undefined, .{
+    const discovery = NetworkDiscovery.init(std.testing.allocator, undefined, .{
         .port = 8080,
     });
 

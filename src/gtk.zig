@@ -74,6 +74,7 @@ pub extern fn gtk_paned_set_position(paned: ?*GtkPaned, position: i32) void;
 pub extern fn gtk_paned_get_position(paned: ?*GtkPaned) i32;
 
 pub extern fn gtk_label_new(str: ?[*:0]const u8) ?*GtkWidget;
+pub extern fn gtk_label_set_text(label: ?*GtkLabel, str: [*:0]const u8) void;
 pub extern fn gtk_label_set_markup(label: ?*GtkLabel, str: [*:0]const u8) void;
 pub extern fn gtk_label_set_wrap(label: ?*GtkLabel, setting: bool) void;
 pub extern fn gtk_label_set_xalign(label: ?*GtkLabel, xalign: f32) void;
@@ -224,4 +225,3 @@ pub const GActionEntry = extern struct {
 };
 pub extern fn g_action_map_add_action_entries(action_map: ?*anyopaque, entries: [*]const GActionEntry, n_entries: i32, user_data: gpointer) void;
 
-pub const settings_dialog = @import("ui/settings_dialog.zig");

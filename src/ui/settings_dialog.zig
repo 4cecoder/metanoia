@@ -190,7 +190,7 @@ pub const SettingsDialog = struct {
         self.tts_url_entry = gtk_entry_new();
         gtk_widget_set_hexpand(self.tts_url_entry, true);
         gtk_widget_add_css_class(self.tts_url_entry, "modern-entry");
-        const url_z = self.allocator.dupeZ(u8, config.tts_url) catch "";
+        const url_z = self.allocator.dupeSentinel(u8, config.tts_url, 0) catch "";
         gtk_editable_set_text(self.tts_url_entry, url_z);
         self.allocator.free(url_z);
         gtk_box_append(entry_row, self.tts_url_entry);
@@ -236,7 +236,7 @@ pub const SettingsDialog = struct {
 
         self.llm_url_entry = gtk_entry_new();
         gtk_widget_add_css_class(self.llm_url_entry, "modern-entry");
-        const url_z = self.allocator.dupeZ(u8, config.llm_url) catch "";
+        const url_z = self.allocator.dupeSentinel(u8, config.llm_url, 0) catch "";
         gtk_editable_set_text(self.llm_url_entry, url_z);
         self.allocator.free(url_z);
         gtk_box_append(section, self.llm_url_entry);
@@ -470,7 +470,7 @@ fn on_discover_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void 
                 };
                 if (allocator.create(UpdateUI)) |u_ctx| {
                     u_ctx.* = .{ 
-                        .url = allocator.dupeZ(u8, result.url) catch {
+                        .url = allocator.dupeSentinel(u8, result.url, 0) catch {
                             allocator.destroy(u_ctx);
                             return null;
                         }, 

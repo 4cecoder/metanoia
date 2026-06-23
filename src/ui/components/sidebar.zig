@@ -192,9 +192,6 @@ pub const Sidebar = struct {
                 const argv = &[_][]const u8{ "curl", "-s", "http://127.0.0.1:8000/voice_status" };
                 var child = std.process.spawn(s.sidebar.io, .{ .argv = argv, .stdout = .pipe }) catch return null;
                 
-                var stdout_list = std.ArrayListUnmanaged(u8).empty;
-                defer stdout_list.deinit(allocator);
-                
                 var r_buf: [4096]u8 = undefined;
                 var f_reader = child.stdout.?.reader(s.sidebar.io, &r_buf);
                 const json_data = f_reader.interface.allocRemaining(allocator, std.Io.Limit.unlimited) catch return null;
@@ -211,18 +208,22 @@ pub const Sidebar = struct {
                     while (iter.next()) |entry| {
                         if (entry.value_ptr.* == .object) {
                             if (entry.value_ptr.*.object.get("display_name")) |dn| {
-                                names_list.append(allocator, allocator.dupeZ(u8, dn.string) catch continue) catch continue;
+                                names_list.append(allocator, allocator.dupeSentinel(u8, dn.string, 0) catch continue) catch continue;
                             }
                         }
                     }
                 }
                 names_list.append(allocator, null) catch {};
+
                 const UpdateUI = struct {
                     sb: *Sidebar,
-                    voice_names: [*:null]?[*:0]const u8,
+                    voice_names: []?[*:0]const u8,
+                    allocator: std.mem.Allocator,
                     fn update(ptr: gpointer) callconv(.c) bool {
                         const ctx: *@This() = @ptrCast(@alignCast(ptr));
-                        const new_drop = gtk.gtk_drop_down_new_from_strings(ctx.voice_names);
+                        const inner_allocator = ctx.allocator;
+                        
+                        const new_drop = gtk.gtk_drop_down_new_from_strings(@ptrCast(ctx.voice_names.ptr));
                         const parent = gtk.gtk_widget_get_parent(ctx.sb.voice_dropdown);
                         if (parent) |p_box| {
                             gtk.gtk_box_remove(@ptrCast(p_box), ctx.sb.voice_dropdown);
@@ -230,11 +231,37 @@ pub const Sidebar = struct {
                             ctx.sb.voice_dropdown = new_drop;
                         }
                         ctx.sb.log("Voice library synchronized.");
+
+                        // Cleanup
+                        for (ctx.voice_names) |maybe_name| {
+                            if (maybe_name) |name| {
+                                inner_allocator.free(std.mem.span(name));
+                            }
+                        }
+                        inner_allocator.free(ctx.voice_names);
+                        inner_allocator.destroy(ctx);
                         return false;
                     }
                 };
-                const ui_ctx = allocator.create(UpdateUI) catch return null;
-                ui_ctx.* = .{ .sb = s.sidebar, .voice_names = @ptrCast(names_list.toOwnedSlice(allocator) catch unreachable) };
+                
+                const ui_ctx = allocator.create(UpdateUI) catch {
+                    for (names_list.items) |maybe_name| {
+                        if (maybe_name) |name| allocator.free(std.mem.span(name));
+                    }
+                    names_list.deinit(allocator);
+                    allocator.destroy(s);
+                    return null;
+                };
+                
+                ui_ctx.* = .{ 
+                    .sb = s.sidebar, 
+                    .voice_names = names_list.toOwnedSlice(allocator) catch blk: {
+                        var err_list = allocator.alloc(?[*:0]const u8, 1) catch unreachable;
+                        err_list[0] = null;
+                        break :blk err_list;
+                    },
+                    .allocator = allocator 
+                };
                 _ = gtk.g_idle_add(&UpdateUI.update, ui_ctx);
                 allocator.destroy(s);
                 return null;
