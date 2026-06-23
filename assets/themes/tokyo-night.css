@@ -412,3 +412,59 @@ separator.vertical {
     border-bottom: 1px solid #2f334d;
     letter-spacing: 1px;
 }
+
+/* Dropdown */
+dropdown {
+    background: #1a1b26;
+    border: 1px solid #414868;
+    border-radius: 6px;
+    color: #c0caf5;
+    padding: 4px 8px;
+    min-height: 28px;
+}
+
+dropdown:hover {
+    border-color: #7aa2f7;
+}
+
+dropdown > button {
+    background: #1a1b26;
+    border: none;
+    color: #c0caf5;
+    padding: 4px 8px;
+}
+
+dropdown > button:hover {
+    background: #24283b;
+    color: #7dcfff;
+}
+
+dropdown popover {
+    background: #24283b;
+    border: 1px solid #414868;
+    border-radius: 8px;
+}
+
+dropdown popover list {
+    background: #24283b;
+}
+
+dropdown popover list > row {
+    background: #24283b;
+    color: #c0caf5;
+    padding: 8px 12px;
+}
+
+dropdown popover list > row:hover {
+    background: #2f334d;
+    color: #7dcfff;
+}
+
+dropdown popover list > row:selected {
+    background: #3d59a1;
+    color: #ffffff;
+}
+
+dropdown arrow {
+    color: #565f89;
+}
