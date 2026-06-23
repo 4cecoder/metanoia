@@ -445,21 +445,31 @@ dropdown popover {
     border-radius: 8px;
 }
 
+dropdown popover contents,
+dropdown popover scrolledwindow,
+dropdown popover viewport,
+dropdown popover listview,
 dropdown popover list {
     background: #24283b;
 }
 
+dropdown popover row,
+dropdown popover listviewitem,
 dropdown popover list > row {
     background: #24283b;
     color: #c0caf5;
     padding: 8px 12px;
 }
 
+dropdown popover row:hover,
+dropdown popover listviewitem:hover,
 dropdown popover list > row:hover {
     background: #2f334d;
     color: #7dcfff;
 }
 
+dropdown popover row:selected,
+dropdown popover listviewitem:selected,
 dropdown popover list > row:selected {
     background: #3d59a1;
     color: #ffffff;
