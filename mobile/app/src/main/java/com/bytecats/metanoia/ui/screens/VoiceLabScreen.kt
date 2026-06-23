@@ -25,7 +25,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.bytecats.metanoia.tts.RemoteVoice
+import com.bytecats.metanoia.models.RemoteVoice
 import com.bytecats.metanoia.viewmodel.MainViewModel
 import java.io.File
 
@@ -33,7 +33,7 @@ import java.io.File
 @Composable
 fun VoiceLabScreen(viewModel: MainViewModel) {
     var text by remember { mutableStateOf("Metanoia: Neural synthesis check.") }
-    var selectedVoiceKey by remember { mutableStateOf("") }
+    var selectedVoiceKey by remember { mutableStateOf(viewModel.settingsManager.selectedVoice) }
     var showCreateSheet by remember { mutableStateOf(false) }
     
     val logs = viewModel.voiceLogs
@@ -115,17 +115,21 @@ fun VoiceLabScreen(viewModel: MainViewModel) {
             voices.forEach { voice ->
                 VoiceCard(
                     voice = voice,
-                    isSelected = viewModel.settingsManager.selectedVoice == voice.key,
-                    onSelect = { viewModel.settingsManager.selectedVoice = voice.key },
+                    isSelected = selectedVoiceKey == voice.key,
+                    onSelect = { 
+                        selectedVoiceKey = voice.key
+                        viewModel.settingsManager.selectedVoice = voice.key 
+                    },
                     onDelete = { viewModel.deleteServerVoice(voice.key) },
                     onUpload = { 
+                        selectedVoiceKey = voice.key
                         viewModel.settingsManager.selectedVoice = voice.key
                         fileLauncher.launch("audio/wav") 
                     }
                 )
             }
 
-            if (viewModel.settingsManager.selectedVoice.isNotEmpty()) {
+            if (selectedVoiceKey.isNotEmpty()) {
                 Button(
                     onClick = { viewModel.speak(text) }, 
                     modifier = Modifier.fillMaxWidth().height(56.dp), 

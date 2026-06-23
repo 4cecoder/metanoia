@@ -59,6 +59,7 @@ fun BibleScreen(viewModel: MainViewModel) {
     var lexiconDetail by remember { mutableStateOf(Pair("", "Loading...")) }
     var showStudySheet by remember { mutableStateOf(false) }
     var showLexiconSheet by remember { mutableStateOf(false) }
+    var showVoiceSheet by remember { mutableStateOf(false) }
     var isSearchVisible by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<SearchResult>>(emptyList()) }
@@ -95,10 +96,35 @@ fun BibleScreen(viewModel: MainViewModel) {
                     title = { Text(if (step == "read") "${selectedBook?.name} $selectedChapter" else "BIBLE") },
                     navigationIcon = { if (step != "book") IconButton({ step = if (step == "read") "chapter" else "book"; isSearchVisible = (step == "book"); viewModel.stopNarration() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
                     actions = { 
+                        if (viewModel.isRemoteTtsActive && narration.isPlaying) {
+                            Surface(
+                                color = Color(0xFF9ece6a).copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(4.dp),
+                                border = BorderStroke(1.dp, Color(0xFF9ece6a)),
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Text(
+                                    "NEURAL",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF9ece6a),
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
+                        }
                         IconButton({ isSearchVisible = !isSearchVisible }) { Icon(Icons.Default.Search, null) }
                         if (step == "read") {
                             if (narration.isPlaying) IconButton({ viewModel.stopNarration() }) { Icon(Icons.Default.StopCircle, null, tint = Color.Red) }
-                            else IconButton({ viewModel.startChapterNarration(currentChapterContent) }) { Icon(Icons.Default.PlayCircle, null) }
+                            else IconButton(
+                                onClick = { viewModel.startChapterNarration(currentChapterContent) },
+                                modifier = Modifier.combinedClickable(
+                                    onClick = { viewModel.startChapterNarration(currentChapterContent) },
+                                    onLongClick = { 
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        showVoiceSheet = true 
+                                    }
+                                )
+                            ) { Icon(Icons.Default.PlayCircle, null) }
                             IconButton({ scope.launch { bibleManager.scrapeChapter(selectedBook!!.name, selectedChapter, settings.bibleGatewayVersion); bibleManager.scrapeInterlinear(selectedBook!!.name, selectedChapter); currentChapterContent = bibleManager.getChapter(selectedBook!!.name, selectedChapter); highlights = bibleManager.getHighlights(selectedBook!!.name, selectedChapter) } }) { Icon(Icons.Default.CloudDownload, null) } 
                         }
                     }
@@ -239,6 +265,55 @@ fun BibleScreen(viewModel: MainViewModel) {
                 }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 Text(lexiconDetail.second, style = MaterialTheme.typography.bodyLarge, lineHeight = 24.sp); Spacer(modifier = Modifier.height(40.dp))
+            }
+        }
+    }
+
+    if (showVoiceSheet) {
+        ModalBottomSheet(onDismissRequest = { showVoiceSheet = false }) {
+            var useRemote by remember { mutableStateOf(settings.useExperimentalTTS) }
+            var selectedVoice by remember { mutableStateOf(settings.selectedVoice) }
+            
+            Column(modifier = Modifier.padding(24.dp).fillMaxWidth().padding(bottom = 40.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                Text("VOICE SETTINGS", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FilterChip(
+                        selected = !useRemote,
+                        onClick = { useRemote = false; settings.useExperimentalTTS = false },
+                        label = { Text("Standard") },
+                        leadingIcon = { Icon(Icons.Default.Smartphone, null, Modifier.size(16.dp)) }
+                    )
+                    FilterChip(
+                        selected = useRemote,
+                        onClick = { useRemote = true; settings.useExperimentalTTS = true },
+                        label = { Text("Neural") },
+                        leadingIcon = { Icon(Icons.Default.Cloud, null, Modifier.size(16.dp)) }
+                    )
+                }
+
+                if (useRemote) {
+                    Text("SELECT NEURAL VOICE", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        viewModel.serverVoices.forEach { voice ->
+                            FilterChip(
+                                selected = (selectedVoice == voice.key),
+                                onClick = { 
+                                    selectedVoice = voice.key
+                                    settings.selectedVoice = voice.key 
+                                },
+                                label = { Text(voice.displayName) },
+                                enabled = voice.exists
+                            )
+                        }
+                    }
+                } else {
+                    Text("Using system-native synthesis.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                }
+                
+                Button(onClick = { showVoiceSheet = false }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Apply Settings")
+                }
             }
         }
     }

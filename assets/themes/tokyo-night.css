@@ -213,3 +213,61 @@ button:disabled {
     color: #414868;
     border-color: #24283b;
 }
+
+/* ADVANCED STATUS BAR */
+.status-bar {
+    background-image: linear-gradient(to bottom, #16161e, #13131a);
+    border-top: 1px solid #414868;
+    padding: 2px 10px;
+    font-size: 11px;
+    min-height: 24px;
+}
+
+.status-bar-left {
+    padding-right: 12px;
+}
+
+.status-bar-right {
+    padding-left: 12px;
+}
+
+.status-icon {
+    color: #7aa2f7;
+    -gtk-icon-size: 14px;
+}
+
+.status-bar-label {
+    color: #c0caf5;
+}
+
+.status-telemetry-item {
+    color: #565f89;
+    font-family: "JetBrains Mono", "Menlo", monospace;
+}
+
+.status-telemetry-item-bold {
+    color: #9ece6a;
+    font-weight: bold;
+    font-family: "JetBrains Mono", "Menlo", monospace;
+}
+
+.status-progress {
+    color: #7aa2f7;
+}
+
+.status-progress trough {
+    background-color: #1f2335;
+    border-radius: 2px;
+    min-height: 4px;
+}
+
+.status-progress progress {
+    background-color: #7aa2f7;
+    border-radius: 2px;
+    min-height: 4px;
+}
+
+separator.vertical {
+    background-color: #414868;
+    margin: 4px 0;
+}
