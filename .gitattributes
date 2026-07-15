@@ -1,0 +1,31 @@
+# Auto-detect text files and normalize line endings
+* text=auto
+
+# Shell scripts must stay LF
+*.sh text eol=lf
+
+# PowerShell scripts stay CRLF on Windows
+*.ps1 text eol=crlf
+
+# Batch files
+*.bat text eol=crlf
+
+# Zig source
+*.zig text diff=zig
+
+# Markdown
+*.md text
+
+# JSON / YAML / TOML
+*.json text
+*.yaml text
+*.yml text
+*.toml text
+
+# Binary files
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary
+*.wav binary
+*.db binary
