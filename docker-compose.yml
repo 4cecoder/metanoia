@@ -1,0 +1,49 @@
+services:
+  # Cross-compile Zig for Windows target from Linux
+  crosscheck:
+    image: debian:bookworm-slim
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+    entrypoint: ["/workspace/ci/crosscheck.sh"]
+    profiles:
+      - crosscheck
+
+  # Compile and validate C# setup wizard via Mono
+  wizard:
+    image: mono:6.12
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+    entrypoint: ["/workspace/ci/wizard.sh"]
+    profiles:
+      - wizard
+
+  # Windows 11 headless VM via dockur (requires KVM)
+  windows:
+    image: dockurr/windows:latest
+    container_name: metanoia-windows
+    environment:
+      VERSION: "11"
+      RAM_SIZE: "4G"
+      CPU_CORES: "2"
+      DISK_SIZE: "40G"
+      USERNAME: "metanoia"
+      PASSWORD: "metanoia"
+    devices:
+      - /dev/kvm
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - 8006:8006   # WebUI (VNC-like)
+      - 3389:3389   # RDP
+    volumes:
+      - windows-data:/storage
+      - ..:/workspace:ro
+    stop_grace_period: 2m
+    restart: unless-stopped
+    profiles:
+      - full
+
+volumes:
+  windows-data:
