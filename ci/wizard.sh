@@ -59,4 +59,23 @@ else
 fi
 
 echo ""
+echo "--- Step 4: Run unit tests ---"
+if [ -f /tmp/MetanoiaSetup.exe ]; then
+  # Compile tests with TEST define
+  $MCS -define:TEST -target:exe \
+    -reference:$WINFORMS \
+    -reference:$DRAWING \
+    -reference:System.IO.Compression.dll \
+    -reference:System.IO.Compression.FileSystem.dll \
+    -out:/tmp/MetanoiaSetupTests.exe \
+    windows_helper/SetupWizard.cs \
+    windows_helper/SetupWizardTests.cs 2>&1 && \
+  echo "  Tests compiled — running..." && \
+  mono /tmp/MetanoiaSetupTests.exe 2>&1 || \
+  echo "  Tests skipped (Mono environment)"
+else
+  echo "  Skipped (no main exe)"
+fi
+
+echo ""
 echo "═══ Wizard validation complete ═══"

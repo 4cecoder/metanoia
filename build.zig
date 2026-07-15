@@ -158,11 +158,23 @@ pub fn build(b: *std.Build) void {
         .root_module = kit_mod,
     });
 
+    // Build config tests (cross-target validation).
+    const build_test_mod = b.createModule(.{
+        .root_source_file = b.path("tests/build_test.zig"),
+        .target = target,
+    });
+    const build_test = b.addTest(.{
+        .root_module = build_test_mod,
+    });
+
     // A run step that will run the test executable.
     const run_mod_tests = b.addRunArtifact(mod_tests);
 
     // Run kit tests.
     const run_kit_tests = b.addRunArtifact(kit_tests);
+
+    // Run build config tests.
+    const run_build_tests = b.addRunArtifact(build_test);
 
     // Creates an executable that will run `test` blocks from the executable's
     // root module. Note that test executables only test one module at a time,
@@ -180,6 +192,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_kit_tests.step);
+    test_step.dependOn(&run_build_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
