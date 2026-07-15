@@ -101,15 +101,24 @@ pub fn build(b: *std.Build) void {
     // Windows-specific: hide terminal window, add MSYS2 search paths
     if (target.result.os.tag == .windows) {
         exe.subsystem = .Windows;
-        // Check project-local .cache/msys64 first, then system paths
-        const local_msys = ".\\cache\\msys64\\ucrt64\\lib";
-        const msys2_paths = [_][]const u8{
-            local_msys,
-            "C:\\msys64\\ucrt64\\lib",
-            "C:\\msys64\\mingw64\\lib",
+        // Try to find MSYS2 pkg-config in project cache or system paths
+        const search_in = [_][]const u8{
+            ".\\cache\\msys64\\ucrt64\\bin",
+            "C:\\msys64\\ucrt64\\bin",
+            "C:\\msys64\\mingw64\\bin",
         };
-        for (msys2_paths) |p| {
-            exe.root_module.addLibraryPath(.{ .cwd_relative = p });
+        const pkg_config = b.findProgram(&.{"pkg-config"}, &search_in) catch null;
+        if (pkg_config) |pc| {
+            // pkg-config resolves everything — no extra paths needed
+            _ = pc;
+        } else {
+            // Fallback: add common MSYS2 lib directories
+            const fallback = [_][]const u8{
+                ".\\cache\\msys64\\ucrt64\\lib",
+                "C:\\msys64\\ucrt64\\lib",
+                "C:\\msys64\\mingw64\\lib",
+            };
+            for (fallback) |p| exe.root_module.addLibraryPath(.{ .cwd_relative = p });
         }
     }
 
