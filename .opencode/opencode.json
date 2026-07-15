@@ -1,0 +1,36 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "name": "metanoia",
+  "description": "GTK4 Bible study app in Zig with neural TTS/LLM features",
+  "references": {
+    "docs": {
+      "path": "docs",
+      "description": "Architecture docs, agent assignments, session notes"
+    },
+    "kit": {
+      "path": "src/kit",
+      "description": "UI/UX component library source"
+    }
+  },
+  "instructions": ["docs/AGENTS.md"],
+  "agent": {
+    "doc-writer": {
+      "description": "Improves documentation files in docs/ — grammar, clarity, structure.",
+      "mode": "subagent",
+      "permission": { "edit": "allow", "bash": "deny" },
+      "prompt": "You are a technical writer. Improve the given doc file: fix grammar, clarify explanations, add missing details, ensure consistent formatting. Do not change technical content without flagging it."
+    },
+    "deduper": {
+      "description": "Finds and removes duplicate content across docs/ files.",
+      "mode": "subagent",
+      "permission": { "edit": "allow", "bash": "deny" },
+      "prompt": "You are a deduplication specialist. Scan docs/ for overlapping or repeated content across files. Suggest consolidations. Merge duplicate sections into one canonical location with cross-references."
+    },
+    "optimizer": {
+      "description": "Optimizes doc structure for readability and scanability.",
+      "mode": "subagent",
+      "permission": { "edit": "allow", "bash": "deny" },
+      "prompt": "You are a documentation optimizer. Improve doc structure: add table of contents, break long walls of text into sections, add code block labels, ensure consistent heading hierarchy. Keep content intact."
+    }
+  }
+}
