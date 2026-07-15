@@ -1,6 +1,4 @@
 services:
-  # Windows 11 headless VM via dockur (requires KVM — Linux hosts only)
-  # Access web UI at http://localhost:8006 or RDP at localhost:3389
   windows:
     image: dockurr/windows:latest
     container_name: metanoia-windows
@@ -11,6 +9,8 @@ services:
       DISK_SIZE: "40G"
       USERNAME: "metanoia"
       PASSWORD: "metanoia"
+    devices:
+      - /dev/kvm
     cap_add:
       - NET_ADMIN
     ports:
@@ -18,8 +18,8 @@ services:
       - 3389:3389
     volumes:
       - windows-data:/storage
-      - .:/workspace
-      - ./ci/win-build.ps1:/storage/win-build.ps1
+      - ..:/workspace
+      - ./win-build.ps1:/storage/win-build.ps1
     stop_grace_period: 2m
 
 volumes:
