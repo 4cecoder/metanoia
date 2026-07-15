@@ -101,7 +101,6 @@ pub fn build(b: *std.Build) void {
     // Windows-specific: hide terminal window, add MSYS2 search paths
     if (target.result.os.tag == .windows) {
         exe.subsystem = .Windows;
-        // Add common MSYS2 lib directories for Zig linker to find
         const msys_libs = [_][]const u8{
             ".\\cache\\msys64\\ucrt64\\lib",
             "C:\\msys64\\ucrt64\\lib",
