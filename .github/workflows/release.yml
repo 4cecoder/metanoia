@@ -57,6 +57,6 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "Metanoia ${{ github.ref_name }}"
+          name: "${{ github.ref_name }}"
           body: "Portable Windows build — unzip and run metanoia.exe"
           files: dist/Metanoia-*.zip
