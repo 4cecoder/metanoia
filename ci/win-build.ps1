@@ -103,5 +103,16 @@ if (Test-Path $exe) {
     Log "  metanoia.exe not found — skipping smoke test"
 }
 
-# ── 6. Done ─────────────────────────────────────────────────────
+# ── 6. Package installer ───────────────────────────────────────
+Log "Step 6/6: Packaging..."
+$dist = "$workspace\dist\Metanoia"
+New-Item -ItemType Directory -Force -Path $dist | Out-Null
+if (Test-Path "$workspace\zig-out\bin\metanoia.exe") {
+    Copy-Item "$workspace\zig-out\bin\*" $dist -Recurse -Force
+    Copy-Item "$workspace\assets\metanoia.ico" $dist -Force
+    Log "Packaged to $dist ($((Get-ChildItem $dist -Recurse | Measure-Object Length -Sum).Sum / 1MB) MB)"
+} else {
+    Log "metanoia.exe not found — skipping package"
+}
+
 Log "=== Build complete ==="
