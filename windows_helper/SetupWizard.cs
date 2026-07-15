@@ -65,6 +65,12 @@ namespace MetanoiaSetup
             return candidates.FirstOrDefault(Directory.Exists);
         }
 
+        public string GetLocalMsys2Path(string projectDir)
+        {
+            var local = Path.Combine(projectDir, ".cache", "msys64", "ucrt64.exe");
+            return File.Exists(local) ? Path.GetDirectoryName(local) : null;
+        }
+
         public bool IsOnPath(string dir)
         {
             var path = Environment.GetEnvironmentVariable("PATH") ?? "";
@@ -524,19 +530,20 @@ namespace MetanoiaSetup
 
         private async Task CheckMsys2()
         {
-            var msysDir = _scanner.GetMsys2Path();
+            var msysDir = GetLocalMsys2Path();
             var ok = msysDir != null;
             SetStatus("msys2", ok, ok ? msysDir : null, "Install", async () =>
             {
+                var localDir = Path.Combine(Application.StartupPath, ".cache", "msys64");
                 await _installer.InstallMsys2(
                     "https://github.com/msys2/msys2-installer/releases/download/2025-04-14/msys2-x86_64-20250414.exe",
-                    @"C:\msys64");
+                    localDir);
             });
         }
 
         private async Task CheckGtk4()
         {
-            var msysDir = _scanner.GetMsys2Path();
+            var msysDir = _scanner.GetMsys2Path() ?? _scanner.GetLocalMsys2Path(Application.StartupPath);
             if (msysDir == null)
             { SetStatus("gtk4", false, null, "Install MSYS2 first", null); return; }
             var pkgConfig = Path.Combine(msysDir, "ucrt64", "bin", "pkg-config.exe");

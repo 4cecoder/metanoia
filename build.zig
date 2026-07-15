@@ -96,9 +96,10 @@ pub fn build(b: *std.Build) void {
     // Windows-specific: hide terminal window, add MSYS2 search paths
     if (target.result.os.tag == .windows) {
         exe.subsystem = .Windows;
-        // Zig's linkSystemLibrary invokes pkg-config which may not be in PATH
-        // on a fresh MSYS2 install. Add common MSYS2 UCRT64 paths as fallback.
+        // Check project-local .cache/msys64 first, then system paths
+        const local_msys = ".\\cache\\msys64\\ucrt64\\lib";
         const msys2_paths = [_][]const u8{
+            local_msys,
             "C:\\msys64\\ucrt64\\lib",
             "C:\\msys64\\mingw64\\lib",
         };
