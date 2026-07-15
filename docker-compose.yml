@@ -1,25 +1,6 @@
 services:
-  # Cross-compile Zig for Windows target from Linux
-  crosscheck:
-    image: debian:bookworm-slim
-    working_dir: /workspace
-    volumes:
-      - ..:/workspace
-    entrypoint: ["/workspace/ci/crosscheck.sh"]
-    profiles:
-      - crosscheck
-
-  # Compile and validate C# setup wizard via Mono
-  wizard:
-    image: mono:6.12
-    working_dir: /workspace
-    volumes:
-      - ..:/workspace
-    entrypoint: ["/workspace/ci/wizard.sh"]
-    profiles:
-      - wizard
-
-  # Windows 11 headless VM via dockur (requires KVM)
+  # Windows 11 headless VM — builds Metanoia natively
+  # Access web UI at http://localhost:8006 or RDP at localhost:3389
   windows:
     image: dockurr/windows:latest
     container_name: metanoia-windows
@@ -34,16 +15,26 @@ services:
       - /dev/kvm
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
     ports:
-      - 8006:8006   # WebUI (VNC-like)
-      - 3389:3389   # RDP
+      - 8006:8006
+      - 3389:3389
     volumes:
       - windows-data:/storage
-      - ..:/workspace:ro
+      - .:/workspace
+      - ./ci/win-build.ps1:/storage/win-build.ps1
     stop_grace_period: 2m
     restart: unless-stopped
+
+  # Validate C# setup wizard compiles via Mono
+  wizard:
+    image: mono:6.12
+    working_dir /workspace
+    volumes:
+      - .:/workspace
+    entrypoint: ["/workspace/ci/wizard.sh"]
     profiles:
-      - full
+      - check
 
 volumes:
   windows-data:

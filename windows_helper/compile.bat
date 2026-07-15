@@ -20,7 +20,7 @@ if exist "%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" (
 %CSC% /target:winexe /out:windows_helper\MetanoiaSetup.exe ^
     /reference:System.IO.Compression.dll ^
     /reference:System.IO.Compression.FileSystem.dll ^
-    /win32icon:assets\Metanoia.icns ^
+    /win32icon:assets\metanoia.ico ^
     windows_helper\SetupWizard.cs
 
 if %ERRORLEVEL% equ 0 (

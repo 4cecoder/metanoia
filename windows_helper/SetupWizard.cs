@@ -116,6 +116,30 @@ namespace MetanoiaSetup
     {
         public event Action<string> OnLog;
 
+        public async Task<string> GetLatestZigUrl()
+        {
+            try
+            {
+                var json = await new WebClient().DownloadStringTaskAsync("https://ziglang.org/download/index.json");
+                // Parse: find "master" -> "x86_64-windows" -> "tarball" value
+                var masterKey = "\"master\"";
+                var winKey = "\"x86_64-windows\"";
+                var tarballKey = "\"tarball\"";
+                var masterIdx = json.IndexOf(masterKey, StringComparison.Ordinal);
+                if (masterIdx < 0) return null;
+                var winIdx = json.IndexOf(winKey, masterIdx, StringComparison.Ordinal);
+                if (winIdx < 0) return null;
+                var tarballIdx = json.IndexOf(tarballKey, winIdx, StringComparison.Ordinal);
+                if (tarballIdx < 0) return null;
+                var valStart = json.IndexOf('"', tarballIdx + tarballKey.Length + 1) + 1;
+                if (valStart <= 0) return null;
+                var valEnd = json.IndexOf('"', valStart);
+                if (valEnd <= valStart) return null;
+                return json.Substring(valStart, valEnd - valStart);
+            }
+            catch (Exception ex) { Log($"Failed to fetch Zig version: {ex.Message}"); return null; }
+        }
+
         public async Task<bool> DownloadZipExtract(string url, string destDir, string exeName, string label)
         {
             Directory.CreateDirectory(destDir);
@@ -472,8 +496,11 @@ namespace MetanoiaSetup
             var r = await _scanner.FindOnPath("zig");
             SetStatus("zig", r.Found, r.Version, "Download", async () =>
             {
+                var url = await _installer.GetLatestZigUrl();
+                if (url == null) { Log("Could not determine latest Zig version."); return; }
+                Log($"Latest Zig: {url}");
                 await _installer.DownloadZipExtract(
-                    "https://ziglang.org/download/0.17.0/zig-windows-x86_64-0.17.0.zip",
+                    url,
                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "zig"),
                     "zig.exe", "Zig");
             });
