@@ -46,15 +46,17 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          # Collect exe + DLLs
           $dist = "dist\Metanoia"
           New-Item $dist -ItemType Directory -Force
           Copy-Item "zig-out\bin\*" $dist -Recurse
           Copy-Item "assets\metanoia.ico" $dist
-          Compress-Archive -Path "$dist\*" -DestinationPath "dist\Metanoia-$env:GITHUB_REF_NAME.zip"
+          $tag = "$env:GITHUB_REF_NAME"
+          $date = $tag.Split("-")[0]
+          Compress-Archive -Path "$dist\*" -DestinationPath "dist\Metanoia-$tag.zip"
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
+          name: "Metanoia ${{ github.ref_name }}"
+          body: "Portable Windows build — unzip and run metanoia.exe"
           files: dist/Metanoia-*.zip
-          generate_release_notes: true
