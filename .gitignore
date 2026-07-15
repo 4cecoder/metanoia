@@ -27,6 +27,7 @@ server.log
 
 # Application caches & uploads
 cache/
+.cache/
 uploads/
 
 # ML models (large, not in git)

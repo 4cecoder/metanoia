@@ -142,7 +142,6 @@ namespace MetanoiaSetup
 
         public async Task<bool> DownloadZipExtract(string url, string destDir, string exeName, string label)
         {
-            Directory.CreateDirectory(destDir);
             var zipPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".zip");
             try
             {
@@ -159,8 +158,7 @@ namespace MetanoiaSetup
                     .FirstOrDefault(File.Exists);
                 if (exePath != null)
                 {
-                    new PathManager().AddToUserPath(Path.GetDirectoryName(exePath));
-                    Log($"{label} installed. Added to PATH.");
+                    Log($"{label} installed to {destDir}.");
                     return true;
                 }
                 Log($"{label}: exe not found after extraction.");
@@ -356,7 +354,20 @@ namespace MetanoiaSetup
             };
 
             _buildBtn = StyledBtn("Build Project", Green);
-            _buildBtn.Click += (sender, args) => { _buildBtn.Enabled = false; try { _builder.Run(Application.StartupPath); } catch (Exception ex) { Log(ex.Message); } finally { _buildBtn.Enabled = true; } };
+            _buildBtn.Click += (sender, args) =>
+            {
+                _buildBtn.Enabled = false;
+                try
+                {
+                    // Prefer local zig cache over system PATH
+                    var localZig = FindLocalZigDir();
+                    if (localZig != null)
+                        Environment.SetEnvironmentVariable("PATH", localZig + ";" + Environment.GetEnvironmentVariable("PATH"));
+                    _builder.Run(Application.StartupPath);
+                }
+                catch (Exception ex) { Log(ex.Message); }
+                finally { _buildBtn.Enabled = true; }
+            };
             _vscodeBtn = StyledBtn("Open in VS Code", Blue);
             _vscodeBtn.Click += (sender, args) => LaunchVSCode();
             _logBtn = StyledBtn("Show Log", Dim);
@@ -494,15 +505,20 @@ namespace MetanoiaSetup
         private async Task CheckZig()
         {
             var r = await _scanner.FindOnPath("zig");
+            // Also check project-local cache
+            var localZig = FindLocalZig();
+            if (!r.Found && localZig != null) {
+                r.Found = true;
+                r.Version = localZig;
+            }
             SetStatus("zig", r.Found, r.Version, "Download", async () =>
             {
                 var url = await _installer.GetLatestZigUrl();
                 if (url == null) { Log("Could not determine latest Zig version."); return; }
                 Log($"Latest Zig: {url}");
-                await _installer.DownloadZipExtract(
-                    url,
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "zig"),
-                    "zig.exe", "Zig");
+                var localDir = Path.Combine(Application.StartupPath, ".cache", "zig");
+                await _installer.DownloadZipExtract(url, localDir, "zig.exe", "Zig");
+                Log($"Zig installed locally: {localDir}");
             });
         }
 
@@ -599,6 +615,28 @@ namespace MetanoiaSetup
             else
                 _logBox.AppendText(line + "\n");
             Debug.WriteLine(line);
+        }
+
+        private string FindLocalZig()
+        {
+            var cacheDir = Path.Combine(Application.StartupPath, ".cache", "zig");
+            if (Directory.Exists(cacheDir))
+            {
+                var exe = Directory.GetFiles(cacheDir, "zig.exe", SearchOption.AllDirectories).FirstOrDefault();
+                if (exe != null) return "local";
+            }
+            return null;
+        }
+
+        private string FindLocalZigDir()
+        {
+            var cacheDir = Path.Combine(Application.StartupPath, ".cache", "zig");
+            if (Directory.Exists(cacheDir))
+            {
+                var exe = Directory.GetFiles(cacheDir, "zig.exe", SearchOption.AllDirectories).FirstOrDefault();
+                if (exe != null) return Path.GetDirectoryName(exe);
+            }
+            return null;
         }
     }
 }
