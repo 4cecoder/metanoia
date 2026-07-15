@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const gtk = @import("gtk.zig");
 const models = @import("models/config.zig");
 const app_state = @import("app_state.zig");
@@ -1131,6 +1132,7 @@ fn on_passage_btn_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) vo
 }
 
 fn resolveBundleRoot() void {
+    if (builtin.os.tag != .macos) return;
     var buf: [4096]u8 = undefined;
     var len: u32 = @intCast(buf.len);
     if (std.c._NSGetExecutablePath(&buf, &len) != 0) return;

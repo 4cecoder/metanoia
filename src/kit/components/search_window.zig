@@ -119,7 +119,9 @@ pub const Search = struct {
                 _ = ffi.gtk_widget_grab_focus(e);
             }
             if (self.results_list) |list| {
-                ffi.gtk_list_box_remove_all(list);
+                while (ffi.gtk_widget_get_first_child(list)) |child| {
+                    ffi.gtk_widget_unparent(child);
+                }
             }
         }
     }
@@ -146,7 +148,11 @@ pub const Search = struct {
             if (!std.mem.eql(u8, msg, "Searching...")) self.allocator.free(msg);
         }
 
-        if (self.results_list) |list| ffi.gtk_list_box_remove_all(list);
+        if (self.results_list) |list| {
+            while (ffi.gtk_widget_get_first_child(list)) |child| {
+                ffi.gtk_widget_unparent(child);
+            }
+        }
 
         var results = std.ArrayListUnmanaged(SearchResult).empty;
         defer {
@@ -210,7 +216,11 @@ pub const Search = struct {
         if (span.len >= 3) {
             self.performSearch(span);
         } else if (span.len == 0) {
-            if (self.results_list) |list| ffi.gtk_list_box_remove_all(list);
+            if (self.results_list) |list| {
+                while (ffi.gtk_widget_get_first_child(list)) |child| {
+                    ffi.gtk_widget_unparent(child);
+                }
+            }
         }
     }
 
