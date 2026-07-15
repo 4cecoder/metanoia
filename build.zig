@@ -89,7 +89,7 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-    exe.root_module.linkSystemLibrary("gtk4", .{});
+    exe.root_module.linkSystemLibrary("gtk-4", .{});
     exe.root_module.linkSystemLibrary("sqlite3", .{});
     exe.root_module.link_libc = true;
 
