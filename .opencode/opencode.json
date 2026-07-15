@@ -1,7 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "name": "metanoia",
-  "description": "GTK4 Bible study app in Zig with neural TTS/LLM features",
   "references": {
     "docs": {
       "path": "docs",

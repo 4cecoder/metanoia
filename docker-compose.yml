@@ -1,40 +1,21 @@
 services:
-  # Windows 11 headless VM — builds Metanoia natively
-  # Access web UI at http://localhost:8006 or RDP at localhost:3389
-  windows:
-    image: dockurr/windows:latest
-    container_name: metanoia-windows
-    environment:
-      VERSION: "11"
-      RAM_SIZE: "4G"
-      CPU_CORES: "2"
-      DISK_SIZE: "40G"
-      USERNAME: "metanoia"
-      PASSWORD: "metanoia"
-    devices:
-      - /dev/kvm
-    cap_add:
-      - NET_ADMIN
-      - SYS_ADMIN
-    ports:
-      - 8006:8006
-      - 3389:3389
+  # Cross-compile Zig for x86_64-windows-gnu target from Linux
+  crosscheck:
+    build:
+      context: .
+      dockerfile: ci/Dockerfile.crosscheck
+    working_dir: /workspace
     volumes:
-      - windows-data:/storage
       - .:/workspace
-      - ./ci/win-build.ps1:/storage/win-build.ps1
-    stop_grace_period: 2m
-    restart: unless-stopped
+    profiles:
+      - check
 
   # Validate C# setup wizard compiles via Mono
   wizard:
     image: mono:6.12
-    working_dir /workspace
+    working_dir: /workspace
     volumes:
       - .:/workspace
     entrypoint: ["/workspace/ci/wizard.sh"]
     profiles:
       - check
-
-volumes:
-  windows-data:

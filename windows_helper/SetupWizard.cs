@@ -306,7 +306,7 @@ namespace MetanoiaSetup
             _builder.OnLog += Log;
 
             BuildUI();
-            this.Load += async (_, _) => { try { await RefreshAll(); } catch (Exception ex) { Log($"Init: {ex.Message}"); } };
+            this.Load += async (s, e) => { try { await RefreshAll(); } catch (Exception ex) { Log($"Init: {ex.Message}"); } };
         }
 
         private void BuildUI()
@@ -356,13 +356,13 @@ namespace MetanoiaSetup
             };
 
             _buildBtn = StyledBtn("Build Project", Green);
-            _buildBtn.Click += (_, _) => { _buildBtn.Enabled = false; try { _builder.Run(Application.StartupPath); } catch (Exception ex) { Log(ex.Message); } finally { _buildBtn.Enabled = true; } };
+            _buildBtn.Click += (sender, args) => { _buildBtn.Enabled = false; try { _builder.Run(Application.StartupPath); } catch (Exception ex) { Log(ex.Message); } finally { _buildBtn.Enabled = true; } };
             _vscodeBtn = StyledBtn("Open in VS Code", Blue);
-            _vscodeBtn.Click += (_, _) => LaunchVSCode();
+            _vscodeBtn.Click += (sender, args) => LaunchVSCode();
             _logBtn = StyledBtn("Show Log", Dim);
-            _logBtn.Click += (_, _) => ToggleLog();
+            _logBtn.Click += (sender, args) => ToggleLog();
             _refreshBtn = StyledBtn("Refresh", Fg);
-            _refreshBtn.Click += async (_, _) => { try { await RefreshAll(); } catch (Exception ex) { Log($"Refresh: {ex.Message}"); } };
+            _refreshBtn.Click += async (sender, args) => { try { await RefreshAll(); } catch (Exception ex) { Log($"Refresh: {ex.Message}"); } };
 
             actions.Controls.AddRange(new Control[] { _buildBtn, _vscodeBtn, _logBtn, _refreshBtn });
             root.Controls.Add(actions, 0, 2);
