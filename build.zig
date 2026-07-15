@@ -89,7 +89,12 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-    exe.root_module.linkSystemLibrary("gtk-4", .{});
+    // GTK4 library name differs between platforms:
+    // - macOS Homebrew: gtk4.pc  → linkSystemLibrary("gtk4")
+    // - Windows MSYS2:  gtk-4.pc → linkSystemLibrary("gtk-4")
+    // - Linux apt:      gtk4.pc  → linkSystemLibrary("gtk4")
+    const gtk_lib = if (target.result.os.tag == .windows) "gtk-4" else "gtk4";
+    exe.root_module.linkSystemLibrary(gtk_lib, .{});
     exe.root_module.linkSystemLibrary("sqlite3", .{});
     exe.root_module.link_libc = true;
 
