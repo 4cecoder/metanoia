@@ -256,10 +256,39 @@ namespace MetanoiaSetup
                 p.WaitForExit(120000);
                 if (!string.IsNullOrEmpty(output)) Log(output);
                 if (!string.IsNullOrEmpty(error)) Log("ERR: " + error);
-                Log(p.ExitCode == 0 ? "BUILD SUCCESS" : $"BUILD FAILED (exit {p.ExitCode})");
+
+                if (p.ExitCode == 0)
+                {
+                    Log("BUILD SUCCESS");
+                    CopyDlls(workingDir);
+                }
+                else
+                {
+                    Log($"BUILD FAILED (exit {p.ExitCode})");
+                }
                 return p.ExitCode == 0;
             }
             catch (Exception ex) { Log($"Build error: {ex.Message}"); return false; }
+        }
+
+        private void CopyDlls(string projectDir)
+        {
+            // Copy GTK4 DLLs from .cache/msys64/ucrt64/bin to the output dir
+            // so the .exe finds them at runtime without PATH changes
+            var srcDir = Path.Combine(projectDir, ".cache", "msys64", "ucrt64", "bin");
+            var outDir = Path.Combine(projectDir, "zig-out", "bin");
+            if (!Directory.Exists(srcDir)) { Log("(no local MSYS2 cache — DLL copy skipped)"); return; }
+            if (!Directory.Exists(outDir)) { Log("(no output dir — DLL copy skipped)"); return; }
+
+            int count = 0;
+            foreach (var dll in Directory.GetFiles(srcDir, "*.dll"))
+            {
+                var name = Path.GetFileName(dll);
+                var dest = Path.Combine(outDir, name);
+                try { File.Copy(dll, dest, overwrite: true); count++; }
+                catch { /* skip locked/system DLLs */ }
+            }
+            Log($"Copied {count} DLLs to {outDir}");
         }
 
         private void Log(string m) { if (OnLog != null) OnLog(m); }
