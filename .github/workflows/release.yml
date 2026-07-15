@@ -38,10 +38,8 @@ jobs:
           echo "$dir" | Out-File $env:GITHUB_PATH -Append
 
       - name: Build
-        shell: pwsh
-        run: |
-          $env:PATH += ";C:\msys64\ucrt64\bin"
-          zig build
+        shell: msys2 {0}
+        run: zig build
 
       - name: Package
         shell: pwsh
