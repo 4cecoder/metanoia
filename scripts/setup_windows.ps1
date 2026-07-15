@@ -44,7 +44,7 @@ if (Test-Path "$MSYS2_PATH\ucrt64.exe") {
 # ── 3. Install GTK4 via pacman ──────────────────────────────────
 Step "3/4: Installing GTK4 + sqlite3..."
 $pacman = "$MSYS2_PATH\ucrt64.exe"
-$pkgs = "mingw-w64-ucrt-x86_64-gtk4 mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-sqlite3"
+$pkgs = "mingw-w64-ucrt-x86_64-gtk4 mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-sqlite3 mingw-w64-ucrt-x86_64-curl"
 Start-Process -Wait -FilePath $pacman -ArgumentList "-Syu --noconfirm"
 Start-Process -Wait -FilePath $pacman -ArgumentList "-S --needed --noconfirm $pkgs"
 

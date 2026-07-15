@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const tts = @import("../tts_client.zig");
 const gtk = @import("../gtk.zig");
 
@@ -144,9 +145,17 @@ pub const TTSEngine = struct {
                     // 3. Highlight current verse
                     t.callbacks.onVerseHighlight(curr);
 
-                    // 4. Play audio via afplay
+                    // 4. Play audio
                     if (audio_path) |ap| {
-                        var child = std.process.spawn(e.io, .{ .argv = &.{ "afplay", ap } }) catch break;
+                        var child = switch (builtin.os.tag) {
+                            .macos => std.process.spawn(e.io, .{ .argv = &.{ "afplay", ap } }) catch break,
+                            .windows => blk: {
+                                const ps_cmd = std.fmt.allocPrint(e.allocator, "(New-Object Media.SoundPlayer '{s}').PlaySync()", .{ap}) catch break;
+                                defer e.allocator.free(ps_cmd);
+                                break :blk std.process.spawn(e.io, .{ .argv = &.{ "powershell", "-NoLogo", "-Command", ps_cmd } }) catch break;
+                            },
+                            else => break,
+                        };
                         e.mutex.lockUncancelable(e.io);
                         e.current_process = &child;
                         e.mutex.unlock(e.io);
@@ -215,9 +224,26 @@ pub const TTSEngine = struct {
                     return null;
                 };
 
-                var child = std.process.spawn(e.io, .{ .argv = &.{ "afplay", path } }) catch {
-                    allocator.free(path);
-                    return null;
+                var child = switch (builtin.os.tag) {
+                    .macos => std.process.spawn(e.io, .{ .argv = &.{ "afplay", path } }) catch {
+                        allocator.free(path);
+                        return null;
+                    },
+                    .windows => blk: {
+                        const ps_cmd = std.fmt.allocPrint(e.allocator, "(New-Object Media.SoundPlayer '{s}').PlaySync()", .{path}) catch {
+                            allocator.free(path);
+                            return null;
+                        };
+                        defer e.allocator.free(ps_cmd);
+                        break :blk std.process.spawn(e.io, .{ .argv = &.{ "powershell", "-NoLogo", "-Command", ps_cmd } }) catch {
+                            allocator.free(path);
+                            return null;
+                        };
+                    },
+                    else => {
+                        allocator.free(path);
+                        return null;
+                    },
                 };
 
                 e.mutex.lockUncancelable(e.io);

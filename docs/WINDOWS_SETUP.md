@@ -19,7 +19,7 @@ This project uses GTK4, which on Windows requires the [MSYS2](https://www.msys2.
 
 ```pwsh
 pacman -Syu
-pacman -S --needed mingw-w64-ucrt-x86_64-gtk4 mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-sqlite3
+pacman -S --needed mingw-w64-ucrt-x86_64-gtk4 mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-sqlite3 mingw-w64-ucrt-x86_64-curl
 ```
 
 4. Add MSYS2's UCRT64 `bin` to your system `PATH` (System Properties → Environment Variables):
