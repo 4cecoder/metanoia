@@ -93,6 +93,30 @@ pub fn build(b: *std.Build) void {
     exe.root_module.linkSystemLibrary("sqlite3", .{});
     exe.root_module.link_libc = true;
 
+    // Windows-specific: hide terminal window, add MSYS2 search paths
+    if (target.result.os.tag == .windows) {
+        exe.subsystem = .Windows;
+        // Zig's linkSystemLibrary invokes pkg-config which may not be in PATH
+        // on a fresh MSYS2 install. Add common MSYS2 UCRT64 paths as fallback.
+        const msys2_paths = [_][]const u8{
+            "C:\\msys64\\ucrt64\\lib",
+            "C:\\msys64\\mingw64\\lib",
+        };
+        for (msys2_paths) |p| {
+            exe.root_module.addLibraryPath(.{ .cwd_relative = p });
+        }
+    }
+
+    // macOS .app bundle (only on macOS)
+    if (target.result.os.tag == .macos) {
+        const app_step = b.step("app", "Create Metanoia.app bundle");
+        const create_app = b.addSystemCommand(&.{
+            "/bin/bash", "scripts/create_app_bundle.sh",
+        });
+        create_app.step.dependOn(b.getInstallStep());
+        app_step.dependOn(&create_app.step);
+    }
+
     // This declares intent for the executable to be installed into the
     // install prefix when running `zig build` (i.e. when executing the default
     // step). By default the install prefix is `zig-out/` but can be overridden
@@ -120,14 +144,6 @@ pub fn build(b: *std.Build) void {
     run_cmd.step.dependOn(b.getInstallStep());
 
 
-
-    // macOS .app bundle
-    const app_step = b.step("app", "Create Metanoia.app bundle");
-    const create_app = b.addSystemCommand(&.{
-        "/bin/bash", "scripts/create_app_bundle.sh",
-    });
-    create_app.step.dependOn(b.getInstallStep());
-    app_step.dependOn(&create_app.step);
 
     // Creates an executable that will run `test` blocks from the provided module.
     // Here `mod` needs to define a target, which is why earlier we made sure to
