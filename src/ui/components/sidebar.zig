@@ -171,6 +171,10 @@ pub const Sidebar = struct {
         self.log("System initialized. Neural engine online.");
     }
 
+    pub fn deinit(self: *Sidebar) void {
+        self.allocator.destroy(self);
+    }
+
     pub fn log(self: *Sidebar, message: []const u8) void {
         if (self.log_buffer) |buf| {
             var iter: [128]u8 = undefined;

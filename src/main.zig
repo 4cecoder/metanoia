@@ -8,24 +8,25 @@ const ollama = @import("ollama_client.zig");
 const scraper = @import("scraper_client.zig");
 const tts_engine_mod = @import("services/tts_engine.zig");
 const llm_engine_mod = @import("services/llm_engine.zig");
-const theme_mod = @import("ui/theme.zig");
-const nav_dialog = @import("ui/navigation_dialog.zig");
-const search_mod = @import("ui/components/search.zig");
-const sidebar_cmp = @import("ui/components/sidebar.zig");
-const status_bar_cmp = @import("ui/components/status_bar.zig");
-const settings_dialog = @import("ui/settings_dialog.zig");
+const kit = @import("kit");
+const kit_flow_picker = kit.components.FlowPicker;
+const kit_search = kit.components.Search;
+const kit_sidebar = kit.components.Sidebar;
+const kit_status_bar = kit.components.StatusBar;
+const kit_settings = kit.components.SettingsPanel;
+const kit_text = kit.util.text;
 
 const AppState = app_state.AppState;
 const ActiveNoteVerse = app_state.ActiveNoteVerse;
 const Config = models.Config;
-const SearchResult = bible.SearchResult;
+const SearchResult = kit.components.SearchResult;
 const BIBLE_BOOKS = bible.BIBLE_BOOKS;
 const BIBLE_ABBREVIATIONS = bible.BIBLE_ABBREVIATIONS;
 const TTSEngine = tts_engine_mod.TTSEngine;
 const TTSEngineConfig = tts_engine_mod.TTSEngineConfig;
 const PlaybackCallbacks = tts_engine_mod.PlaybackCallbacks;
 const LLMEngine = llm_engine_mod.LLMEngine;
-const Theme = theme_mod.Theme;
+const Theme = kit.theme.Theme;
 
 const gpointer = gtk.gpointer;
 const GtkApplication = gtk.GtkApplication;
@@ -55,9 +56,10 @@ const SQLITE_OK = bible.SQLITE_OK;
 
 var state: AppState = undefined;
 var app_theme: Theme = undefined;
-var nav_dialog_instance: *nav_dialog.NavigationDialog = undefined;
-var search_instance: *search_mod.Search = undefined;
+var nav_picker: *kit_flow_picker = undefined;
+var search_instance: *kit_search = undefined;
 var llm_engine: *LLMEngine = undefined;
+var nav_selected_book: usize = 0; // For flowPickerLevelNeeded callback
 
 fn clearBox(box: ?*GtkBox) void {
     if (box == null) return;
@@ -96,13 +98,23 @@ const tts_playback_cbs = PlaybackCallbacks{
 };
 
 // LLM Idle Callbacks
+fn setMarkupSafe(lbl: anytype, text: [*:0]u8) void {
+    const span = std.mem.span(text);
+    const escaped = kit_text.escape(state.allocator, span) catch {
+        gtk.gtk_label_set_text(lbl, text);
+        return;
+    };
+    defer state.allocator.free(escaped);
+    gtk.gtk_label_set_markup(lbl, escaped.ptr);
+}
+
 fn llmStepIdle(data: gpointer) callconv(.c) bool {
     const s: [*:0]u8 = @ptrCast(@alignCast(data));
     defer state.allocator.free(std.mem.span(s));
     const msg = std.mem.span(s);
     if (state.main_status_bar) |sb| sb.updateStatus(msg, false);
     if (state.main_sidebar) |ms| ms.log(msg);
-    if (state.word_study_label) |lbl| gtk.gtk_label_set_markup(lbl, s);
+    if (state.word_study_label) |lbl| setMarkupSafe(lbl, s);
     return false;
 }
 
@@ -110,7 +122,7 @@ fn llmSummaryIdle(data: gpointer) callconv(.c) bool {
     const s: [*:0]u8 = @ptrCast(@alignCast(data));
     defer state.allocator.free(std.mem.span(s));
     if (state.main_sidebar) |ms| ms.log("Summary updated.");
-    if (state.chapter_summary_label) |lbl| gtk.gtk_label_set_markup(lbl, s);
+    if (state.chapter_summary_label) |lbl| setMarkupSafe(lbl, s);
     return false;
 }
 
@@ -119,7 +131,20 @@ fn llmResultIdle(data: gpointer) callconv(.c) bool {
     defer state.allocator.free(std.mem.span(s));
     if (state.main_status_bar) |sb| sb.updateStatus("Analysis Complete", false);
     if (state.main_sidebar) |ms| ms.log("Neural analysis finished.");
-    if (state.word_study_label) |lbl| gtk.gtk_label_set_markup(lbl, s);
+    if (state.word_study_label) |lbl| setMarkupSafe(lbl, s);
+    if (state.llm_spinner) |sp| {
+        gtk.gtk_spinner_stop(sp);
+        gtk.gtk_widget_set_visible(sp, false);
+    }
+    return false;
+}
+
+fn llmErrorIdle(data: gpointer) callconv(.c) bool {
+    const s: [*:0]u8 = @ptrCast(@alignCast(data));
+    defer state.allocator.free(std.mem.span(s));
+    if (state.main_status_bar) |sb| sb.updateStatus("Analysis Failed", true);
+    if (state.main_sidebar) |ms| ms.log("Analysis failed.");
+    if (state.word_study_label) |lbl| setMarkupSafe(lbl, s);
     if (state.llm_spinner) |sp| {
         gtk.gtk_spinner_stop(sp);
         gtk.gtk_widget_set_visible(sp, false);
@@ -145,7 +170,7 @@ fn llmResultCb(result: []const u8) void {
 
 fn llmErrorCb(err: []const u8) void {
     const s = state.allocator.dupeSentinel(u8, err, 0) catch return;
-    _ = gtk.g_idle_add(&llmResultIdle, @ptrCast(s.ptr));
+    _ = gtk.g_idle_add(&llmErrorIdle, @ptrCast(s.ptr));
 }
 
 const llm_callbacks = LLMEngine.AnalysisCallbacks{
@@ -168,6 +193,10 @@ fn resetSaveButtonIdle(data: gpointer) callconv(.c) bool {
 fn onColorClicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
     _ = btn;
     const color: [*:0]const u8 = @ptrCast(user_data);
+    onColorClickedSimple(color);
+}
+
+fn onColorClickedSimple(color: [*:0]const u8) void {
     const color_span = std.mem.span(color);
     if (state.active_note_verse) |av| {
         const book = std.mem.span(@as([*:0]const u8, @ptrCast(&av.book)));
@@ -384,6 +413,7 @@ fn load_chapter_into_study(book: []const u8, chapter: i32, start_verse: i32) voi
         }
 
         const title_text = std.fmt.allocPrintSentinel(allocator, "{s} {d}", .{ book, chapter }, 0) catch return;
+        defer allocator.free(title_text);
         const title = gtk.gtk_label_new(null);
         gtk.gtk_label_set_markup(@ptrCast(title), title_text);
         gtk.gtk_widget_set_name(title, "chapter_title");
@@ -467,13 +497,13 @@ fn load_chapter_into_study(book: []const u8, chapter: i32, start_verse: i32) voi
         }
         if (!std.mem.eql(u8, loaded_msg, "Loaded.")) allocator.free(loaded_msg);
 
-        @memcpy(state.cur_book_name[0..@min(book.len, 63)], book[0..@min(book.len, 63)]);
+        @memmove(state.cur_book_name[0..@min(book.len, 63)], book[0..@min(book.len, 63)]);
         state.cur_book_name[@min(book.len, 63)] = 0;
         state.cur_chapter = chapter;
 
         if (book.ptr != &state.config.last_book) {
             @memset(&state.config.last_book, 0);
-            @memcpy(state.config.last_book[0..@min(book.len, 63)], book[0..@min(book.len, 63)]);
+            @memmove(state.config.last_book[0..@min(book.len, 63)], book[0..@min(book.len, 63)]);
         }
         state.config.last_chapter = chapter;
         state.config.last_verse = start_verse;
@@ -597,7 +627,7 @@ fn onLlmClicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
     const verse_text = verses.items[index];
     const book_name = std.mem.span(@as([*:0]const u8, @ptrCast(&state.cur_book_name)));
 
-    gtk.gtk_label_set_markup(state.word_study_label, "<span color='#7aa2f7'>Consulting Granite 4 LLM...</span>");
+    gtk.gtk_label_set_markup(state.word_study_label, "<span color='#7aa2f7'>Consulting local LLM...</span>");
     if (state.llm_spinner) |s| {
         gtk.gtk_widget_set_visible(s, true);
         gtk.gtk_spinner_start(s);
@@ -665,6 +695,101 @@ fn onVoiceChanged(self: ?*anyopaque, pspec: ?*anyopaque, user_data: gpointer) ca
 }
 
 // Search & Keyboard
+fn performSearchCb(
+    allocator: std.mem.Allocator,
+    query: []const u8,
+    results: *std.ArrayListUnmanaged(SearchResult),
+) usize {
+    if (query.len < 2) return 0;
+    var total: usize = 0;
+
+    // 1. Reference Parsing
+    var it = std.mem.tokenizeAny(u8, query, " :");
+    var parts = std.ArrayListUnmanaged([]const u8).empty;
+    defer parts.deinit(allocator);
+    while (it.next()) |p| parts.append(allocator, p) catch {};
+    if (parts.items.len >= 2) {
+        var book_end: usize = 0;
+        var chapter: ?i32 = null;
+        var verse: ?i32 = null;
+        for (parts.items, 0..) |p, i| {
+            const val = std.fmt.parseInt(i32, p, 10) catch {
+                if (chapter == null) book_end = i + 1;
+                continue;
+            };
+            if (i == 0 and (val >= 1 and val <= 3)) { book_end = 1; continue; }
+            if (chapter == null) { chapter = val; } else if (verse == null) { verse = val; }
+        }
+        if (book_end > 0 and chapter != null) {
+            const book_q = std.mem.join(allocator, "", parts.items[0..book_end]) catch "";
+            defer allocator.free(book_q);
+            var resolved: ?[]const u8 = null;
+            for (bible.BIBLE_ABBREVIATIONS) |abbr| {
+                if (std.ascii.eqlIgnoreCase(abbr.abbr, book_q)) { resolved = abbr.full; break; }
+            }
+            if (resolved == null) {
+                for (bible.BIBLE_BOOKS) |b| {
+                    const bn = std.mem.span(b.name);
+                    var clean = std.ArrayListUnmanaged(u8).empty;
+                    defer clean.deinit(allocator);
+                    for (bn) |c| if (c != ' ') clean.append(allocator, c) catch {};
+                    if (std.ascii.eqlIgnoreCase(clean.items, book_q)) { resolved = bn; break; }
+                }
+            }
+            if (resolved) |rb| {
+                var result = SearchResult{ .chapter = chapter.?, .verse = verse orelse 1 };
+                @memset(&result.book, 0);
+                @memcpy(result.book[0..rb.len], rb);
+                const title = std.fmt.allocPrintSentinel(allocator, "<b>Go to: {s} {d}:{d}</b>", .{ rb, chapter.?, verse orelse 1 }, 0) catch "Err";
+                result.title = title;
+                results.append(allocator, result) catch {};
+                total += 1;
+            }
+        }
+    }
+
+    // 2. Keyword Search
+    const sql = std.fmt.allocPrintSentinel(allocator, "SELECT book, chapter, verse, text FROM verses WHERE text LIKE '%{s}%' LIMIT 40", .{query}, 0) catch return total;
+    defer allocator.free(sql);
+    var stmt: ?*bible.sqlite3_stmt = null;
+    if (bible.sqlite3_prepare_v2(state.db.?, sql, -1, @ptrCast(&stmt), null) == bible.SQLITE_OK) {
+        var count: usize = 0;
+        while (bible.sqlite3_step(stmt.?) == bible.SQLITE_ROW and count < 40) {
+            const b = bible.sqlite3_column_text(stmt.?, 0);
+            const c = bible.sqlite3_column_int(stmt.?, 1);
+            const v = bible.sqlite3_column_int(stmt.?, 2);
+            const t = bible.sqlite3_column_text(stmt.?, 3);
+            const b_span = std.mem.span(b.?);
+            const text_span = std.mem.span(t.?);
+            var highlighted = std.ArrayListUnmanaged(u8).empty;
+            defer highlighted.deinit(allocator);
+            var last: usize = 0;
+            var si: usize = 0;
+            while (std.ascii.findIgnoreCase(text_span[si..], query)) |mi| {
+                const start = si + mi;
+                highlighted.appendSlice(allocator, text_span[last..start]) catch {};
+                highlighted.appendSlice(allocator, "<span color='#7dcfff' weight='bold'>") catch {};
+                highlighted.appendSlice(allocator, text_span[start..start + query.len]) catch {};
+                highlighted.appendSlice(allocator, "</span>") catch {};
+                last = start + query.len;
+                si = last;
+                if (si >= text_span.len) break;
+            }
+            highlighted.appendSlice(allocator, text_span[last..]) catch {};
+            var result = SearchResult{ .chapter = c, .verse = v };
+            @memset(&result.book, 0);
+            @memcpy(result.book[0..b_span.len], b_span);
+            const label = std.fmt.allocPrintSentinel(allocator, "<b>{s} {d}:{d}</b> - {s}", .{ b.?, c, v, highlighted.items }, 0) catch continue;
+            result.highlighted = label;
+            results.append(allocator, result) catch {};
+            count += 1;
+            total += 1;
+        }
+        _ = bible.sqlite3_finalize(stmt.?);
+    }
+    return total;
+}
+
 fn onSearchNavigate(book: []const u8, chapter: i32, verse: i32) void {
     load_chapter_into_study(book, chapter, verse);
 }
@@ -677,7 +802,7 @@ fn onMainWindowKey(controller: ?*anyopaque, keyval: u32, keycode: u32, state_mod
     _ = controller; _ = keycode; _ = user_data;
     const GDK_MOD_COMMAND = 1 << 28;
     if ((state_mod & GDK_MOD_COMMAND) != 0) {
-        if (search_mod.Search.handleKeyPress(keyval, search_instance)) return true;
+        if (kit_search.handleKeyPress(keyval, search_instance)) return true;
     }
     return false;
 }
@@ -691,34 +816,123 @@ fn onNavNavigate(book: []const u8, chapter: i32, verse: i32) void {
     load_chapter_into_study(book, chapter, verse);
 }
 
+fn flowPickerLevelNeeded(
+    prev_level_idx: usize,
+    prev_selection_idx: usize,
+    allocator: std.mem.Allocator,
+) ?kit.components.PickerLevel {
+    if (prev_level_idx == 0) {
+        nav_selected_book = prev_selection_idx;
+        const book = std.mem.span(BIBLE_BOOKS[prev_selection_idx].name);
+        const sql = std.fmt.allocPrintSentinel(allocator, "SELECT DISTINCT chapter FROM verses WHERE book='{s}' ORDER BY chapter ASC", .{book}, 0) catch return null;
+        defer allocator.free(sql);
+        var items = std.ArrayListUnmanaged(kit.components.PickerItem).empty;
+        defer items.deinit(allocator);
+        var stmt: ?*bible.sqlite3_stmt = null;
+        if (bible.sqlite3_prepare_v2(state.db.?, sql, -1, @ptrCast(&stmt), null) == bible.SQLITE_OK) {
+            while (bible.sqlite3_step(stmt.?) == bible.SQLITE_ROW) {
+                const ch = bible.sqlite3_column_int(stmt.?, 0);
+                const ch_str = std.fmt.allocPrintSentinel(std.heap.page_allocator, "{d}", .{ch}, 0) catch continue;
+                items.append(allocator, .{ .label = ch_str }) catch {};
+            }
+            _ = bible.sqlite3_finalize(stmt.?);
+        }
+        return .{ .title = "Select Chapter", .items = items.toOwnedSlice(allocator) catch return null };
+    } else if (prev_level_idx == 1) {
+        const book = std.mem.span(BIBLE_BOOKS[nav_selected_book].name);
+        const chapter: i32 = @intCast(prev_selection_idx + 1);
+        const sql = std.fmt.allocPrintSentinel(allocator, "SELECT DISTINCT verse FROM verses WHERE book='{s}' AND chapter={d} ORDER BY verse ASC", .{ book, chapter }, 0) catch return null;
+        defer allocator.free(sql);
+        var items = std.ArrayListUnmanaged(kit.components.PickerItem).empty;
+        defer items.deinit(allocator);
+        var stmt: ?*bible.sqlite3_stmt = null;
+        if (bible.sqlite3_prepare_v2(state.db.?, sql, -1, @ptrCast(&stmt), null) == bible.SQLITE_OK) {
+            while (bible.sqlite3_step(stmt.?) == bible.SQLITE_ROW) {
+                const v = bible.sqlite3_column_int(stmt.?, 0);
+                const v_str = std.fmt.allocPrintSentinel(std.heap.page_allocator, "{d}", .{v}, 0) catch continue;
+                items.append(allocator, .{ .label = v_str }) catch {};
+            }
+            _ = bible.sqlite3_finalize(stmt.?);
+        }
+        return .{ .title = "Select Verse", .items = items.toOwnedSlice(allocator) catch return null };
+    }
+    return null;
+}
+
+fn flowPickerComplete(selected: []const usize) void {
+    const book = std.mem.span(BIBLE_BOOKS[selected[0]].name);
+    const chapter: i32 = @intCast(selected[1] + 1);
+    const verse: i32 = @intCast(selected[2] + 1);
+    onNavNavigate(book, chapter, verse);
+}
+
 // Settings
-fn onSettingsSave(config: settings_dialog.SettingsConfig) void {
-    state.config.tts_server_url = state.allocator.dupe(u8, config.tts_url) catch state.config.tts_server_url;
-    state.config.tts_timeout_ms = config.tts_timeout_ms;
-    state.config.tts_retry_count = config.tts_retry_count;
-    state.config.llm_server_url = state.allocator.dupe(u8, config.llm_url) catch state.config.llm_server_url;
+fn onSettingsSaveKit(field_values: []const kit.components.SettingsFieldValue) void {
+    for (field_values) |f| {
+        const key = std.mem.span(f.label);
+        const val = std.mem.span(f.value);
+        if (std.mem.eql(u8, key, "TTS Server URL")) {
+            state.config.tts_server_url = state.allocator.dupe(u8, val) catch state.config.tts_server_url;
+        } else if (std.mem.eql(u8, key, "LLM Server URL")) {
+            state.config.llm_server_url = state.allocator.dupe(u8, val) catch state.config.llm_server_url;
+        } else if (std.mem.eql(u8, key, "Connection Timeout (ms)")) {
+            state.config.tts_timeout_ms = std.fmt.parseInt(u32, val, 10) catch state.config.tts_timeout_ms;
+        } else if (std.mem.eql(u8, key, "Network Retry Count")) {
+            state.config.tts_retry_count = @intCast(std.fmt.parseInt(u8, val, 10) catch @as(u8, @intCast(state.config.tts_retry_count)));
+        }
+    }
     state.config.save(state.io);
     if (state.main_status_bar) |sb| sb.updateStatus("Settings saved", false);
 }
 
 fn onSettingsBtnClicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
     _ = btn; _ = user_data;
-    const dialog = settings_dialog.SettingsDialog.init(
-        state.allocator,
-        state.main_window,
+    const tts_label = state.allocator.dupeSentinel(u8, state.config.tts_server_url, 0) catch return;
+    defer state.allocator.free(tts_label);
+    const llm_label = state.allocator.dupeSentinel(u8, state.config.llm_server_url, 0) catch return;
+    defer state.allocator.free(llm_label);
+    const timeout_str = std.fmt.allocPrintSentinel(state.allocator, "{d}", .{state.config.tts_timeout_ms}, 0) catch return;
+    defer state.allocator.free(timeout_str);
+    const retry_str = std.fmt.allocPrintSentinel(state.allocator, "{d}", .{state.config.tts_retry_count}, 0) catch return;
+    defer state.allocator.free(retry_str);
+
+    const sections = [_]kit.components.SettingsSection{
         .{
-            .onSave = onSettingsSave,
-            .allocator = state.allocator,
+            .title = "Audio Engine",
+            .icon = "🔊",
+            .icon_color = "#bb9af7",
+            .description = "Endpoint for TTS neural synthesis.",
+            .fields = &.{
+                .{ .label = "TTS Server URL", .initial_value = tts_label },
+            },
         },
         .{
-            .tts_url = state.config.tts_server_url,
-            .tts_timeout_ms = state.config.tts_timeout_ms,
-            .tts_retry_count = @intCast(state.config.tts_retry_count),
-            .llm_url = state.config.llm_server_url,
+            .title = "Intelligence API",
+            .icon = "🧠",
+            .icon_color = "#9ece6a",
+            .description = "Connect to Ollama for word studies.",
+            .fields = &.{
+                .{ .label = "LLM Server URL", .initial_value = llm_label },
+            },
         },
-        state.io,
+        .{
+            .title = "Performance",
+            .icon = "⚡",
+            .icon_color = "#e0af68",
+            .fields = &.{
+                .{ .label = "Connection Timeout (ms)", .initial_value = timeout_str },
+                .{ .label = "Network Retry Count", .initial_value = retry_str },
+            },
+        },
+    };
+
+    const kit_sb = kit_settings.init(state.allocator, state.main_window,
+        "<span size='xx-large' weight='bold' foreground='#7aa2f7'>Preferences</span>",
+        "Configure your neural environment and backend servers.",
+        &sections,
+        .{ .onSave = onSettingsSaveKit },
     );
-    dialog.show();
+    kit_sb.show();
 }
 
 // Activate - GTK Window Assembly
@@ -823,12 +1037,12 @@ fn activate(app: ?*GtkApplication, user_data: gpointer) callconv(.c) void {
     gtk.gtk_box_append(@ptrCast(main_layout), @ptrCast(state.main_paned));
     _ = gtk.g_signal_connect_data(state.main_paned, "notify::position", @ptrCast(&onPanedNotifyPosition), null, null, 0);
 
-    state.main_status_bar = status_bar_cmp.StatusBar.init(state.allocator);
+    state.main_status_bar = kit_status_bar.init(state.allocator);
     state.main_status_bar.?.updateVoice(state.config.selected_voice);
     gtk.gtk_box_append(@ptrCast(main_layout), state.main_status_bar.?.box);
 
-    state.main_sidebar = sidebar_cmp.Sidebar.init(state.allocator, state.io, onColorClicked);
-    gtk.gtk_widget_set_visible(state.main_sidebar.?.box.?, false);
+    state.main_sidebar = kit_sidebar.init(state.allocator, .{ .onColorClicked = onColorClickedSimple });
+    gtk.gtk_widget_set_visible(state.main_sidebar.?.box, false);
     gtk.gtk_paned_set_start_child(@ptrCast(state.main_paned), state.main_sidebar.?.box);
     gtk.gtk_paned_set_position(@ptrCast(state.main_paned), state.config.sidebar_width);
 
@@ -874,11 +1088,15 @@ fn activate(app: ?*GtkApplication, user_data: gpointer) callconv(.c) void {
     // Modules
     state.tts_engine = TTSEngine.init(state.allocator, state.io);
     llm_engine = LLMEngine.init(state.allocator, state.io, state.db);
-    search_instance = search_mod.Search.init(state.allocator, state.main_window, state.db, .{
+    search_instance = kit_search.init(state.allocator, state.main_window, .{
         .onNavigate = onSearchNavigate,
         .onStatus = onSearchStatus,
+        .performSearch = performSearchCb,
     });
-    nav_dialog_instance = nav_dialog.NavigationDialog.init(state.allocator, state.db, onNavNavigate);
+    nav_picker = kit_flow_picker.init(state.allocator, .{
+        .onSelectionComplete = flowPickerComplete,
+        .onLevelNeeded = flowPickerLevelNeeded,
+    });
 
     // Keyboard Shortcut
     gtk.gtk_window_present(state.main_window);
@@ -901,13 +1119,42 @@ fn onScrollChanged(adj: ?*anyopaque, user_data: gpointer) callconv(.c) void {
 
 fn on_passage_btn_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
     _ = btn; _ = user_data;
-    nav_dialog_instance.show(state.main_window);
+    nav_picker.reset(0);
+    // Build books level from BIBLE_BOOKS
+    var books = std.ArrayListUnmanaged(kit.components.PickerItem).empty;
+    for (BIBLE_BOOKS, 0..) |book, i| {
+        _ = i;
+        books.append(std.heap.page_allocator, .{ .label = book.name, .enabled = true }) catch {};
+    }
+    nav_picker.addLevel(.{ .title = "<b>Select Book</b>", .items = books.toOwnedSlice(std.heap.page_allocator) catch return });
+    nav_picker.show(state.main_window);
+}
+
+fn resolveBundleRoot() void {
+    var buf: [4096]u8 = undefined;
+    var len: u32 = @intCast(buf.len);
+    if (std.c._NSGetExecutablePath(&buf, &len) != 0) return;
+    const exe_path = buf[0..len];
+
+    const bundle_marker = ".app/Contents/MacOS/";
+    const marker_idx = std.mem.indexOf(u8, exe_path, bundle_marker) orelse return;
+
+    const bundle_root = exe_path[0 .. marker_idx + 5];
+
+    var res_buf: [4096]u8 = undefined;
+    const res_written = std.fmt.bufPrint(&res_buf, "{s}/Contents/Resources", .{bundle_root}) catch return;
+    res_buf[res_written.len] = 0;
+    const res_path: [:0]u8 = res_buf[0..res_written.len :0];
+
+    _ = std.c.chdir(res_path);
 }
 
 pub fn main() !void {
     var gpa_state = std.heap.DebugAllocator(.{}).init;
     defer _ = gpa_state.deinit();
     const gpa = gpa_state.allocator();
+
+    resolveBundleRoot();
 
     var threaded_io = std.Io.Threaded.init(gpa, .{});
     const io = threaded_io.io();
@@ -929,5 +1176,20 @@ pub fn main() !void {
     defer gtk.g_object_unref(app);
     _ = gtk.g_signal_connect_data(app, "activate", @ptrCast(&activate), null, null, 0);
     const status = gtk.g_application_run(@ptrCast(app), 0, null);
+
+    // Cleanup Zig-managed allocations
+    if (state.current_chapter_verses) |*list| {
+        for (list.items) |v| state.allocator.free(v);
+        list.clearAndFree(state.allocator);
+    }
+    if (state.verse_labels) |*list| list.clearAndFree(state.allocator);
+    state.config.deinit(state.allocator);
+    if (state.main_status_bar) |sb| sb.deinit();
+    if (state.main_sidebar) |sb| sb.deinit();
+    if (state.tts_engine) |e| e.deinit();
+    search_instance.deinit();
+    llm_engine.deinit();
+    nav_picker.deinit();
+
     if (status != 0) std.process.exit(1);
 }

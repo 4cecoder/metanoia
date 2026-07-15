@@ -41,6 +41,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
+    // Kit module — reusable, decoupled UI/UX component library.
+    const kit_mod = b.addModule("kit", .{
+        .root_source_file = b.path("src/kit/root.zig"),
+        .target = target,
+    });
+
     // Here we define an executable. An executable needs to have a root module
     // which needs to expose a `main` function. While we could add a main function
     // to the module defined above, it's sometimes preferable to split business
@@ -79,6 +85,7 @@ pub fn build(b: *std.Build) void {
                 // can be extremely useful in case of collisions (which can happen
                 // importing modules from different packages).
                 .{ .name = "metanoia", .module = mod },
+                .{ .name = "kit", .module = kit_mod },
             },
         }),
     });
@@ -114,6 +121,14 @@ pub fn build(b: *std.Build) void {
 
 
 
+    // macOS .app bundle
+    const app_step = b.step("app", "Create Metanoia.app bundle");
+    const create_app = b.addSystemCommand(&.{
+        "/bin/bash", "scripts/create_app_bundle.sh",
+    });
+    create_app.step.dependOn(b.getInstallStep());
+    app_step.dependOn(&create_app.step);
+
     // Creates an executable that will run `test` blocks from the provided module.
     // Here `mod` needs to define a target, which is why earlier we made sure to
     // set the releative field.
@@ -121,8 +136,16 @@ pub fn build(b: *std.Build) void {
         .root_module = mod,
     });
 
+    // Kit module tests.
+    const kit_tests = b.addTest(.{
+        .root_module = kit_mod,
+    });
+
     // A run step that will run the test executable.
     const run_mod_tests = b.addRunArtifact(mod_tests);
+
+    // Run kit tests.
+    const run_kit_tests = b.addRunArtifact(kit_tests);
 
     // Creates an executable that will run `test` blocks from the executable's
     // root module. Note that test executables only test one module at a time,
@@ -139,6 +162,7 @@ pub fn build(b: *std.Build) void {
     // make the two of them run in parallel.
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
+    test_step.dependOn(&run_kit_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.

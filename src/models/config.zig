@@ -6,21 +6,40 @@ pub const Config = struct {
     last_book: [64]u8 = "John".* ++ @as([60]u8, @splat(0)),
     last_chapter: i32 = 3,
     last_verse: i32 = 1,
-    selected_voice: []const u8 = "lennox",
+    selected_voice: []const u8 = "",
     speed: f32 = 1.0,
-    emotion: []const u8 = "Neutral, clear narration",
-    mode: []const u8 = "base",
-    tts_mode: []const u8 = "speedy",
+    emotion: []const u8 = "",
+    mode: []const u8 = "",
+    tts_mode: []const u8 = "",
     sidebar_width: i32 = 300,
-    tts_server_url: []const u8 = "http://127.0.0.1:8000",
-    llm_server_url: []const u8 = "http://127.0.0.1:11434",
+    tts_server_url: []const u8 = "",
+    llm_server_url: []const u8 = "",
     tts_timeout_ms: u32 = 5000,
     tts_retry_count: u32 = 3,
     show_sidebar: bool = true,
     parallel_view: bool = false,
 
+    fn loadString(allocator: std.mem.Allocator, src: []const u8) []const u8 {
+        return allocator.dupe(u8, src) catch @panic("OOM");
+    }
+
     pub fn load(allocator: std.mem.Allocator, io: anytype) Config {
-        var self = Config{};
+        const defaults = struct {
+            const selected_voice = "lennox";
+            const emotion = "Neutral, clear narration";
+            const mode = "base";
+            const tts_mode = "speedy";
+            const tts_server_url = "http://127.0.0.1:8000";
+            const llm_server_url = "http://127.0.0.1:11434";
+        };
+        var self = Config{
+            .selected_voice = loadString(allocator, defaults.selected_voice),
+            .emotion = loadString(allocator, defaults.emotion),
+            .mode = loadString(allocator, defaults.mode),
+            .tts_mode = loadString(allocator, defaults.tts_mode),
+            .tts_server_url = loadString(allocator, defaults.tts_server_url),
+            .llm_server_url = loadString(allocator, defaults.llm_server_url),
+        };
         const file = std.Io.Dir.cwd().openFile(io, "data/config.json", .{}) catch return self;
         defer file.close(io);
 
@@ -48,19 +67,46 @@ pub const Config = struct {
                 else => 1.0,
             };
         }
-        if (parsed.object.get("selected_voice")) |v| self.selected_voice = allocator.dupe(u8, v.string) catch "lennox";
-        if (parsed.object.get("emotion")) |v| self.emotion = allocator.dupe(u8, v.string) catch "Neutral, clear narration";
-        if (parsed.object.get("mode")) |v| self.mode = allocator.dupe(u8, v.string) catch "base";
-        if (parsed.object.get("tts_mode")) |v| self.tts_mode = allocator.dupe(u8, v.string) catch "speedy";
+        if (parsed.object.get("selected_voice")) |v| {
+            allocator.free(self.selected_voice);
+            self.selected_voice = loadString(allocator, v.string);
+        }
+        if (parsed.object.get("emotion")) |v| {
+            allocator.free(self.emotion);
+            self.emotion = loadString(allocator, v.string);
+        }
+        if (parsed.object.get("mode")) |v| {
+            allocator.free(self.mode);
+            self.mode = loadString(allocator, v.string);
+        }
+        if (parsed.object.get("tts_mode")) |v| {
+            allocator.free(self.tts_mode);
+            self.tts_mode = loadString(allocator, v.string);
+        }
         if (parsed.object.get("sidebar_width")) |v| self.sidebar_width = @intCast(v.integer);
-        if (parsed.object.get("tts_server_url")) |v| self.tts_server_url = allocator.dupe(u8, v.string) catch "http://127.0.0.1:8000";
-        if (parsed.object.get("llm_server_url")) |v| self.llm_server_url = allocator.dupe(u8, v.string) catch "http://127.0.0.1:11434";
+        if (parsed.object.get("tts_server_url")) |v| {
+            allocator.free(self.tts_server_url);
+            self.tts_server_url = loadString(allocator, v.string);
+        }
+        if (parsed.object.get("llm_server_url")) |v| {
+            allocator.free(self.llm_server_url);
+            self.llm_server_url = loadString(allocator, v.string);
+        }
         if (parsed.object.get("tts_timeout_ms")) |v| self.tts_timeout_ms = @intCast(v.integer);
         if (parsed.object.get("tts_retry_count")) |v| self.tts_retry_count = @intCast(v.integer);
         if (parsed.object.get("show_sidebar")) |v| self.show_sidebar = v.bool;
         if (parsed.object.get("parallel_view")) |v| self.parallel_view = v.bool;
 
         return self;
+    }
+
+    pub fn deinit(self: Config, allocator: std.mem.Allocator) void {
+        allocator.free(self.selected_voice);
+        allocator.free(self.emotion);
+        allocator.free(self.mode);
+        allocator.free(self.tts_mode);
+        allocator.free(self.tts_server_url);
+        allocator.free(self.llm_server_url);
     }
 
     pub fn save(self: Config, io: anytype) void {

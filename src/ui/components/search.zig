@@ -79,6 +79,10 @@ pub const Search = struct {
         return self;
     }
 
+    pub fn deinit(self: *Search) void {
+        self.allocator.destroy(self);
+    }
+
     pub fn show(self: *Search) void {
         if (self.window) |win| {
             gtk.gtk_window_present(win);

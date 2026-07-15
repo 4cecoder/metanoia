@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub const OllamaRequest = struct {
-    model: []const u8 = "granite4:350m",
+    model: []const u8 = "minicpm5:latest",
     prompt: []const u8,
     stream: bool = false,
 };
@@ -62,6 +62,6 @@ test "ollama request json" {
     try stringifier.write(req);
     
     const result = buf[0..f_writer.end];
-    try std.testing.expect(std.mem.containsAtLeast(u8, result, 1, "\"model\":\"granite4:350m\""));
+    try std.testing.expect(std.mem.containsAtLeast(u8, result, 1, "\"model\":\"minicpm5:latest\""));
     try std.testing.expect(std.mem.containsAtLeast(u8, result, 1, "\"prompt\":\"test prompt\""));
 }

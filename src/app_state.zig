@@ -2,8 +2,8 @@ const std = @import("std");
 const gtk = @import("gtk.zig");
 const bible = @import("bible_db.zig");
 const models = @import("models/config.zig");
-const sidebar_cmp = @import("ui/components/sidebar.zig");
-const status_bar_cmp = @import("ui/components/status_bar.zig");
+const kit_sidebar = @import("kit").components.Sidebar;
+const kit_status_bar = @import("kit").components.StatusBar;
 const tts_engine = @import("services/tts_engine.zig");
 
 const GtkWindow = gtk.GtkWindow;
@@ -38,8 +38,8 @@ pub const AppState = struct {
     bible_view: ?*GtkBox,
     main_paned: ?*GtkPaned,
     font_provider: ?*GtkCssProvider,
-    main_sidebar: ?*sidebar_cmp.Sidebar,
-    main_status_bar: ?*status_bar_cmp.StatusBar,
+    main_sidebar: ?*kit_sidebar,
+    main_status_bar: ?*kit_status_bar,
 
     // Search state
     search_window: ?*GtkWindow,

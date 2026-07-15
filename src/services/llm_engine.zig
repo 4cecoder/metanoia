@@ -28,6 +28,10 @@ pub const LLMEngine = struct {
         return self;
     }
 
+    pub fn deinit(self: *LLMEngine) void {
+        self.allocator.destroy(self);
+    }
+
     pub fn analyzeVerse(self: *LLMEngine, book: []const u8, chapter: i32, verse: i32, text: []const u8, callbacks: AnalysisCallbacks) void {
         const Task = struct {
             engine: *LLMEngine,
@@ -141,10 +145,10 @@ pub const LLMEngine = struct {
         const task = self.allocator.create(Task) catch return;
         task.* = .{
             .engine = self,
-            .book = self.allocator.dupeSentinel(u8, book, 0) catch return,
+            .book = self.allocator.dupe(u8, book) catch return,
             .chapter = chapter,
             .verse = verse,
-            .text = self.allocator.dupeSentinel(u8, text, 0) catch return,
+            .text = self.allocator.dupe(u8, text) catch return,
             .cb = callbacks,
         };
         _ = gtk.g_thread_new("llm-analysis", &Task.run, task);

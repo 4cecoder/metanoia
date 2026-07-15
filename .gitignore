@@ -9,21 +9,35 @@ __pycache__/
 *$py.class
 .pytest_cache/
 .uv/
+uv.lock
 
 # macOS
 .DS_Store
 
-# Application Caches & Assets
+# Build artifacts
+*.o
+*.obj
+*.exe
+probe
+tts_client.o
+
+# Logs
+*.log
+server.log
+
+# Application caches & uploads
 cache/
 uploads/
-models/
 
-# Data & Databases
+# ML models (large, not in git)
+models/
+mobile/models/
+
+# Data & databases
 data/*.db
 data/*.wav
-data/tts_req_*.json
-data/ollama_req.json
 data/*.html
+data/*.txt
 
 # Mobile (Android/Kotlin)
 mobile/.gradle/
@@ -33,14 +47,12 @@ mobile/build/
 mobile/local.properties
 mobile/*.apk
 mobile/*.aar
-mobile/models/
 mobile/app/src/main/assets/*.bin
 mobile/app/src/main/assets/*.onnx
 mobile/app/src/main/assets/*.data
 mobile/app/src/main/assets/*.npy
 
-# Large Binary Files
-*.db
+# Large binary files
 *.bin
 *.onnx
 *.data
@@ -52,12 +64,19 @@ mobile/app/src/main/assets/*.npy
 *.mp3
 *.m4a
 
-# Miscellaneous
-probe
-check_allocator.zig
-check_child_id.zig
-*.log
-.DS_Store
+# Coverage reports
+htmlcov/
+.coverage
+
+# Editor / IDE
 node_modules/
 dist/
 build/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Scratch files (gitignored for personal experimentation)
+check_allocator.zig
+check_child_id.zig

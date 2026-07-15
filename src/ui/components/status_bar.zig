@@ -1,5 +1,6 @@
 const std = @import("std");
 const gtk = @import("../../gtk.zig");
+const markup = @import("markup.zig");
 
 const GtkWidget = gtk.GtkWidget;
 const GtkLabel = gtk.GtkLabel;
@@ -96,6 +97,10 @@ pub const StatusBar = struct {
         return self;
     }
 
+    pub fn deinit(self: *StatusBar) void {
+        self.allocator.destroy(self);
+    }
+
     pub fn updateStatus(self: *StatusBar, message: []const u8, is_error: bool) void {
         const UpdateUI = struct {
             self: *StatusBar,
@@ -111,16 +116,24 @@ pub const StatusBar = struct {
                 const color = if (is_err) "#f7768e" else "#7aa2f7";
                 const icon = if (is_err) "dialog-error-symbolic" else "emblem-system-symbolic";
                 
-                const markup = std.fmt.allocPrintSentinel(allocator, "<span foreground='{s}'>{s}</span>", .{color, msg_ptr}, 0) catch {
+                const escaped = markup.escape(allocator, std.mem.span(msg_ptr)) catch {
+                    allocator.free(std.mem.span(msg_ptr));
+                    allocator.destroy(ctx);
+                    return false;
+                };
+                defer allocator.free(escaped);
+                
+                const fmt_markup = std.fmt.allocPrintSentinel(allocator, "<span foreground='{s}'>{s}</span>", .{color, escaped}, 0) catch {
+                    allocator.free(escaped);
                     allocator.free(std.mem.span(msg_ptr));
                     allocator.destroy(ctx);
                     return false;
                 };
                 
-                gtk.gtk_label_set_markup(status_bar.status_label, markup.ptr);
+                gtk.gtk_label_set_markup(status_bar.status_label, fmt_markup.ptr);
                 gtk.gtk_image_set_from_icon_name(status_bar.status_icon, icon);
                 
-                allocator.free(markup);
+                allocator.free(fmt_markup);
                 allocator.free(std.mem.span(msg_ptr));
                 allocator.destroy(ctx);
                 return false;

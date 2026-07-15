@@ -23,6 +23,7 @@ pub const TTSEngine = struct {
 
     stop_requested: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
     playing: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+    task_thread: ?*anyopaque = null,
 
     current_process: ?*std.process.Child = null,
     mutex: std.Io.Mutex = .init,
@@ -51,6 +52,11 @@ pub const TTSEngine = struct {
 
     pub fn stop(self: *TTSEngine) void {
         self.stop_requested.store(true, .release);
+        // Join the running task thread so it doesn't access freed memory
+        if (self.task_thread) |th| {
+            self.task_thread = null;
+            _ = gtk.g_thread_join(th);
+        }
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
         if (self.current_process) |p| {
@@ -93,41 +99,6 @@ pub const TTSEngine = struct {
                     if (curr >= t.verses.len) break;
 
                     // 1. Fill pipeline lookahead (4 verses ahead)
-                    const PipeGen = struct {
-                        engine: *TTSEngine,
-                        verse_idx: usize,
-                        text: []const u8,
-                        voice: []const u8,
-                        speed: f32,
-                        emotion: []const u8,
-                        mode: []const u8,
-
-                        fn run(raw: gpointer) callconv(.c) gpointer {
-                            const ctx: *@This() = @ptrCast(@alignCast(raw));
-                            const a = ctx.engine.allocator;
-
-                            const path = tts.generate_speech(
-                                ctx.engine.io,
-                                ctx.text,
-                                ctx.voice,
-                                ctx.speed,
-                                ctx.emotion,
-                                ctx.mode,
-                                false,
-                            ) catch null;
-
-                            ctx.engine.mutex.lockUncancelable(ctx.engine.io);
-                            if (ctx.verse_idx < 2000) {
-                                ctx.engine.pipeline_paths[ctx.verse_idx] = path;
-                                ctx.engine.pipeline_inflight[ctx.verse_idx] = false;
-                            }
-                            ctx.engine.mutex.unlock(ctx.engine.io);
-
-                            a.free(ctx.text);
-                            a.destroy(ctx);
-                            return null;
-                        }
-                    };
 
                     var la: usize = 0;
                     while (la < 4) : (la += 1) {
@@ -140,21 +111,21 @@ pub const TTSEngine = struct {
                         e.mutex.unlock(e.io);
 
                         if (needs) {
-                            const ctx = allocator.create(PipeGen) catch continue;
-                            const text_dupe = allocator.dupe(u8, t.verses[idx]) catch {
-                                allocator.destroy(ctx);
-                                continue;
-                            };
-                            ctx.* = .{
-                                .engine = e,
-                                .verse_idx = idx,
-                                .text = text_dupe,
-                                .voice = t.config.voice,
-                                .speed = t.config.speed,
-                                .emotion = t.config.emotion,
-                                .mode = "speedy",
-                            };
-                            _ = gtk.g_thread_new("tts_pipe", &PipeGen.run, ctx);
+                            const path = tts.generate_speech(
+                                e.io,
+                                t.verses[idx],
+                                t.config.voice,
+                                t.config.speed,
+                                t.config.emotion,
+                                "speedy",
+                                false,
+                            ) catch null;
+                            e.mutex.lockUncancelable(e.io);
+                            if (idx < 2000) {
+                                e.pipeline_paths[idx] = path;
+                                e.pipeline_inflight[idx] = false;
+                            }
+                            e.mutex.unlock(e.io);
                         }
                     }
 
@@ -202,7 +173,7 @@ pub const TTSEngine = struct {
             .config = config,
             .callbacks = callbacks,
         };
-        _ = gtk.g_thread_new("tts_seq", &Task.run, task);
+        self.task_thread = gtk.g_thread_new("tts_seq", &Task.run, task);
     }
 
     pub fn playChapter(self: *TTSEngine, full_text: []const u8, config: TTSEngineConfig, callbacks: PlaybackCallbacks) void {
@@ -276,7 +247,7 @@ pub const TTSEngine = struct {
             .config = config,
             .callbacks = callbacks,
         };
-        _ = gtk.g_thread_new("tts_chapter", &Task.run, task);
+        self.task_thread = gtk.g_thread_new("tts_chapter", &Task.run, task);
     }
 
     pub fn regenerateVerse(self: *TTSEngine, text: []const u8, config: TTSEngineConfig, onDone: *const fn () void) void {

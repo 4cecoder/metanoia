@@ -56,6 +56,10 @@ pub const NavigationDialog = struct {
         return self;
     }
 
+    pub fn deinit(self: *NavigationDialog) void {
+        self.allocator.destroy(self);
+    }
+
     pub fn show(self: *NavigationDialog, parent: ?*GtkWindow) void {
         if (self.dialog != null) return;
         current_dialog = self;
