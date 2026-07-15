@@ -8,7 +8,7 @@ set -euo pipefail
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info() { echo -e "${GREEN}❯${NC} $1"; }
 
-VERSION="$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)"
+VERSION="$(date +%Y.%m.%d)"
 
 info "Tagging: $VERSION"
 git tag "$VERSION"
