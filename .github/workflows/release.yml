@@ -1,0 +1,60 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-pkg-config
+            mingw-w64-ucrt-x86_64-sqlite3
+            mingw-w64-ucrt-x86_64-curl
+            mingw-w64-ucrt-x86_64-nsis
+
+      - name: Install Zig
+        shell: pwsh
+        run: |
+          $json = Invoke-RestMethod https://ziglang.org/download/index.json
+          $url = $json.master."x86_64-windows".tarball
+          $zip = "$env:TEMP\zig.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Expand-Archive $zip -DestinationPath "$env:USERPROFILE\zig" -Force
+          $dir = (Get-ChildItem "$env:USERPROFILE\zig" -Recurse -Filter "zig.exe").DirectoryName
+          echo "$dir" | Out-File $env:GITHUB_PATH -Append
+
+      - name: Build
+        shell: pwsh
+        run: |
+          $env:PATH += ";C:\msys64\ucrt64\bin"
+          zig build
+
+      - name: Package
+        shell: pwsh
+        run: |
+          # Collect exe + DLLs
+          $dist = "dist\Metanoia"
+          New-Item $dist -ItemType Directory -Force
+          Copy-Item "zig-out\bin\*" $dist -Recurse
+          Copy-Item "assets\metanoia.ico" $dist
+          Compress-Archive -Path "$dist\*" -DestinationPath "dist\Metanoia-$env:GITHUB_REF_NAME.zip"
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Metanoia-*.zip
+          generate_release_notes: true
