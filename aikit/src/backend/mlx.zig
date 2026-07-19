@@ -39,6 +39,10 @@ pub const mlx_array = extern struct { ctx: ?*anyopaque };
 pub const mlx_stream = extern struct { ctx: ?*anyopaque };
 pub const mlx_vector_array = extern struct { ctx: ?*anyopaque };
 pub const mlx_device = extern struct { ctx: ?*anyopaque };
+pub const mlx_map_string_to_array = extern struct { ctx: ?*anyopaque };
+pub const mlx_map_string_to_string = extern struct { ctx: ?*anyopaque };
+pub const mlx_optional_int = extern struct { value: c_int, has_value: bool };
+pub const mlx_optional_dtype = extern struct { value: c_int, has_value: bool };
 
 // --- MLX C API functions (manual extern declarations, mlx-c 0.6.x) -----
 pub extern "c" fn mlx_vector_array_new() callconv(.c) mlx_vector_array;
@@ -48,11 +52,15 @@ pub extern "c" fn mlx_vector_array_free(vec: mlx_vector_array) callconv(.c) c_in
 pub extern "c" fn mlx_array_new_data(data: ?*const anyopaque, shape: [*]const i32, dim: c_int, dtype: c_int) callconv(.c) mlx_array;
 pub extern "c" fn mlx_array_data_float32(arr: mlx_array) callconv(.c) [*]const f32;
 pub extern "c" fn mlx_array_free(arr: mlx_array) callconv(.c) c_int;
+pub extern "c" fn mlx_array_ndim(arr: mlx_array) callconv(.c) usize;
+pub extern "c" fn mlx_array_shape(arr: mlx_array) callconv(.c) [*]const c_int;
+pub extern "c" fn mlx_array_dtype(arr: mlx_array) callconv(.c) c_int;
 
 pub extern "c" fn mlx_add(res: *mlx_array, a: mlx_array, b: mlx_array, s: mlx_stream) callconv(.c) c_int;
 pub extern "c" fn mlx_subtract(res: *mlx_array, a: mlx_array, b: mlx_array, s: mlx_stream) callconv(.c) c_int;
 pub extern "c" fn mlx_multiply(res: *mlx_array, a: mlx_array, b: mlx_array, s: mlx_stream) callconv(.c) c_int;
 pub extern "c" fn mlx_matmul(res: *mlx_array, a: mlx_array, b: mlx_array, s: mlx_stream) callconv(.c) c_int;
+pub extern "c" fn mlx_transpose(res: *mlx_array, a: mlx_array, s: mlx_stream) callconv(.c) c_int;
 pub extern "c" fn mlx_tanh(res: *mlx_array, a: mlx_array, s: mlx_stream) callconv(.c) c_int;
 pub extern "c" fn mlx_sin(res: *mlx_array, a: mlx_array, s: mlx_stream) callconv(.c) c_int;
 pub extern "c" fn mlx_cos(res: *mlx_array, a: mlx_array, s: mlx_stream) callconv(.c) c_int;
@@ -60,13 +68,61 @@ pub extern "c" fn mlx_eval(outputs: mlx_vector_array) callconv(.c) c_int;
 pub extern "c" fn mlx_random_seed(seed: u64) callconv(.c) c_int;
 pub extern "c" fn mlx_device_new_type(device_type: c_int, index: c_int) callconv(.c) mlx_device;
 pub extern "c" fn mlx_default_gpu_stream_new() callconv(.c) mlx_stream;
+pub extern "c" fn mlx_default_cpu_stream_new() callconv(.c) mlx_stream;
+
+/// Loads an MLX-format `.safetensors` checkpoint (weights + metadata),
+/// e.g. `model.safetensors` from any `mlx-community/*` HuggingFace repo.
+/// LLM-capability groundwork — see the "LLM inference (research)" section
+/// below; validated against a real 265MB Qwen2.5-0.5B-4bit checkpoint in
+/// aikit/examples/llm_spike.zig.
+///
+/// NOTE (mlx-c 0.6.0): loading is CPU-only — evaluating a `Load` op on the
+/// GPU stream fails with "Load::eval_gpu Not implemented". Pass
+/// `defaultCpuStream()` here, not `defaultStream()`.
+pub extern "c" fn mlx_load_safetensors(
+    weights_out: *mlx_map_string_to_array,
+    metadata_out: *mlx_map_string_to_string,
+    file: [*:0]const u8,
+    s: mlx_stream,
+) callconv(.c) c_int;
+pub extern "c" fn mlx_map_string_to_array_new() callconv(.c) mlx_map_string_to_array;
+pub extern "c" fn mlx_map_string_to_array_get(value: *mlx_array, map: mlx_map_string_to_array, key: [*:0]const u8) callconv(.c) c_int;
+pub extern "c" fn mlx_map_string_to_string_new() callconv(.c) mlx_map_string_to_string;
+
+/// Dequantizes an affine-quantized weight matrix (the format `mlx_lm`/
+/// `mlx-community` checkpoints ship linear-layer weights in: a packed
+/// `w` tensor plus per-group `scales`/`biases`) back to float32.
+/// `group_size`/`bits` come from the checkpoint's `config.json`
+/// `"quantization"` block (commonly `{group_size: 64, bits: 4}`).
+pub extern "c" fn mlx_dequantize(
+    res: *mlx_array,
+    w: mlx_array,
+    scales: mlx_array,
+    biases: mlx_array,
+    group_size: mlx_optional_int,
+    bits: mlx_optional_int,
+    mode: [*:0]const u8,
+    global_scale: mlx_array,
+    dtype: mlx_optional_dtype,
+    s: mlx_stream,
+) callconv(.c) c_int;
 
 var g_stream: ?mlx_stream = null;
+var g_cpu_stream: ?mlx_stream = null;
 
 fn defaultStream() mlx_stream {
     if (g_stream) |s| return s;
     const s = mlx_default_gpu_stream_new();
     g_stream = s;
+    return s;
+}
+
+/// See `mlx_load_safetensors`'s doc comment — checkpoint loading must run
+/// on this stream, not the GPU one.
+pub fn defaultCpuStream() mlx_stream {
+    if (g_cpu_stream) |s| return s;
+    const s = mlx_default_cpu_stream_new();
+    g_cpu_stream = s;
     return s;
 }
 
@@ -82,8 +138,8 @@ pub fn getMetalDevice() mlx_device {
 pub const Array = struct {
     handle: mlx_array,
 
-    pub fn fromFloat32(data: []const f32, shape: []const i32) Array {
-        const arr = mlx_array_new_data(data.ptr, shape.ptr, @intCast(shape.len), 10); // 10 = float32 dtype
+    pub fn fromFloat32(data: []const f32, dims: []const i32) Array {
+        const arr = mlx_array_new_data(data.ptr, dims.ptr, @intCast(dims.len), 10); // 10 = float32 dtype
         return .{ .handle = arr };
     }
 
@@ -123,6 +179,35 @@ pub const Array = struct {
         return .{ .handle = res };
     }
 
+    pub fn transpose(a: Array) Array {
+        var res = mlx_array{ .ctx = null };
+        _ = mlx_transpose(&res, a.handle, defaultStream());
+        return .{ .handle = res };
+    }
+
+    /// See `mlx_dequantize`'s doc comment for what `group_size`/`bits`/
+    /// `scales`/`biases` mean — this wraps the common "affine" mode case.
+    pub fn dequantizeAffine(w: Array, scales: Array, biases: Array, group_size: i32, bits: i32) Array {
+        var res = mlx_array{ .ctx = null };
+        _ = mlx_dequantize(
+            &res,
+            w.handle,
+            scales.handle,
+            biases.handle,
+            .{ .value = group_size, .has_value = true },
+            .{ .value = bits, .has_value = true },
+            "affine",
+            mlx_array{ .ctx = null },
+            .{ .value = 10, .has_value = true }, // 10 = float32
+            defaultStream(),
+        );
+        return .{ .handle = res };
+    }
+
+    pub fn shape(a: Array) []const c_int {
+        return mlx_array_shape(a.handle)[0..mlx_array_ndim(a.handle)];
+    }
+
     pub fn eval(a: Array) void {
         const vec = mlx_vector_array_new();
         defer _ = mlx_vector_array_free(vec);
@@ -132,6 +217,34 @@ pub const Array = struct {
 
     pub fn free(a: Array) void {
         _ = mlx_array_free(a.handle);
+    }
+};
+
+/// An open `.safetensors` checkpoint's weight map — `get()` looks up a
+/// tensor by its checkpoint key (e.g. `"model.layers.0.self_attn.q_proj.weight"`).
+/// Validated against a real Qwen2.5-0.5B-4bit checkpoint (see
+/// aikit/examples/llm_spike.zig) — this is LLM-capability groundwork, not
+/// yet used by any shipped capability.
+pub const Checkpoint = struct {
+    weights: mlx_map_string_to_array,
+    metadata: mlx_map_string_to_string,
+
+    pub fn load(path: [:0]const u8) !Checkpoint {
+        var weights = mlx_map_string_to_array_new();
+        var metadata = mlx_map_string_to_string_new();
+        // Loading is CPU-only in mlx-c 0.6.0 — see mlx_load_safetensors's doc comment.
+        if (mlx_load_safetensors(&weights, &metadata, path.ptr, defaultCpuStream()) != 0) {
+            return error.CheckpointLoadFailed;
+        }
+        return .{ .weights = weights, .metadata = metadata };
+    }
+
+    pub fn get(self: Checkpoint, key: [:0]const u8) !Array {
+        var arr = mlx_array{ .ctx = null };
+        if (mlx_map_string_to_array_get(&arr, self.weights, key.ptr) != 0) {
+            return error.KeyNotFound;
+        }
+        return .{ .handle = arr };
     }
 };
 

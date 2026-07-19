@@ -86,6 +86,38 @@ should ever import from `models/` — the dependency direction is strictly
 `models/` → `capabilities/` + `backend/`, never the reverse, or the
 interface stops being backend-agnostic.
 
+## LLM inference (research spike, not yet a capability)
+
+Goal: replace metanoia's Ollama dependency (`src/ollama_client.zig`, a
+`curl` subprocess to a locally-running Ollama server) with native in-process
+LLM inference — same "keep the old path available" pattern as TTS's
+`tts_backend` switch.
+
+A feasibility spike (`examples/llm_spike.zig`, `zig build run-llm-spike`)
+proved the approach end-to-end against a real downloaded checkpoint
+(`mlx-community/Qwen2.5-0.5B-Instruct-4bit`, ~265MB): `backend/mlx.zig`'s
+`Checkpoint.load`/`.get`, `Array.dequantizeAffine`, `Array.transpose` load
+real MLX-format safetensors weights, dequantize a real 4-bit-quantized
+weight matrix to plausible float32 values, and run a real matmul against
+it. Per aikit's "no new external native deps" principle above, this stays
+within mlx-c's *tensor primitives* — no llama.cpp/ONNX/candle. mlx-c
+0.6.0 turns out to already expose fused `mlx_fast_scaled_dot_product_attention`,
+`mlx_fast_rope`, `mlx_fast_rms_norm`, `mlx_softmax`, and `mlx_gather` (embedding
+lookup) — everything numerically hard a Qwen2-style transformer needs, so
+this is closer to "write the architecture, mlx-c does the math" than a
+from-scratch tensor engine.
+
+**Honest scope for an actual capability** (`capabilities/llm.zig` +
+`models/qwen2_mlx.zig` implementing it): 1-2 weeks, not days. What's proven:
+loading and dequantizing real weights. What's not yet done: a Zig BPE
+tokenizer for Qwen's `tokenizer.json`, the actual per-layer forward pass
+(embed → N×[RMSNorm → attention → RMSNorm → SwiGLU MLP] → final norm →
+lm_head) wired through all 24+ layers, a KV cache, and sampling — plus real
+correctness debugging against a Python/MLX reference output (the spike
+already hit one silent FFI-ABI bug this way: `mlx_dequantize`'s `dtype`
+parameter is a struct, not a bare `c_int` — silently wrong output, not a
+crash, until caught by comparing against expected value ranges).
+
 ## Cross-platform GPU: Vulkan on Windows/Linux (verified, not yet built)
 
 `backend/ggml.zig`'s bindings (`qt_init`, `qt_synthesize`, ...) are

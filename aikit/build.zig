@@ -78,6 +78,9 @@ pub fn build(b: *std.Build) void {
                 .root_source_file = b.path("examples/llm_spike.zig"),
                 .target = target,
                 .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "aikit", .module = mod },
+                },
             }),
         });
         llm_spike_exe.root_module.addOptions("build_options", spike_options);
