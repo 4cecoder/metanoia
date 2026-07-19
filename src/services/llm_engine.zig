@@ -52,12 +52,12 @@ pub const LLMEngine = struct {
                     defer if (test_lex.len > 0) allocator.free(test_lex);
                     if (test_lex.len == 0) {
                         s.cb.onStep("Auto-Tooling: Fetching Interlinear Data from BibleHub...");
-                        if (scraper.scrape_interlinear(s.engine.io, s.book, s.chapter)) |_| {
+                        if (scraper.scrape_interlinear(s.engine.io, allocator, s.engine.db.?, s.book, s.chapter)) |_| {
                             // Only worth a lexicon backfill pass if we actually got new
                             // Strong's numbers to look up — otherwise every failed fetch
                             // (network down, book has no BibleHub page, etc.) also pays
                             // for a full-table lexicon scan for nothing.
-                            scraper.scrape_lexicon(s.engine.io, s.book, s.chapter) catch |lex_err| {
+                            scraper.scrape_lexicon(s.engine.io, allocator, s.engine.db.?, s.book, s.chapter) catch |lex_err| {
                                 const msg = std.fmt.allocPrint(allocator, "Lexicon fetch failed: {any} (word definitions may be incomplete)", .{lex_err}) catch "Lexicon fetch failed.";
                                 defer if (!std.mem.eql(u8, msg, "Lexicon fetch failed.")) allocator.free(msg);
                                 s.cb.onStep(msg);

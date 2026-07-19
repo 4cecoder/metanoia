@@ -139,6 +139,113 @@ added alongside a change were never actually checked anywhere. Added
 the thing that makes "we wrote a regression test" mean "it's enforced,"
 not just "it exists on someone's machine."
 
+## Native-Zig scraper: eliminating the Python subprocess (in progress)
+
+Follow-up to the caching-bug section above: `src/scraper_client.zig`'s
+`scrape_interlinear`/`scrape_lexicon` no longer shell out to
+`uv run python tools/interlinear_scraper.py`/`tools/lexicon_scraper.py` —
+they call a native Zig port, `src/native_scraper.zig`, directly. (`tools/scraper.py`,
+the separate verse-text scraper reachable via `scrape_verses`, is untouched —
+out of scope for this pass.) `tools/interlinear_scraper.py`,
+`tools/lexicon_scraper.py`, and `tools/scraper_common.py` are left in place
+(nothing else references them, and removing them wasn't asked for) but are no
+longer invoked by the app.
+
+**What's in `native_scraper.zig`:**
+- A small hand-rolled HTML tag/class scanner (`findElement`/`findElementById`
+  + a depth-aware close-tag matcher, needed because BibleHub nests a plain
+  `<table>` inside each Hebrew `tablefloatheb` word cell) — not a general
+  parser, just enough to replicate BeautifulSoup's `.find()`/`.find_all()`
+  calls in the Python scrapers.
+- `parseInterlinearHtml` / `parseLexiconHtml` — pure functions (`[]const u8`
+  in, no `std.Io`), so they're unit-tested against fixture strings with zero
+  network access, per the brief's TDD preference.
+- `fetchWithRetry` — mirrors `tools/scraper_common.py`'s `fetch_with_retry`
+  exactly: 3 attempts, 1s/2s/4s backoff, retries timeout/connection-failure/5xx,
+  does not retry 4xx. The real per-attempt 15s timeout is implemented via
+  `std.Io.Select` racing the fetch against a timer and canceling the loser —
+  the closest native equivalent to `requests.get(..., timeout=15)` available
+  in this Zig nightly (`0.17.0-dev.1422+e863bf3be`).
+- Four new small `bible_db.zig` functions (`insert_interlinear_word`,
+  `insert_lexicon_entry`, `lexicon_has_strongs`, `distinct_interlinear_strongs`)
+  so the scraper's DB writes go through the existing `lockDb()`/`unlockDb()`
+  mutex (see "A real concurrency bug this surfaced" above) instead of hitting
+  sqlite3 directly. These use real parameterized binds
+  (`sqlite3_bind_text`/`sqlite3_bind_int`, newly declared) rather than this
+  file's existing string-interpolated-SQL pattern, since scraped web text can
+  contain single quotes that would corrupt an interpolated query — this
+  actually matches the Python side more closely, since its
+  `cursor.execute(sql, params)` calls were already parameterized.
+
+**Known behavioral notes (preserved from the Python originals, not fixed —
+see native_scraper.zig's docstring and inline comments for detail):**
+1. On today's live BibleHub markup, Hebrew (`tablefloatheb`) word tables use
+   `class="strongsnt"` for their Strong's-number span, not `class="pos"`/
+   `class="strongs"` like Greek tables — so `tools/interlinear_scraper.py`'s
+   (and this port's) `find(class_=["pos","strongs"])` never matches for
+   Hebrew, and OT strongs numbers come back empty on a fresh scrape. Same gap,
+   same class list, both languages. (Confirmed by fetching a real page,
+   `curl -A "Mozilla/5.0" https://biblehub.com/interlinear/obadiah/1.htm`.)
+2. `tools/lexicon_scraper.py`'s `scrape_strongs()` only populates `definition`
+   (and only if the page has `class="strongs"` and/or `class="strongsnt"`
+   elements it never finds on today's real `/greek/N.htm`/`/hebrew/N.htm`
+   pages); `lemma`/`transliteration`/`usage` are dead code, always `""`.
+   Confirmed against the shipped `data/bible.db`: **all 6190 existing lexicon
+   rows already have empty lemma/transliteration/definition/usage** — this
+   isn't a regression, the feature has been a no-op against the live site for
+   a while. Ported faithfully rather than silently "fixed", since guessing at
+   better selectors would be a bigger behavioral deviation than preserving a
+   documented no-op — fixing the actual extraction (real BibleHub lexicon
+   page selectors) is a good follow-up but is a product/scope decision, not a
+   silent side effect of a subprocess-elimination task.
+3. No NFC Unicode normalization. The Python scraper does
+   `unicodedata.normalize('NFC', text)` on original-language text; Zig's
+   standard library has no built-in Unicode normalizer and hand-rolling one
+   was out of scope. In practice BibleHub's Greek text is raw UTF-8 (not
+   entity-encoded) and its Hebrew text is decimal-entity-encoded — untested
+   whether either ever arrives in a form NFC would actually change, but this
+   is a known, disclosed gap, not a verified non-issue.
+4. `fetchWithRetry`'s "is this error worth retrying" gate
+   (`isPermanentFetchError`) is a hand-picked allowlist of Zig errors
+   (`UnsupportedUriScheme`/`UriMissingHost`/`InvalidHostName`) standing in for
+   Python's `except (requests.Timeout, requests.ConnectionError)` vs "other
+   `RequestException` subtypes propagate immediately" distinction — the two
+   error taxonomies don't line up 1:1, so this is a reasonable approximation,
+   not a literal port.
+
+**Testing status:** `zig build test` passes (fixture-based parser tests,
+retry-driver tests via a fake attempt function, `bible_db.zig` round-trip
+tests for the four new functions — all network-free, per the brief's
+preference for separating parse-from-fetch over standing up a fake HTTP
+server). A `METANOIA_LIVE_SCRAPER_TEST=1 zig build test` run against the real
+`https://biblehub.com/interlinear/philemon/1.htm` was kicked off to confirm
+real-world, non-fixture output — **check `git log`/this file's next revision
+for whether that finished and what it found** before assuming it passed; if
+this bullet is still here unedited, the live run's result wasn't captured
+before the session ended and should be the first thing re-run next session:
+`METANOIA_LIVE_SCRAPER_TEST=1 zig build test 2>&1 | grep -A2 "LIVE "`.
+
+**Next-session TODO:**
+- Confirm the live-fetch smoke test result (see above) and record actual
+  numbers here (distinct strongs count for Philemon 1, a sample word/strongs
+  pair) as real evidence per the original task brief.
+- Consider whether `tools/interlinear_scraper.py`/`lexicon_scraper.py`/
+  `scraper_common.py` should now be deleted, since nothing in the app invokes
+  them anymore (kept for this pass only because deleting wasn't explicitly
+  asked for).
+- Item 2 above (lexicon extraction being a near-total no-op against the real
+  site) is the highest-value real follow-up — the feature exists end-to-end
+  (fetch → parse → cache → read) but the parse step currently can't find real
+  data on today's BibleHub markup. Needs someone to look at a real
+  `/greek/N.htm` page and find the actual current selectors for
+  lemma/transliteration/definition/usage, in both Python and this Zig port
+  simultaneously so they don't drift again.
+- The `std.Io.Select`-based per-attempt timeout (`httpGetOnce` in
+  `native_scraper.zig`) is the first use of `Io.Select`/`Io.async` in this
+  codebase — worth a [ZIG_DISCOVERIES.md](ZIG_DISCOVERIES.md) entry once it's
+  been exercised more (the live test above is the first real-network
+  exercise of it).
+
 ## Quick-wins backlog (noticed, not fixed — scoped out to avoid creep)
 
 - **`get_chapter_verses` ignores the `version` column.** The `verses` table

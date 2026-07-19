@@ -38,9 +38,33 @@ pub extern fn sqlite3_step(stmt: *sqlite3_stmt) i32;
 pub extern fn sqlite3_column_text(stmt: *sqlite3_stmt, iCol: i32) ?[*:0]const u8;
 pub extern fn sqlite3_column_int(stmt: *sqlite3_stmt, iCol: i32) i32;
 pub extern fn sqlite3_finalize(stmt: *sqlite3_stmt) i32;
+// Parameterized-bind API (added for native_scraper.zig): unlike every read/write
+// function above, which builds SQL by string-interpolating values straight into
+// the query text (a pre-existing pattern in this file, not introduced here),
+// scraped web content is untrusted and can contain single quotes (e.g. an
+// English gloss like "Paul's"), so the scraper writes below use real bound
+// parameters instead of interpolation. This also matches tools/*_scraper.py,
+// whose sqlite3 `cursor.execute(sql, params)` calls were already parameterized.
+// The destructor parameter is typed as `?*const anyopaque` rather than the C
+// header's precise `void(*)(void*)` function-pointer type: we only ever pass
+// the two sentinel values SQLITE_STATIC (0) / SQLITE_TRANSIENT (-1), never a
+// real callback, and @ptrFromInt(maxInt(usize)) doesn't satisfy a function
+// pointer's alignment requirement but does satisfy anyopaque's (1). The
+// bytes crossing the C ABI boundary are identical either way.
+pub extern fn sqlite3_bind_text(stmt: *sqlite3_stmt, idx: i32, val: [*]const u8, len: i32, destructor: ?*const anyopaque) i32;
+pub extern fn sqlite3_bind_int(stmt: *sqlite3_stmt, idx: i32, val: i32) i32;
 
 pub const SQLITE_ROW = 100;
 pub const SQLITE_OK = 0;
+/// SQLITE_TRANSIENT: tells sqlite3 to copy the bound bytes immediately
+/// (rather than assume the pointer outlives the statement, as SQLITE_STATIC
+/// (0) would), since the []const u8 slices bound below are freed by the
+/// caller shortly after sqlite3_step().
+const SQLITE_TRANSIENT: ?*const anyopaque = @ptrFromInt(std.math.maxInt(usize));
+
+fn bindText(stmt: *sqlite3_stmt, idx: i32, val: []const u8) void {
+    _ = sqlite3_bind_text(stmt, idx, val.ptr, @intCast(val.len), SQLITE_TRANSIENT);
+}
 
 pub fn init_db(db: *sqlite3) !void {
     lockDb();
@@ -492,6 +516,89 @@ pub fn get_cross_references(allocator: std.mem.Allocator, db: *sqlite3, book: []
     return xrefs.toOwnedSlice(allocator);
 }
 
+// --- Scraper writes (src/native_scraper.zig) --------------------------------
+// Mirror the exact INSERT shapes tools/interlinear_scraper.py and
+// tools/lexicon_scraper.py use (INSERT OR REPLACE, same column order), so a
+// native-Zig scrape and a Python scrape produce identical rows.
+
+pub fn insert_interlinear_word(db: *sqlite3, book: []const u8, chapter: i32, verse: i32, word_index: i32, original_text: []const u8, translation: []const u8, strongs: []const u8, morphology: []const u8) void {
+    lockDb();
+    defer unlockDb();
+    const sql = "INSERT OR REPLACE INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs, morphology) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    var stmt: ?*sqlite3_stmt = null;
+    if (sqlite3_prepare_v2(db, sql, -1, @ptrCast(&stmt), null) != SQLITE_OK) return;
+    defer _ = sqlite3_finalize(stmt.?);
+    bindText(stmt.?, 1, book);
+    _ = sqlite3_bind_int(stmt.?, 2, chapter);
+    _ = sqlite3_bind_int(stmt.?, 3, verse);
+    _ = sqlite3_bind_int(stmt.?, 4, word_index);
+    bindText(stmt.?, 5, original_text);
+    bindText(stmt.?, 6, translation);
+    bindText(stmt.?, 7, strongs);
+    bindText(stmt.?, 8, morphology);
+    _ = sqlite3_step(stmt.?);
+}
+
+pub fn insert_lexicon_entry(db: *sqlite3, strongs: []const u8, language: []const u8, lemma: []const u8, transliteration: []const u8, definition: []const u8, usage: []const u8) void {
+    lockDb();
+    defer unlockDb();
+    const sql = "INSERT OR REPLACE INTO lexicon (strongs, language, lemma, transliteration, definition, usage) VALUES (?, ?, ?, ?, ?, ?)";
+    var stmt: ?*sqlite3_stmt = null;
+    if (sqlite3_prepare_v2(db, sql, -1, @ptrCast(&stmt), null) != SQLITE_OK) return;
+    defer _ = sqlite3_finalize(stmt.?);
+    bindText(stmt.?, 1, strongs);
+    bindText(stmt.?, 2, language);
+    bindText(stmt.?, 3, lemma);
+    bindText(stmt.?, 4, transliteration);
+    bindText(stmt.?, 5, definition);
+    bindText(stmt.?, 6, usage);
+    _ = sqlite3_step(stmt.?);
+}
+
+pub fn lexicon_has_strongs(db: *sqlite3, strongs: []const u8) bool {
+    lockDb();
+    defer unlockDb();
+    const sql = "SELECT 1 FROM lexicon WHERE strongs = ?";
+    var stmt: ?*sqlite3_stmt = null;
+    if (sqlite3_prepare_v2(db, sql, -1, @ptrCast(&stmt), null) != SQLITE_OK) return false;
+    defer _ = sqlite3_finalize(stmt.?);
+    bindText(stmt.?, 1, strongs);
+    return sqlite3_step(stmt.?) == SQLITE_ROW;
+}
+
+/// Distinct, non-empty Strong's numbers referenced by the interlinear table,
+/// optionally scoped to one book/chapter -- mirrors tools/lexicon_scraper.py's
+/// cache_lexicon_from_db(book, chapter) scoping (see that function's
+/// docstring). Caller owns the returned slice and each string in it.
+pub fn distinct_interlinear_strongs(allocator: std.mem.Allocator, db: *sqlite3, book: ?[]const u8, chapter: ?i32) ![][]const u8 {
+    lockDb();
+    defer unlockDb();
+    var list = std.ArrayListUnmanaged([]const u8).empty;
+    errdefer {
+        for (list.items) |s| allocator.free(s);
+        list.deinit(allocator);
+    }
+
+    const scoped = book != null and chapter != null;
+    const sql: [*:0]const u8 = if (scoped)
+        "SELECT DISTINCT strongs FROM interlinear WHERE strongs != '' AND book = ? AND chapter = ?"
+    else
+        "SELECT DISTINCT strongs FROM interlinear WHERE strongs != ''";
+
+    var stmt: ?*sqlite3_stmt = null;
+    if (sqlite3_prepare_v2(db, sql, -1, @ptrCast(&stmt), null) != SQLITE_OK) return list.toOwnedSlice(allocator);
+    defer _ = sqlite3_finalize(stmt.?);
+    if (scoped) {
+        bindText(stmt.?, 1, book.?);
+        _ = sqlite3_bind_int(stmt.?, 2, chapter.?);
+    }
+    while (sqlite3_step(stmt.?) == SQLITE_ROW) {
+        const s = sqlite3_column_text(stmt.?, 0) orelse continue;
+        try list.append(allocator, try allocator.dupe(u8, std.mem.span(s)));
+    }
+    return list.toOwnedSlice(allocator);
+}
+
 // --- SQL round-trip tests ---------------------------------------------------
 // Before these, none of bible_db.zig's SQL read/write paths had any test
 // coverage at all — including get_verse_lexicon_context, the exact function
@@ -645,6 +752,73 @@ test "get_verse_lexicon_context: this is what llm_engine checks to decide whethe
     const other = try get_verse_lexicon_context(std.testing.allocator, db, "John", 3, 17);
     defer std.testing.allocator.free(other);
     try std.testing.expectEqual(@as(usize, 0), other.len);
+}
+
+test "insert_interlinear_word / insert_lexicon_entry: parameterized binds round-trip values containing single quotes" {
+    const db = openTestDb();
+    defer _ = sqlite3_close(db);
+
+    // A translation gloss with an apostrophe would corrupt a string-interpolated
+    // INSERT (like every other write helper in this file uses); the bound
+    // version added for the scraper must not have that problem.
+    insert_interlinear_word(db, "Genesis", 1, 27, 3, "בְּצֶ֥לֶם", "God's own image", "H6754", "N-msc");
+    insert_lexicon_entry(db, "H6754", "hebrew", "צֶ֫לֶם", "tselem", "Adam's likeness, an image", "");
+
+    const ctx = try get_verse_lexicon_context(std.testing.allocator, db, "Genesis", 1, 27);
+    defer std.testing.allocator.free(ctx);
+    try std.testing.expect(std.mem.indexOf(u8, ctx, "God's own image") != null);
+    try std.testing.expect(std.mem.indexOf(u8, ctx, "Adam's likeness, an image") != null);
+
+    try std.testing.expect(lexicon_has_strongs(db, "H6754"));
+    try std.testing.expect(!lexicon_has_strongs(db, "H0000"));
+
+    // INSERT OR REPLACE: re-inserting the same (book, chapter, verse, word_index)
+    // updates in place rather than duplicating the row.
+    insert_interlinear_word(db, "Genesis", 1, 27, 3, "בְּצֶ֥לֶם", "in the image of", "H6754", "N-msc");
+    const ctx2 = try get_verse_lexicon_context(std.testing.allocator, db, "Genesis", 1, 27);
+    defer std.testing.allocator.free(ctx2);
+    try std.testing.expect(std.mem.indexOf(u8, ctx2, "in the image of") != null);
+    try std.testing.expect(std.mem.indexOf(u8, ctx2, "God's own image") == null);
+}
+
+test "distinct_interlinear_strongs: unscoped vs scoped to one book/chapter" {
+    const db = openTestDb();
+    defer _ = sqlite3_close(db);
+
+    insert_interlinear_word(db, "Genesis", 1, 1, 0, "orig1", "In", "H7225", "");
+    insert_interlinear_word(db, "Genesis", 1, 1, 1, "orig2", "beginning", "H7225", ""); // duplicate strongs, same chapter
+    insert_interlinear_word(db, "Genesis", 2, 1, 0, "orig3", "thus", "H3541", "");
+    insert_interlinear_word(db, "John", 3, 16, 0, "orig4", "For", "G1063", "");
+    insert_interlinear_word(db, "John", 3, 16, 1, "orig5", ".", "", ""); // empty strongs excluded
+
+    {
+        const all = try distinct_interlinear_strongs(std.testing.allocator, db, null, null);
+        defer {
+            for (all) |s| std.testing.allocator.free(s);
+            std.testing.allocator.free(all);
+        }
+        try std.testing.expectEqual(@as(usize, 3), all.len);
+    }
+
+    {
+        const scoped = try distinct_interlinear_strongs(std.testing.allocator, db, "Genesis", 1);
+        defer {
+            for (scoped) |s| std.testing.allocator.free(s);
+            std.testing.allocator.free(scoped);
+        }
+        try std.testing.expectEqual(@as(usize, 1), scoped.len);
+        try std.testing.expectEqualStrings("H7225", scoped[0]);
+    }
+
+    {
+        const scoped_ch2 = try distinct_interlinear_strongs(std.testing.allocator, db, "Genesis", 2);
+        defer {
+            for (scoped_ch2) |s| std.testing.allocator.free(s);
+            std.testing.allocator.free(scoped_ch2);
+        }
+        try std.testing.expectEqual(@as(usize, 1), scoped_ch2.len);
+        try std.testing.expectEqualStrings("H3541", scoped_ch2[0]);
+    }
 }
 
 test "get_lexicon_detail: found vs not found" {
