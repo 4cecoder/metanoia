@@ -31,7 +31,7 @@ cache/
 uploads/
 
 # ML models (large, not in git)
-models/
+/models/
 mobile/models/
 # ...but aikit/src/models/ is Zig source code (Synthesizer implementations),
 # not model weights — don't let the broad models/ rule above swallow it.
