@@ -213,22 +213,21 @@ see native_scraper.zig's docstring and inline comments for detail):**
    error taxonomies don't line up 1:1, so this is a reasonable approximation,
    not a literal port.
 
-**Testing status:** `zig build test` passes (fixture-based parser tests,
-retry-driver tests via a fake attempt function, `bible_db.zig` round-trip
-tests for the four new functions — all network-free, per the brief's
-preference for separating parse-from-fetch over standing up a fake HTTP
-server). A `METANOIA_LIVE_SCRAPER_TEST=1 zig build test` run against the real
-`https://biblehub.com/interlinear/philemon/1.htm` was kicked off to confirm
-real-world, non-fixture output — **check `git log`/this file's next revision
-for whether that finished and what it found** before assuming it passed; if
-this bullet is still here unedited, the live run's result wasn't captured
-before the session ended and should be the first thing re-run next session:
-`METANOIA_LIVE_SCRAPER_TEST=1 zig build test 2>&1 | grep -A2 "LIVE "`.
+**Testing status:** `zig build test` passes clean (42 fixture/unit tests: HTML
+parser against captured-real-page fixtures, retry-driver tests via a fake
+attempt function, `bible_db.zig` round-trip tests for the four new
+functions — all network-free, per the brief's preference for separating
+parse-from-fetch over standing up a fake HTTP server). A
+`METANOIA_LIVE_SCRAPER_TEST=1 zig build test` run against the real
+`https://biblehub.com/interlinear/philemon/1.htm` (chosen for being short)
+confirmed real-world, non-fixture behavior:
+`LIVE interlinear: 141 distinct strongs numbers cached for Philemon 1` and
+`LIVE lexicon sample: strongs=G3972 language=greek lemma="" definition=""` —
+the empty lemma/definition on the very first live-fetched lexicon entry is
+*expected*, not a bug: it's exactly known-behavioral-note 2 above, confirmed
+live rather than just inferred from `data/bible.db`'s existing rows.
 
 **Next-session TODO:**
-- Confirm the live-fetch smoke test result (see above) and record actual
-  numbers here (distinct strongs count for Philemon 1, a sample word/strongs
-  pair) as real evidence per the original task brief.
 - Consider whether `tools/interlinear_scraper.py`/`lexicon_scraper.py`/
   `scraper_common.py` should now be deleted, since nothing in the app invokes
   them anymore (kept for this pass only because deleting wasn't explicitly
