@@ -58,6 +58,36 @@ pub fn build(b: *std.Build) void {
     run_example_step.dependOn(&run_example.step);
 
     b.installArtifact(example_exe);
+
+    // Research-only spike (see docs/ or the LLM-feasibility report): loads
+    // real MLX-format safetensors weights and runs a real dequantize +
+    // matmul against them. Not part of the public API — proof-of-feasibility
+    // only, macOS/MLX only.
+    if (target.result.os.tag == .macos) {
+        const spike_model_path = b.option(
+            []const u8,
+            "llm-spike-model",
+            "Path to a .safetensors file for examples/llm_spike.zig",
+        ) orelse "";
+        const spike_options = b.addOptions();
+        spike_options.addOption([]const u8, "model_path", spike_model_path);
+
+        const llm_spike_exe = b.addExecutable(.{
+            .name = "llm_spike",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("examples/llm_spike.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+        llm_spike_exe.root_module.addOptions("build_options", spike_options);
+        linkMlx(llm_spike_exe.root_module);
+        const run_llm_spike = b.addRunArtifact(llm_spike_exe);
+        run_llm_spike.step.dependOn(b.getInstallStep());
+        const run_llm_spike_step = b.step("run-llm-spike", "Build and run examples/llm_spike.zig");
+        run_llm_spike_step.dependOn(&run_llm_spike.step);
+        b.installArtifact(llm_spike_exe);
+    }
 }
 
 /// Same external-dependency pattern metanoia's own build.zig already uses
