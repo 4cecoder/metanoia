@@ -1,0 +1,120 @@
+name: release-unix
+
+# macOS + Linux + Android release packaging. Windows keeps its own pipeline
+# at .github/workflows/release.yml — untouched, not affected by this file.
+# Same tag trigger as release.yml so one tag push fires both workflows and
+# all jobs upload to the same GitHub Release.
+on:
+  push:
+    tags: ["20*.*.*"]
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # data/bible.db and the wav clips referenced by data/voices.json are
+      # tracked in git (explicit exceptions in .gitignore) — a plain
+      # checkout is enough, no separate data-fetch step needed.
+
+      - name: Install GTK4/SQLite3 deps
+        run: brew install gtk4 pango cairo glib sqlite3
+
+      - name: Install Zig (pinned master nightly)
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            arm64|aarch64) ZIG_TARGET="aarch64-macos" ;;
+            x86_64) ZIG_TARGET="x86_64-macos" ;;
+            *) echo "unsupported arch $(uname -m)" >&2; exit 1 ;;
+          esac
+          JSON="$(curl -fsSL https://ziglang.org/download/index.json)"
+          URL="$(echo "$JSON" | jq -r ".master[\"$ZIG_TARGET\"].tarball")"
+          echo "Installing zig from $URL"
+          curl -fsSL "$URL" -o "$RUNNER_TEMP/zig.tar.xz"
+          mkdir -p "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Verify zig
+        run: zig version
+
+      - name: Build macOS .app bundle
+        run: bash packaging/build-macos.sh
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ github.ref_name }}"
+          body: "macOS build (unsigned/ad-hoc-signed — see docs/PACKAGING.md for Gatekeeper caveat). Unzip and run Metanoia.app."
+          files: dist/Metanoia-macos-*.tar.gz
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # data/bible.db + referenced voice clips come from the checkout above
+      # (see the macOS job's comment); build-linux.sh still fails fast if
+      # data/bible.db is somehow missing.
+
+      - name: Install GTK4/SQLite3 deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libsqlite3-dev pkg-config build-essential
+
+      - name: Install Zig (pinned master nightly)
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            x86_64) ZIG_TARGET="x86_64-linux" ;;
+            aarch64|arm64) ZIG_TARGET="aarch64-linux" ;;
+            *) echo "unsupported arch $(uname -m)" >&2; exit 1 ;;
+          esac
+          JSON="$(curl -fsSL https://ziglang.org/download/index.json)"
+          URL="$(echo "$JSON" | jq -r ".master[\"$ZIG_TARGET\"].tarball")"
+          echo "Installing zig from $URL"
+          curl -fsSL "$URL" -o "$RUNNER_TEMP/zig.tar.xz"
+          mkdir -p "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Verify zig
+        run: zig version
+
+      - name: Build Linux tarball + .deb
+        run: bash packaging/build-linux.sh
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ github.ref_name }}"
+          body: "Linux build: universal tarball (with install.sh) + .deb for Debian/Ubuntu. See docs/PACKAGING.md."
+          files: |
+            dist/Metanoia-linux-*.tar.gz
+            dist/*.deb
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build debug-signed APK
+        run: bash packaging/build-android.sh
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ github.ref_name }}"
+          body: "Android build is DEBUG-SIGNED (sideload only, not from the Play Store). See docs/PACKAGING.md for what a real signed release needs."
+          files: dist/metanoia-android-debug.apk
