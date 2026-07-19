@@ -6,6 +6,23 @@ val BOOKS = listOf(
     BibleBook("SirateTsion", 1, "Eth"), BibleBook("Tizaz", 1, "Eth"), BibleBook("Gitsiw", 1, "Eth"), BibleBook("Abtilis", 1, "Eth"), BibleBook("1Dominos", 1, "Eth"), BibleBook("2Dominos", 1, "Eth"), BibleBook("Qalementos", 1, "Eth"), BibleBook("Didasqalia", 1, "Eth")
 )
 
+/**
+ * Strong's-number language prefix for a given canonical book name, derived
+ * solely from [BOOKS] so it can never drift from the app's testament data
+ * (the way tools/interlinear_scraper.py's old hardcoded `ot_books` list once
+ * drifted from src/bible_db.zig's `BIBLE_BOOKS`).
+ *
+ * Old Testament books use Hebrew ("H"). Everything else — New Testament
+ * *and* Ethiopian-canon-only books ("Eth", e.g. SirateTsion, Qalementos) —
+ * uses Greek ("G"), mirroring tools/interlinear_scraper.py's
+ * `language_prefix()` (`"H" if testament == "Old" else "G"`).
+ *
+ * Unrecognized book names also fall back to "G" (never silently mis-tag as
+ * Hebrew), matching the Python scraper's fallback behavior.
+ */
+fun strongsLanguagePrefix(bookName: String): String =
+    if (BOOKS.find { it.name == bookName }?.testament == "Old") "H" else "G"
+
 val BIBLE_ABBREVIATIONS = mapOf(
     "gen" to "Genesis", "ex" to "Exodus", "lev" to "Leviticus", "num" to "Numbers", "deut" to "Deuteronomy",
     "josh" to "Joshua", "judg" to "Judges", "ruth" to "Ruth", "1sam" to "1Samuel", "2sam" to "2Samuel",

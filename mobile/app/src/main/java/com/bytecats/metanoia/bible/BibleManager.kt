@@ -6,6 +6,8 @@ import com.bytecats.metanoia.gateway.GatewayClient
 import com.bytecats.metanoia.models.*
 import com.bytecats.metanoia.settings.SettingsManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 
 class BibleManager(private val context: Context) {
@@ -15,6 +17,17 @@ class BibleManager(private val context: Context) {
     val gateway: GatewayClient = GatewayClient { settings.gatewayUrl }
 
     val books: List<BibleBook> get() = BOOKS
+
+    private val _scrapeError = MutableStateFlow<String?>(null)
+
+    /**
+     * Message describing the most recent scrape/network failure, or null if the
+     * most recent attempt succeeded. BibleScraper no longer swallows fetch
+     * failures internally (see BibleScraper.kt), so this is where they surface:
+     * observe it from the UI (e.g. a Snackbar) instead of a fetch silently
+     * looking like "still loading" forever with no error and no retry signal.
+     */
+    val scrapeError: StateFlow<String?> = _scrapeError
 
     // --- Local DB passthroughs ---
 
@@ -60,32 +73,50 @@ class BibleManager(private val context: Context) {
     // --- Scraper passthroughs ---
 
     suspend fun scrapeChapter(book: String, chapter: Int, version: String = "NKJV") {
-        scraper.scrapeChapter(book, chapter, version) { vNum, text ->
-            db.open(false).apply {
-                execSQL(
-                    "INSERT OR REPLACE INTO verses (book, chapter, verse, text, version) VALUES (?, ?, ?, ?, ?)",
-                    arrayOf(book, chapter, vNum, text, version)
-                )
-                close()
+        try {
+            scraper.scrapeChapter(book, chapter, version) { vNum, text ->
+                db.open(false).apply {
+                    execSQL(
+                        "INSERT OR REPLACE INTO verses (book, chapter, verse, text, version) VALUES (?, ?, ?, ?, ?)",
+                        arrayOf(book, chapter, vNum, text, version)
+                    )
+                    close()
+                }
             }
+            _scrapeError.value = null
+        } catch (e: Exception) {
+            Log.w("BibleManager", "scrapeChapter failed for $book $chapter: ${e.message}")
+            _scrapeError.value = "Couldn't download $book $chapter: ${e.message ?: e::class.simpleName}"
         }
     }
 
     suspend fun scrapeInterlinear(book: String, chapter: Int) {
-        scraper.scrapeInterlinear(book, chapter) { verse, wordIdx, orig, trans, strongs ->
-            db.open(false).apply {
-                execSQL(
-                    "INSERT OR REPLACE INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    arrayOf(book, chapter, verse, wordIdx, orig, trans, strongs)
-                )
-                close()
+        try {
+            scraper.scrapeInterlinear(book, chapter) { verse, wordIdx, orig, trans, strongs ->
+                db.open(false).apply {
+                    execSQL(
+                        "INSERT OR REPLACE INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        arrayOf(book, chapter, verse, wordIdx, orig, trans, strongs)
+                    )
+                    close()
+                }
             }
+            _scrapeError.value = null
+        } catch (e: Exception) {
+            Log.w("BibleManager", "scrapeInterlinear failed for $book $chapter: ${e.message}")
+            _scrapeError.value = "Couldn't download interlinear for $book $chapter: ${e.message ?: e::class.simpleName}"
         }
     }
 
     suspend fun scrapeStrong(strongs: String, bookName: String? = null) {
-        scraper.scrapeLexicon(strongs, bookName) { lang, lemma, translit, def ->
-            db.insertLexicon(strongs, lang, lemma, translit, def)
+        try {
+            scraper.scrapeLexicon(strongs, bookName) { lang, lemma, translit, def ->
+                db.insertLexicon(strongs, lang, lemma, translit, def)
+            }
+            _scrapeError.value = null
+        } catch (e: Exception) {
+            Log.w("BibleManager", "scrapeStrong failed for $strongs: ${e.message}")
+            _scrapeError.value = "Couldn't download definition for $strongs: ${e.message ?: e::class.simpleName}"
         }
     }
 
