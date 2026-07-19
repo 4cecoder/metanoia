@@ -1,5 +1,23 @@
 const std = @import("std");
 
+test "Config.parseJson defaults tts_backend to remote when key is absent" {
+    // parseJson uses std.json's "Leaky" parser (matching load()'s existing
+    // behavior — see comment on parseJson below), so scratch JSON
+    // allocations are intentionally not freed individually; an arena is the
+    // correct allocator for it, same as any other Leaky-parser caller.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const cfg = Config.parseJson(arena.allocator(), "{}");
+    try std.testing.expectEqualStrings("remote", cfg.tts_backend);
+}
+
+test "Config.parseJson loads tts_backend: native from JSON" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const cfg = Config.parseJson(arena.allocator(), "{\"tts_backend\": \"native\"}");
+    try std.testing.expectEqualStrings("native", cfg.tts_backend);
+}
+
 pub const Config = struct {
     english_font_size: i32 = 24,
     interlinear_font_size: i32 = 26,
@@ -18,12 +36,38 @@ pub const Config = struct {
     tts_retry_count: u32 = 3,
     show_sidebar: bool = true,
     parallel_view: bool = false,
+    /// Selects which TTS implementation `tts_client.zig`'s `generate_speech`
+    /// uses: "remote" (default — curl to the Python/MLX server, unchanged
+    /// existing behavior) or "native" (in-process aikit/qwentts.cpp GGML
+    /// backend). Distinct from `tts_mode` above, which is an unrelated
+    /// quality/speed preset ("speedy"/"gold"/"custom") matching
+    /// data/voices.json's per-voice "mode" field. Defaults to "remote" so
+    /// existing configs/users without this key see no behavior change.
+    tts_backend: []const u8 = "",
 
     fn loadString(allocator: std.mem.Allocator, src: []const u8) []const u8 {
         return allocator.dupe(u8, src) catch @panic("OOM");
     }
 
     pub fn load(allocator: std.mem.Allocator, io: anytype) Config {
+        const file = std.Io.Dir.cwd().openFile(io, "data/config.json", .{}) catch return parseJson(allocator, "");
+        defer file.close(io);
+
+        var buf: [4096]u8 = undefined;
+        var f_reader = file.reader(io, &buf);
+        const content = f_reader.interface.allocRemaining(allocator, std.Io.Limit.limited(4096)) catch return parseJson(allocator, "");
+        defer allocator.free(content);
+
+        return parseJson(allocator, content);
+    }
+
+    /// Pure JSON->Config parsing, split out from `load()` so the mapping
+    /// from JSON content to defaults/overrides is directly unit-testable
+    /// without touching the filesystem (see tests above). `content` may be
+    /// empty or malformed, in which case defaults are returned — matching
+    /// `load()`'s existing behavior of falling back to defaults on any
+    /// read/parse failure.
+    pub fn parseJson(allocator: std.mem.Allocator, content: []const u8) Config {
         const defaults = struct {
             const selected_voice = "lennox";
             const emotion = "Neutral, clear narration";
@@ -31,6 +75,7 @@ pub const Config = struct {
             const tts_mode = "speedy";
             const tts_server_url = "http://127.0.0.1:8000";
             const llm_server_url = "http://127.0.0.1:11434";
+            const tts_backend = "remote";
         };
         var self = Config{
             .selected_voice = loadString(allocator, defaults.selected_voice),
@@ -39,14 +84,8 @@ pub const Config = struct {
             .tts_mode = loadString(allocator, defaults.tts_mode),
             .tts_server_url = loadString(allocator, defaults.tts_server_url),
             .llm_server_url = loadString(allocator, defaults.llm_server_url),
+            .tts_backend = loadString(allocator, defaults.tts_backend),
         };
-        const file = std.Io.Dir.cwd().openFile(io, "data/config.json", .{}) catch return self;
-        defer file.close(io);
-
-        var buf: [4096]u8 = undefined;
-        var f_reader = file.reader(io, &buf);
-        const content = f_reader.interface.allocRemaining(allocator, std.Io.Limit.limited(4096)) catch return self;
-        defer allocator.free(content);
 
         const parsed = std.json.parseFromSliceLeaky(std.json.Value, allocator, content, .{}) catch return self;
         if (parsed != .object) return self;
@@ -96,6 +135,10 @@ pub const Config = struct {
         if (parsed.object.get("tts_retry_count")) |v| self.tts_retry_count = @intCast(v.integer);
         if (parsed.object.get("show_sidebar")) |v| self.show_sidebar = v.bool;
         if (parsed.object.get("parallel_view")) |v| self.parallel_view = v.bool;
+        if (parsed.object.get("tts_backend")) |v| {
+            allocator.free(self.tts_backend);
+            self.tts_backend = loadString(allocator, v.string);
+        }
 
         return self;
     }
@@ -107,6 +150,7 @@ pub const Config = struct {
         allocator.free(self.tts_mode);
         allocator.free(self.tts_server_url);
         allocator.free(self.llm_server_url);
+        allocator.free(self.tts_backend);
     }
 
     pub fn save(self: Config, io: anytype) void {

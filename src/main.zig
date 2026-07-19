@@ -47,6 +47,15 @@ const GtkStack = gtk.GtkStack;
 const GtkAdjustment = gtk.GtkAdjustment;
 const GtkExpander = gtk.GtkExpander;
 
+// `models/config.zig` is only reachable from this file (root.zig doesn't
+// import it), and plain `@import` alone doesn't pull a file's `test` blocks
+// into `zig build test` — same reason root.zig has its own
+// `test { _ = bible; _ = tts; ... }` block. Mirror that idiom here so
+// Config's own tests (see models/config.zig) actually run.
+test {
+    _ = models;
+}
+
 const GTK_ORIENTATION_HORIZONTAL = gtk.GTK_ORIENTATION_HORIZONTAL;
 const GTK_ORIENTATION_VERTICAL = gtk.GTK_ORIENTATION_VERTICAL;
 const GTK_STYLE_PROVIDER_PRIORITY_APPLICATION = gtk.GTK_STYLE_PROVIDER_PRIORITY_APPLICATION;

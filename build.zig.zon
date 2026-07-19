@@ -32,6 +32,12 @@
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
     .dependencies = .{
+        // Native TTS backend (aikit/qwentts.cpp GGML/Metal). Path dependency
+        // — aikit lives in-tree at ./aikit, not fetched from a URL. See
+        // aikit/README.md and src/tts_client.zig's native-backend code path.
+        .aikit = .{
+            .path = "aikit",
+        },
         // See `zig fetch --save <url>` for a command-line interface for adding dependencies.
         //.example = .{
         //    // When updating this field to a new URL, be sure to delete the corresponding

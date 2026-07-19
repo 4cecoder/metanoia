@@ -16,6 +16,21 @@ pub fn build(b: *std.Build) void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
+
+    // Native TTS backend (aikit/qwentts.cpp). aikit's own build.zig defaults
+    // its "qwen-build-dir" option to "../vendor/qwentts.cpp/build", a
+    // `.cwd_relative` path meant to be resolved from *aikit's own* directory
+    // (i.e. running `zig build` from within aikit/). Here we're pulling
+    // aikit in as a dependency of metanoia's root build, so `zig build` is
+    // invoked from the metanoia repo root instead — the same relative
+    // default would resolve one directory too high. Override it to the
+    // correct path from *this* root: vendor/qwentts.cpp/build (no "..").
+    const aikit_dep = b.dependency("aikit", .{
+        .target = target,
+        .optimize = optimize,
+        .@"qwen-build-dir" = @as([]const u8, "vendor/qwentts.cpp/build"),
+    });
+    const aikit_mod = aikit_dep.module("aikit");
     // It's also possible to define more custom flags to toggle optional features
     // of this build script using `b.option()`. All defined flags (including
     // target and optimize options) will be listed when running `zig build --help`
@@ -39,6 +54,11 @@ pub fn build(b: *std.Build) void {
         // Later on we'll use this module as the root module of a test executable
         // which requires us to specify a target.
         .target = target,
+        // src/tts_client.zig (reachable from src/root.zig) imports "aikit"
+        // for the native TTS backend.
+        .imports = &.{
+            .{ .name = "aikit", .module = aikit_mod },
+        },
     });
 
     // Kit module — reusable, decoupled UI/UX component library.
@@ -86,6 +106,10 @@ pub fn build(b: *std.Build) void {
                 // importing modules from different packages).
                 .{ .name = "metanoia", .module = mod },
                 .{ .name = "kit", .module = kit_mod },
+                // src/main.zig also imports src/tts_client.zig directly
+                // (relative import, separate from the "metanoia" module
+                // above), so it needs its own "aikit" import too.
+                .{ .name = "aikit", .module = aikit_mod },
             },
         }),
     });
@@ -195,6 +219,29 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_kit_tests.step);
     test_step.dependOn(&run_build_tests.step);
     test_step.dependOn(&run_exe_tests.step);
+
+    // Real end-to-end native-TTS test, separate from the default `test`
+    // step: it needs the ~1.3GB GGUF weights under vendor/qwentts.cpp/models
+    // (see src/native_tts_test.zig), which normal CI and most local
+    // checkouts won't have. It self-skips (error.SkipZigTest) when the
+    // weights aren't present, but keeping it out of the default `test` step
+    // still avoids paying its (real model load + real synthesis) cost on
+    // every routine `zig build test` for contributors who do have them.
+    const native_tts_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/native_tts_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "aikit", .module = aikit_mod },
+        },
+    });
+    const native_tts_test = b.addTest(.{ .root_module = native_tts_test_mod });
+    native_tts_test.root_module.linkSystemLibrary(gtk_lib, .{});
+    native_tts_test.root_module.linkSystemLibrary("sqlite3", .{});
+    native_tts_test.root_module.link_libc = true;
+    const run_native_tts_test = b.addRunArtifact(native_tts_test);
+    const native_tts_test_step = b.step("test-native-tts", "Run the real native-TTS end-to-end test (needs local GGUF weights)");
+    native_tts_test_step.dependOn(&run_native_tts_test.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
