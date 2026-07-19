@@ -4,16 +4,23 @@ from bs4 import BeautifulSoup
 import sys
 import time
 
+try:
+    from tools.scraper_common import fetch_with_retry
+except ImportError:
+    from scraper_common import fetch_with_retry
+
 def scrape_strongs(strongs_num, language="greek"):
     # BibleHub format: https://biblehub.com/greek/1.htm or /hebrew/1.htm
     url = f"https://biblehub.com/{language}/{strongs_num}.htm"
     print(f"Fetching Dictionary Entry: {url}...")
-    
+
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
-        response = requests.get(url, headers=headers)
+        response = fetch_with_retry(url, headers=headers, timeout=15)
         if response.status_code != 200: return None
-    except: return None
+    except requests.RequestException as e:
+        print(f"Failed to fetch {url}: {e}")
+        return None
 
     soup = BeautifulSoup(response.text, "html.parser")
     
@@ -50,12 +57,28 @@ def scrape_strongs(strongs_num, language="greek"):
         "usage": usage
     }
 
-def cache_lexicon_from_db():
+def cache_lexicon_from_db(book=None, chapter=None):
+    """Backfill the lexicon table with Strong's-number entries referenced by
+    the interlinear table but not yet cached.
+
+    With no arguments, scans the whole interlinear table (maintenance/standalone
+    run, e.g. `python tools/lexicon_scraper.py`). Pass `book`/`chapter` to
+    scope the scan to just that chapter's Strong's numbers -- e.g. after a
+    single-chapter interlinear scrape, so a single verse lookup doesn't pay
+    for a full-database backfill pass.
+    """
     conn = sqlite3.connect("data/bible.db")
     cursor = conn.cursor()
-    
-    # Find all unique Strong's numbers in our interlinear table
-    cursor.execute("SELECT DISTINCT strongs FROM interlinear WHERE strongs != ''")
+
+    if book is not None and chapter is not None:
+        # Scoped: only Strong's numbers introduced by this one chapter.
+        cursor.execute(
+            "SELECT DISTINCT strongs FROM interlinear WHERE strongs != '' AND book = ? AND chapter = ?",
+            (book, chapter),
+        )
+    else:
+        # Whole-database backfill.
+        cursor.execute("SELECT DISTINCT strongs FROM interlinear WHERE strongs != ''")
     strongs_list = [row[0] for row in cursor.fetchall()]
     
     # Prioritize Greek (G) then Hebrew (H)
@@ -82,5 +105,21 @@ def cache_lexicon_from_db():
 
     conn.close()
 
+
+def _parse_args(argv):
+    """Returns (book, chapter) from CLI args, or (None, None) for the
+    whole-database mode. Split out from __main__ so it's unit-testable
+    without executing the module as a script."""
+    if len(argv) >= 3:
+        return argv[1], int(argv[2])
+    return None, None
+
+
 if __name__ == "__main__":
-    cache_lexicon_from_db()
+    # Optional `book chapter` args scope the backfill to one chapter; with no
+    # args, falls back to the whole-database maintenance scan.
+    _book, _chapter = _parse_args(sys.argv)
+    if _book is not None:
+        cache_lexicon_from_db(_book, _chapter)
+    else:
+        cache_lexicon_from_db()

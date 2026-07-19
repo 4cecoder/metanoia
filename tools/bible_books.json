@@ -1,0 +1,338 @@
+[
+  {
+    "name": "Genesis",
+    "testament": "Old"
+  },
+  {
+    "name": "Exodus",
+    "testament": "Old"
+  },
+  {
+    "name": "Leviticus",
+    "testament": "Old"
+  },
+  {
+    "name": "Numbers",
+    "testament": "Old"
+  },
+  {
+    "name": "Deuteronomy",
+    "testament": "Old"
+  },
+  {
+    "name": "Joshua",
+    "testament": "Old"
+  },
+  {
+    "name": "Judges",
+    "testament": "Old"
+  },
+  {
+    "name": "Ruth",
+    "testament": "Old"
+  },
+  {
+    "name": "1Samuel",
+    "testament": "Old"
+  },
+  {
+    "name": "2Samuel",
+    "testament": "Old"
+  },
+  {
+    "name": "1Kings",
+    "testament": "Old"
+  },
+  {
+    "name": "2Kings",
+    "testament": "Old"
+  },
+  {
+    "name": "1Chronicles",
+    "testament": "Old"
+  },
+  {
+    "name": "2Chronicles",
+    "testament": "Old"
+  },
+  {
+    "name": "Ezra",
+    "testament": "Old"
+  },
+  {
+    "name": "Nehemiah",
+    "testament": "Old"
+  },
+  {
+    "name": "Tobit",
+    "testament": "Old"
+  },
+  {
+    "name": "Judith",
+    "testament": "Old"
+  },
+  {
+    "name": "Esther",
+    "testament": "Old"
+  },
+  {
+    "name": "1Meqabyan",
+    "testament": "Old"
+  },
+  {
+    "name": "2Meqabyan",
+    "testament": "Old"
+  },
+  {
+    "name": "3Meqabyan",
+    "testament": "Old"
+  },
+  {
+    "name": "Job",
+    "testament": "Old"
+  },
+  {
+    "name": "Psalms",
+    "testament": "Old"
+  },
+  {
+    "name": "Proverbs",
+    "testament": "Old"
+  },
+  {
+    "name": "Tegsas",
+    "testament": "Old"
+  },
+  {
+    "name": "Wisdom",
+    "testament": "Old"
+  },
+  {
+    "name": "Ecclesiastes",
+    "testament": "Old"
+  },
+  {
+    "name": "SongofSolomon",
+    "testament": "Old"
+  },
+  {
+    "name": "Sirach",
+    "testament": "Old"
+  },
+  {
+    "name": "Isaiah",
+    "testament": "Old"
+  },
+  {
+    "name": "Jeremiah",
+    "testament": "Old"
+  },
+  {
+    "name": "Lamentations",
+    "testament": "Old"
+  },
+  {
+    "name": "Ezekiel",
+    "testament": "Old"
+  },
+  {
+    "name": "Daniel",
+    "testament": "Old"
+  },
+  {
+    "name": "Hosea",
+    "testament": "Old"
+  },
+  {
+    "name": "Amos",
+    "testament": "Old"
+  },
+  {
+    "name": "Micah",
+    "testament": "Old"
+  },
+  {
+    "name": "Joel",
+    "testament": "Old"
+  },
+  {
+    "name": "Obadiah",
+    "testament": "Old"
+  },
+  {
+    "name": "Jonah",
+    "testament": "Old"
+  },
+  {
+    "name": "Nahum",
+    "testament": "Old"
+  },
+  {
+    "name": "Habakkuk",
+    "testament": "Old"
+  },
+  {
+    "name": "Zephaniah",
+    "testament": "Old"
+  },
+  {
+    "name": "Haggai",
+    "testament": "Old"
+  },
+  {
+    "name": "Zechariah",
+    "testament": "Old"
+  },
+  {
+    "name": "Malachi",
+    "testament": "Old"
+  },
+  {
+    "name": "Enoch",
+    "testament": "Old"
+  },
+  {
+    "name": "Jubilees",
+    "testament": "Old"
+  },
+  {
+    "name": "Matthew",
+    "testament": "New"
+  },
+  {
+    "name": "Mark",
+    "testament": "New"
+  },
+  {
+    "name": "Luke",
+    "testament": "New"
+  },
+  {
+    "name": "John",
+    "testament": "New"
+  },
+  {
+    "name": "Acts",
+    "testament": "New"
+  },
+  {
+    "name": "Romans",
+    "testament": "New"
+  },
+  {
+    "name": "1Corinthians",
+    "testament": "New"
+  },
+  {
+    "name": "2Corinthians",
+    "testament": "New"
+  },
+  {
+    "name": "Galatians",
+    "testament": "New"
+  },
+  {
+    "name": "Ephesians",
+    "testament": "New"
+  },
+  {
+    "name": "Philippians",
+    "testament": "New"
+  },
+  {
+    "name": "Colossians",
+    "testament": "New"
+  },
+  {
+    "name": "1Thessalonians",
+    "testament": "New"
+  },
+  {
+    "name": "2Thessalonians",
+    "testament": "New"
+  },
+  {
+    "name": "1Timothy",
+    "testament": "New"
+  },
+  {
+    "name": "2Timothy",
+    "testament": "New"
+  },
+  {
+    "name": "Titus",
+    "testament": "New"
+  },
+  {
+    "name": "Philemon",
+    "testament": "New"
+  },
+  {
+    "name": "Hebrews",
+    "testament": "New"
+  },
+  {
+    "name": "1Peter",
+    "testament": "New"
+  },
+  {
+    "name": "2Peter",
+    "testament": "New"
+  },
+  {
+    "name": "1John",
+    "testament": "New"
+  },
+  {
+    "name": "2John",
+    "testament": "New"
+  },
+  {
+    "name": "3John",
+    "testament": "New"
+  },
+  {
+    "name": "James",
+    "testament": "New"
+  },
+  {
+    "name": "Jude",
+    "testament": "New"
+  },
+  {
+    "name": "Revelation",
+    "testament": "New"
+  },
+  {
+    "name": "SirateTsion",
+    "testament": "EthiopiaExpanded"
+  },
+  {
+    "name": "Tizaz",
+    "testament": "EthiopiaExpanded"
+  },
+  {
+    "name": "Gitsiw",
+    "testament": "EthiopiaExpanded"
+  },
+  {
+    "name": "Abtilis",
+    "testament": "EthiopiaExpanded"
+  },
+  {
+    "name": "1Dominos",
+    "testament": "EthiopiaExpanded"
+  },
+  {
+    "name": "2Dominos",
+    "testament": "EthiopiaExpanded"
+  },
+  {
+    "name": "Qalementos",
+    "testament": "EthiopiaExpanded"
+  },
+  {
+    "name": "Didasqalia",
+    "testament": "EthiopiaExpanded"
+  }
+]
