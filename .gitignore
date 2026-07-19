@@ -33,6 +33,9 @@ uploads/
 # ML models (large, not in git)
 models/
 mobile/models/
+# ...but aikit/src/models/ is Zig source code (Synthesizer implementations),
+# not model weights — don't let the broad models/ rule above swallow it.
+!aikit/src/models/
 
 # Data & databases
 data/*.db
@@ -81,3 +84,16 @@ build/
 # Scratch files (gitignored for personal experimentation)
 check_allocator.zig
 check_child_id.zig
+
+# Native TTS build dependency (aikit/backend/ggml.zig) — a full clone of
+# ServeurpersoCom/qwentts.cpp (its own nested .git) plus ~1.2GB of GGUF
+# model weights. Never belongs in this repo's git history. Built locally
+# per aikit/README.md's "Native backend" instructions; src/tts_client.zig's
+# native path expects it at vendor/qwentts.cpp/{build,models}/ relative to
+# the repo root.
+vendor/
+
+# aikit/examples/tommy_test.zig's reference clip — small (703KB), needed
+# for `zig build run-example` to actually run, same reasoning as the main
+# repo's data/*.wav exceptions above.
+!aikit/testdata/tommy.wav

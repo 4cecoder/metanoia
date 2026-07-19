@@ -1,0 +1,16 @@
+.{
+    // Standalone package name — importable from any Zig 0.17 project via
+    // `zig fetch --save` (path or git URL), not just from within metanoia.
+    // See README.md for the reusability design rationale.
+    .name = .aikit,
+    .version = "0.1.0",
+    .fingerprint = 0x838b506325adb1f0,
+    .minimum_zig_version = "0.16.0-dev.2653+784e89fd4",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "README.md",
+    },
+}
