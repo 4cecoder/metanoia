@@ -90,7 +90,7 @@ pub const LLMEngine = struct {
                     s.cb.onStep("Step 2/4: Creating Literary Context (Summarizing)...");
                     allocator.free(summary_context);
 
-                    const chapter_verses = bible.get_chapter_verses(allocator, s.engine.db.?, s.book, s.chapter) catch null;
+                    const chapter_verses = bible.get_chapter_verses(allocator, s.engine.db.?, s.book, s.chapter, bible.DEFAULT_VERSION) catch null;
                     if (chapter_verses) |cv| {
                         defer {
                             for (cv.items) |v| allocator.free(v);

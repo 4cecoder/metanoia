@@ -359,11 +359,21 @@ pub const SearchResult = struct {
     text: ?[]const u8 = null,
 };
 
-pub fn get_chapter_verses(allocator: std.mem.Allocator, db: *sqlite3, book: []const u8, chapter: i32) !std.ArrayListUnmanaged([]const u8) {
+// TODO: `verses` has a unique index on (book, chapter, verse, version)
+// because multiple translations were intended, but there's no config-level
+// "currently selected translation" concept anywhere in the app yet (checked
+// config.zig and every other call site — nothing tracks it). Until that
+// exists, callers that don't care can omit `version` and get this default;
+// the real fix is threading a user-selected translation through from
+// config/UI once a second version is ever actually loaded into
+// data/bible.db (today it only ships NKJV).
+pub const DEFAULT_VERSION = "NKJV";
+
+pub fn get_chapter_verses(allocator: std.mem.Allocator, db: *sqlite3, book: []const u8, chapter: i32, version: []const u8) !std.ArrayListUnmanaged([]const u8) {
     lockDb();
     defer unlockDb();
     var list = std.ArrayListUnmanaged([]const u8).empty;
-    const sql = try std.fmt.allocPrintSentinel(allocator, "SELECT text FROM verses WHERE book='{s}' AND chapter={d} ORDER BY verse ASC", .{ book, chapter }, 0);
+    const sql = try std.fmt.allocPrintSentinel(allocator, "SELECT text FROM verses WHERE book='{s}' AND chapter={d} AND version='{s}' ORDER BY verse ASC", .{ book, chapter, version }, 0);
     defer allocator.free(sql);
 
     var stmt: ?*sqlite3_stmt = null;
@@ -700,7 +710,7 @@ test "get_chapter_verses: returns verses in verse order" {
         _ = sqlite3_finalize(stmt.?);
     }
 
-    var verses = try get_chapter_verses(std.testing.allocator, db, "John", 3);
+    var verses = try get_chapter_verses(std.testing.allocator, db, "John", 3, DEFAULT_VERSION);
     defer {
         for (verses.items) |v| std.testing.allocator.free(v);
         verses.deinit(std.testing.allocator);
@@ -708,6 +718,47 @@ test "get_chapter_verses: returns verses in verse order" {
     try std.testing.expectEqual(@as(usize, 2), verses.items.len);
     try std.testing.expect(std.mem.startsWith(u8, verses.items[0], "For God so loved"));
     try std.testing.expect(std.mem.startsWith(u8, verses.items[1], "For God did not send"));
+}
+
+test "get_chapter_verses: filters by version instead of mixing translations" {
+    // Regression test for the bug documented on DEFAULT_VERSION above: the
+    // query used to have no `WHERE version=...` clause at all, so once a
+    // second translation existed for the same book/chapter/verse, results
+    // would silently mix both versions together (verses.text has no
+    // guaranteed order across two rows with the same verse number).
+    const db = openTestDb();
+    defer _ = sqlite3_close(db);
+
+    const inserts = [_][*:0]const u8{
+        "INSERT INTO verses (book, chapter, verse, text, version) VALUES ('John', 3, 16, 'For God so loved the world.', 'NKJV')",
+        "INSERT INTO verses (book, chapter, verse, text, version) VALUES ('John', 3, 17, 'For God did not send His Son to condemn.', 'NKJV')",
+        "INSERT INTO verses (book, chapter, verse, text, version) VALUES ('John', 3, 16, 'For God so loved the kosmos.', 'ESV')",
+        "INSERT INTO verses (book, chapter, verse, text, version) VALUES ('John', 3, 17, 'For God did not send the Son to judge.', 'ESV')",
+    };
+    for (inserts) |q| {
+        var stmt: ?*sqlite3_stmt = null;
+        try std.testing.expectEqual(SQLITE_OK, sqlite3_prepare_v2(db, q, -1, @ptrCast(&stmt), null));
+        _ = sqlite3_step(stmt.?);
+        _ = sqlite3_finalize(stmt.?);
+    }
+
+    var nkjv = try get_chapter_verses(std.testing.allocator, db, "John", 3, "NKJV");
+    defer {
+        for (nkjv.items) |v| std.testing.allocator.free(v);
+        nkjv.deinit(std.testing.allocator);
+    }
+    try std.testing.expectEqual(@as(usize, 2), nkjv.items.len);
+    try std.testing.expect(std.mem.startsWith(u8, nkjv.items[0], "For God so loved the world"));
+    try std.testing.expect(std.mem.startsWith(u8, nkjv.items[1], "For God did not send His Son"));
+
+    var esv = try get_chapter_verses(std.testing.allocator, db, "John", 3, "ESV");
+    defer {
+        for (esv.items) |v| std.testing.allocator.free(v);
+        esv.deinit(std.testing.allocator);
+    }
+    try std.testing.expectEqual(@as(usize, 2), esv.items.len);
+    try std.testing.expect(std.mem.startsWith(u8, esv.items[0], "For God so loved the kosmos"));
+    try std.testing.expect(std.mem.startsWith(u8, esv.items[1], "For God did not send the Son"));
 }
 
 test "get_verse_lexicon_context: this is what llm_engine checks to decide whether to (re-)scrape" {

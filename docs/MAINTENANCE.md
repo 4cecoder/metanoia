@@ -247,18 +247,40 @@ live rather than just inferred from `data/bible.db`'s existing rows.
 
 ## Quick-wins backlog (noticed, not fixed — scoped out to avoid creep)
 
-- **`get_chapter_verses` ignores the `version` column.** The `verses` table
-  has a unique index on `(book, chapter, verse, version)` implying multiple
-  translations were intended, but the query
-  (`bible_db.zig:get_chapter_verses`) has no `WHERE version=...` — if more
-  than one translation is ever loaded, results could mix/duplicate. Not
-  fixed because the intended default-version behavior isn't specified
-  anywhere; needs a product decision, not a guess.
-- **`bookmarks`, `vocab_list`, `versions` tables** exist in the shipped
-  `data/bible.db` schema but are read/written by no Zig or Python code
-  found this session. Either dead schema from an earlier design or
-  planned-but-unbuilt features — worth a decision either way rather than
-  silently carrying unused tables indefinitely.
+- ~~`get_chapter_verses` ignores the `version` column.~~ — **fixed
+  2026-07-20**: the query now takes an explicit `version: []const u8`
+  parameter and filters `WHERE version='{s}'` (`bible_db.zig`). There's
+  still no app-wide "currently selected translation" concept (checked
+  `config.zig` and every call site — nothing tracks one), so a
+  `bible.DEFAULT_VERSION` constant (`"NKJV"`) was added as the minimal
+  stand-in and is what `llm_engine.zig`'s one call site passes today. A
+  regression test (`"get_chapter_verses: filters by version instead of
+  mixing translations"`) inserts two versions of the same book/chapter/verse
+  and asserts each `version` argument returns only its own rows. The real
+  follow-up, if a second translation is ever actually loaded into
+  `data/bible.db`, is threading a user-selected translation through from
+  config/UI instead of the hardcoded default — that's a product decision,
+  not something this fix guessed at.
+- **`bookmarks`, `vocab_list`, `versions` tables** — **documented, left
+  alone, 2026-07-20**: re-confirmed via `grep -rn` for these three table
+  names across `src/*.zig` (including subdirectories) and `tools/*.py` —
+  zero hits in either language; nothing reads or writes them. Decision:
+  leave the schema as-is (option (a) from the original note), not drop it.
+  Reasoning — `bookmarks` (per-verse notes with a `note` column) and
+  `vocab_list` (a personal Strong's/word list keyed by language) read as
+  planned-but-unbuilt personal-study features that overlap conceptually
+  with the `notes`/`lexical_favorites` tables that *did* get built, so
+  they're plausible future work rather than leftover cruft — worth keeping
+  around rather than a destructive `DROP TABLE` against a schema shipped
+  inside a tracked, in-git production database file with no migration
+  tooling in this codebase. `versions` (`slug`/`name` columns) looks like
+  it was meant to be the lookup table for exactly the multi-translation
+  feature `get_chapter_verses`'s `version` column above anticipates, so the
+  two backlog items are likely related: if a second Bible translation is
+  ever added, populating `versions` and building real UI/config around it
+  is the point to revisit whether these three tables get used or removed.
+  No code or migration was written for this item — it's a documentation-only
+  resolution per the original scope.
 - **Deuterocanonical/Ethiopian OT books likely have no BibleHub page at
   all.** Even with the language-prefix fix, scraping Tobit/Judith/Sirach/
   Enoch/Jubilees/etc. will probably still return zero interlinear rows
