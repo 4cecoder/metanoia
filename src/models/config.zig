@@ -18,6 +18,20 @@ test "Config.parseJson loads tts_backend: native from JSON" {
     try std.testing.expectEqualStrings("native", cfg.tts_backend);
 }
 
+test "Config.parseJson defaults llm_backend to remote when key is absent" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const cfg = Config.parseJson(arena.allocator(), "{}");
+    try std.testing.expectEqualStrings("remote", cfg.llm_backend);
+}
+
+test "Config.parseJson loads llm_backend: native from JSON" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const cfg = Config.parseJson(arena.allocator(), "{\"llm_backend\": \"native\"}");
+    try std.testing.expectEqualStrings("native", cfg.llm_backend);
+}
+
 pub const Config = struct {
     english_font_size: i32 = 24,
     interlinear_font_size: i32 = 26,
@@ -44,6 +58,16 @@ pub const Config = struct {
     /// data/voices.json's per-voice "mode" field. Defaults to "remote" so
     /// existing configs/users without this key see no behavior change.
     tts_backend: []const u8 = "",
+
+    /// Selects which LLM implementation `llm_client.zig`'s `generate_response`
+    /// uses: "remote" (default — curl to a locally-running Ollama server via
+    /// `ollama_client.zig`, unchanged existing behavior) or "native"
+    /// (in-process `aikit.models.qwen2_mlx` MLX backend). Same
+    /// "native"|"remote" precedent as `tts_backend` above — deliberately a
+    /// distinct field, not reused, since a user may want e.g. native TTS with
+    /// remote LLM or vice versa. Defaults to "remote" so existing configs/
+    /// users without this key see no behavior change.
+    llm_backend: []const u8 = "",
 
     fn loadString(allocator: std.mem.Allocator, src: []const u8) []const u8 {
         return allocator.dupe(u8, src) catch @panic("OOM");
@@ -76,6 +100,7 @@ pub const Config = struct {
             const tts_server_url = "http://127.0.0.1:8000";
             const llm_server_url = "http://127.0.0.1:11434";
             const tts_backend = "remote";
+            const llm_backend = "remote";
         };
         var self = Config{
             .selected_voice = loadString(allocator, defaults.selected_voice),
@@ -85,6 +110,7 @@ pub const Config = struct {
             .tts_server_url = loadString(allocator, defaults.tts_server_url),
             .llm_server_url = loadString(allocator, defaults.llm_server_url),
             .tts_backend = loadString(allocator, defaults.tts_backend),
+            .llm_backend = loadString(allocator, defaults.llm_backend),
         };
 
         const parsed = std.json.parseFromSliceLeaky(std.json.Value, allocator, content, .{}) catch return self;
@@ -139,6 +165,10 @@ pub const Config = struct {
             allocator.free(self.tts_backend);
             self.tts_backend = loadString(allocator, v.string);
         }
+        if (parsed.object.get("llm_backend")) |v| {
+            allocator.free(self.llm_backend);
+            self.llm_backend = loadString(allocator, v.string);
+        }
 
         return self;
     }
@@ -151,6 +181,7 @@ pub const Config = struct {
         allocator.free(self.tts_server_url);
         allocator.free(self.llm_server_url);
         allocator.free(self.tts_backend);
+        allocator.free(self.llm_backend);
     }
 
     pub fn save(self: Config, io: anytype) void {

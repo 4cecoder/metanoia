@@ -243,6 +243,26 @@ pub fn build(b: *std.Build) void {
     const native_tts_test_step = b.step("test-native-tts", "Run the real native-TTS end-to-end test (needs local GGUF weights)");
     native_tts_test_step.dependOn(&run_native_tts_test.step);
 
+    // Real end-to-end native-LLM test, same reasoning/pattern as
+    // test-native-tts above: needs the ~265MB MLX checkpoint at
+    // vendor/llm/qwen2.5-0.5b-instruct-4bit/ (see src/llm_client.zig's
+    // native_model_dir), which normal CI and most local checkouts won't
+    // have — kept out of the default `test` step, self-skips via
+    // error.SkipZigTest when the weights aren't present.
+    const native_llm_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/native_llm_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "aikit", .module = aikit_mod },
+        },
+    });
+    const native_llm_test = b.addTest(.{ .root_module = native_llm_test_mod });
+    native_llm_test.root_module.link_libc = true;
+    const run_native_llm_test = b.addRunArtifact(native_llm_test);
+    const native_llm_test_step = b.step("test-native-llm", "Run the real native-LLM end-to-end test (needs local MLX checkpoint)");
+    native_llm_test_step.dependOn(&run_native_llm_test.step);
+
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
     // The Zig build system is entirely implemented in userland, which means

@@ -1,6 +1,6 @@
 const std = @import("std");
 const gtk = @import("../gtk.zig");
-const ollama = @import("../ollama_client.zig");
+const llm_client = @import("../llm_client.zig");
 const bible = @import("../bible_db.zig");
 const scraper = @import("../scraper_client.zig");
 
@@ -97,7 +97,7 @@ pub const LLMEngine = struct {
                         ) catch "No summary available.";
                         defer if (!std.mem.eql(u8, summary_prompt, "No summary available.")) allocator.free(summary_prompt);
 
-                        summary_context = ollama.generate_response(allocator, s.engine.io, summary_prompt) catch (allocator.dupe(u8, "No summary available.") catch "");
+                        summary_context = llm_client.generate_response(allocator, s.engine.io, summary_prompt) catch (allocator.dupe(u8, "No summary available.") catch "");
                         if (summary_context.len > 0 and !std.mem.eql(u8, summary_context, "No summary available.")) {
                             bible.save_chapter_summary(s.engine.db.?, s.book, s.chapter, summary_context) catch {};
                         }
@@ -125,7 +125,7 @@ pub const LLMEngine = struct {
                 ) catch return null;
                 defer allocator.free(prompt);
 
-                const response = ollama.generate_response(allocator, s.engine.io, prompt) catch |err| {
+                const response = llm_client.generate_response(allocator, s.engine.io, prompt) catch |err| {
                     const err_msg = std.fmt.allocPrint(allocator, "LLM Error: {any}", .{err}) catch return null;
                     defer allocator.free(err_msg);
                     s.cb.onError(err_msg);
