@@ -47,6 +47,13 @@ const ResultData = struct {
 pub const Search = struct {
     window: ?*ffi.GtkWindow,
     entry: ?*ffi.GtkWidget,
+    /// Clear this with `ffi.gtk_list_box_remove_all()`, never a manual
+    /// `gtk_widget_get_first_child`/`gtk_widget_unparent` loop — that
+    /// bypasses GtkListBox's internal row bookkeeping (it doesn't know a
+    /// generic `unparent` call removed one of its rows) and previously
+    /// caused a real, reproducible SEGV in `_gtk_list_box_measure_height_for_width`
+    /// after the second search (assertion cascade: `gtk_widget_insert_after`
+    /// then `gtk_widget_get_visible` on stale rows, then the crash).
     results_list: ?*ffi.GtkWidget,
     allocator: std.mem.Allocator,
     callbacks: SearchCallbacks,
@@ -119,9 +126,7 @@ pub const Search = struct {
                 _ = ffi.gtk_widget_grab_focus(e);
             }
             if (self.results_list) |list| {
-                while (ffi.gtk_widget_get_first_child(list)) |child| {
-                    ffi.gtk_widget_unparent(child);
-                }
+                ffi.gtk_list_box_remove_all(list);
             }
         }
     }
@@ -149,9 +154,7 @@ pub const Search = struct {
         }
 
         if (self.results_list) |list| {
-            while (ffi.gtk_widget_get_first_child(list)) |child| {
-                ffi.gtk_widget_unparent(child);
-            }
+            ffi.gtk_list_box_remove_all(list);
         }
 
         var results = std.ArrayListUnmanaged(SearchResult).empty;
@@ -217,9 +220,7 @@ pub const Search = struct {
             self.performSearch(span);
         } else if (span.len == 0) {
             if (self.results_list) |list| {
-                while (ffi.gtk_widget_get_first_child(list)) |child| {
-                    ffi.gtk_widget_unparent(child);
-                }
+                ffi.gtk_list_box_remove_all(list);
             }
         }
     }
