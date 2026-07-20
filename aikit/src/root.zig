@@ -7,8 +7,18 @@ const builtin = @import("builtin");
 
 pub const tts = @import("capabilities/tts.zig");
 
+/// Backend-agnostic byte-level BPE tokenizer (HuggingFace `tokenizer.json`
+/// format — GPT-2 family, Qwen2/Qwen2.5 included). See src/tokenizer.zig's
+/// doc comment for why this lives at the top level instead of under
+/// backend/ or models/.
+pub const tokenizer = @import("tokenizer.zig");
+
 pub const models = struct {
     pub const qwen3_tts = @import("models/qwen3_tts.zig");
+    /// Native Zig forward pass for Qwen2(.5)-family causal LMs on top of
+    /// `backend.mlx` — macOS only (see backend/mlx.zig's comptime guard);
+    /// `void` fallback elsewhere keeps this struct's shape stable.
+    pub const qwen2_mlx = if (builtin.os.tag == .macos) @import("models/qwen2_mlx.zig") else void;
 };
 
 /// Raw backend FFI layers. Most callers should go through `models.*`
@@ -25,7 +35,11 @@ pub const backend = struct {
 
 test {
     _ = tts;
+    _ = tokenizer;
     _ = models.qwen3_tts;
     _ = backend.ggml;
-    if (builtin.os.tag == .macos) _ = backend.mlx;
+    if (builtin.os.tag == .macos) {
+        _ = backend.mlx;
+        _ = models.qwen2_mlx;
+    }
 }

@@ -90,6 +90,36 @@ pub fn build(b: *std.Build) void {
         const run_llm_spike_step = b.step("run-llm-spike", "Build and run examples/llm_spike.zig");
         run_llm_spike_step.dependOn(&run_llm_spike.step);
         b.installArtifact(llm_spike_exe);
+
+        // Phase 1: the real per-layer Qwen2 forward pass (src/models/qwen2_mlx.zig),
+        // exercised end to end against a real checkpoint dir (tokenizer.json +
+        // model.safetensors). See examples/llm_forward_pass.zig.
+        const forward_model_dir = b.option(
+            []const u8,
+            "llm-model-dir",
+            "Directory containing tokenizer.json + model.safetensors, for examples/llm_forward_pass.zig",
+        ) orelse "";
+        const forward_options = b.addOptions();
+        forward_options.addOption([]const u8, "model_dir", forward_model_dir);
+
+        const llm_forward_exe = b.addExecutable(.{
+            .name = "llm_forward_pass",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("examples/llm_forward_pass.zig"),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "aikit", .module = mod },
+                },
+            }),
+        });
+        llm_forward_exe.root_module.addOptions("build_options", forward_options);
+        linkMlx(llm_forward_exe.root_module);
+        const run_llm_forward = b.addRunArtifact(llm_forward_exe);
+        run_llm_forward.step.dependOn(b.getInstallStep());
+        const run_llm_forward_step = b.step("run-llm-forward-pass", "Build and run examples/llm_forward_pass.zig");
+        run_llm_forward_step.dependOn(&run_llm_forward.step);
+        b.installArtifact(llm_forward_exe);
     }
 }
 
