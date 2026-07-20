@@ -7,6 +7,11 @@ const builtin = @import("builtin");
 
 pub const tts = @import("capabilities/tts.zig");
 
+/// Backend-agnostic text-in/text-out LLM interface (`Generator`). See
+/// `models.qwen2_mlx.Qwen2LLM` for the (macOS/MLX-only, for now)
+/// implementation.
+pub const llm = @import("capabilities/llm.zig");
+
 /// Backend-agnostic byte-level BPE tokenizer (HuggingFace `tokenizer.json`
 /// format — GPT-2 family, Qwen2/Qwen2.5 included). See src/tokenizer.zig's
 /// doc comment for why this lives at the top level instead of under
@@ -35,6 +40,7 @@ pub const backend = struct {
 
 test {
     _ = tts;
+    _ = llm;
     _ = tokenizer;
     _ = models.qwen3_tts;
     _ = backend.ggml;

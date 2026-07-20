@@ -120,6 +120,33 @@ pub fn build(b: *std.Build) void {
         const run_llm_forward_step = b.step("run-llm-forward-pass", "Build and run examples/llm_forward_pass.zig");
         run_llm_forward_step.dependOn(&run_llm_forward.step);
         b.installArtifact(llm_forward_exe);
+
+        // Phase 2: KV-cache-based multi-token autoregressive generation
+        // (Model.generate), exercised end to end against a real checkpoint
+        // dir and checked against the same Python mlx_lm reference oracle
+        // as the forward-pass example. Reuses the same "llm-model-dir"
+        // option as run-llm-forward-pass above.
+        const generate_options = b.addOptions();
+        generate_options.addOption([]const u8, "model_dir", forward_model_dir);
+
+        const llm_generate_exe = b.addExecutable(.{
+            .name = "llm_generate",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("examples/llm_generate.zig"),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "aikit", .module = mod },
+                },
+            }),
+        });
+        llm_generate_exe.root_module.addOptions("build_options", generate_options);
+        linkMlx(llm_generate_exe.root_module);
+        const run_llm_generate = b.addRunArtifact(llm_generate_exe);
+        run_llm_generate.step.dependOn(b.getInstallStep());
+        const run_llm_generate_step = b.step("run-llm-generate", "Build and run examples/llm_generate.zig (KV-cache multi-token generation)");
+        run_llm_generate_step.dependOn(&run_llm_generate.step);
+        b.installArtifact(llm_generate_exe);
     }
 }
 
