@@ -17,24 +17,47 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    // Native TTS backend (aikit/qwentts.cpp). aikit's own build.zig defaults
-    // its "qwen-build-dir" option to "../vendor/qwentts.cpp/build", a
-    // `.cwd_relative` path meant to be resolved from *aikit's own* directory
-    // (i.e. running `zig build` from within aikit/). Here we're pulling
-    // aikit in as a dependency of metanoia's root build, so `zig build` is
-    // invoked from the metanoia repo root instead — the same relative
-    // default would resolve one directory too high. Override it to the
-    // correct path from *this* root: vendor/qwentts.cpp/build (no "..").
-    const aikit_dep = b.dependency("aikit", .{
-        .target = target,
-        .optimize = optimize,
-        .@"qwen-build-dir" = @as([]const u8, "vendor/qwentts.cpp/build"),
-    });
-    const aikit_mod = aikit_dep.module("aikit");
-    // It's also possible to define more custom flags to toggle optional features
-    // of this build script using `b.option()`. All defined flags (including
-    // target and optimize options) will be listed when running `zig build --help`
-    // in this directory.
+    // Native AI backends (aikit — TTS/LLM/STT) are opt-in, off by default.
+    // aikit unconditionally links against qwentts.cpp (libqwen) for its TTS
+    // backend, and on macOS also mlx-c and (if the STT capability is
+    // reached) whisper.cpp — all real, heavy, locally-built/installed
+    // native dependencies (see aikit/README.md) that a fresh checkout,
+    // and CI (.github/workflows/test.yml), do NOT have. Every native
+    // capability already defaults to "remote"/off at the *runtime config*
+    // level (tts_backend/llm_backend default to "remote" — see
+    // src/tts_client.zig / src/llm_client.zig), but that's meaningless if
+    // the app can't even *compile* without those dependencies present.
+    // This flag is the actual off switch: default false means `zig build`
+    // / `zig build test` work with nothing beyond the README's normal
+    // `brew install zig gtk4 pango cairo glib sqlite3`. Pass
+    // `-Dnative-ai=true` (after building aikit's dependencies per
+    // aikit/README.md) to link the real thing in.
+    const native_ai = b.option(
+        bool,
+        "native-ai",
+        "Link aikit's native TTS/LLM/STT backends (requires qwentts.cpp/mlx-c/whisper-cpp set up locally, see aikit/README.md). Off by default so a fresh checkout builds with nothing beyond gtk4/sqlite3.",
+    ) orelse false;
+
+    const native_ai_opts = b.addOptions();
+    native_ai_opts.addOption(bool, "native_ai", native_ai);
+    const build_options_mod = native_ai_opts.createModule();
+
+    // aikit's own build.zig defaults its "qwen-build-dir" option to
+    // "../vendor/qwentts.cpp/build", a `.cwd_relative` path meant to be
+    // resolved from *aikit's own* directory (i.e. running `zig build` from
+    // within aikit/). Here we're pulling aikit in as a dependency of
+    // metanoia's root build, so `zig build` is invoked from the metanoia
+    // repo root instead — the same relative default would resolve one
+    // directory too high. Override it to the correct path from *this*
+    // root: vendor/qwentts.cpp/build (no "..").
+    const aikit_mod: ?*std.Build.Module = if (native_ai) blk: {
+        const aikit_dep = b.dependency("aikit", .{
+            .target = target,
+            .optimize = optimize,
+            .@"qwen-build-dir" = @as([]const u8, "vendor/qwentts.cpp/build"),
+        });
+        break :blk aikit_dep.module("aikit");
+    } else null;
 
     // This creates a module, which represents a collection of source files alongside
     // some compilation options, such as optimization mode and linked system libraries.
@@ -43,6 +66,16 @@ pub fn build(b: *std.Build) void {
     // to our consumers. We must give it a name because a Zig package can expose
     // multiple modules and consumers will need to be able to specify which
     // module they want to access.
+    // src/tts_client.zig / src/llm_client.zig (reachable from src/root.zig)
+    // import "aikit" and "build_options" for the native backend switch —
+    // "aikit" is only added when native_ai is true (see aikit_mod above);
+    // both files comptime-gate their own `@import("aikit")` on
+    // `build_options.native_ai`, so it's fine for that import to simply not
+    // exist otherwise.
+    var mod_imports = std.ArrayListUnmanaged(std.Build.Module.Import).empty;
+    mod_imports.append(b.allocator, .{ .name = "build_options", .module = build_options_mod }) catch @panic("OOM");
+    if (aikit_mod) |am| mod_imports.append(b.allocator, .{ .name = "aikit", .module = am }) catch @panic("OOM");
+
     const mod = b.addModule("metanoia", .{
         // The root source file is the "entry point" of this module. Users of
         // this module will only be able to access public declarations contained
@@ -54,11 +87,7 @@ pub fn build(b: *std.Build) void {
         // Later on we'll use this module as the root module of a test executable
         // which requires us to specify a target.
         .target = target,
-        // src/tts_client.zig (reachable from src/root.zig) imports "aikit"
-        // for the native TTS backend.
-        .imports = &.{
-            .{ .name = "aikit", .module = aikit_mod },
-        },
+        .imports = mod_imports.items,
     });
 
     // Kit module — reusable, decoupled UI/UX component library.
@@ -92,6 +121,16 @@ pub fn build(b: *std.Build) void {
     //
     // If neither case applies to you, feel free to delete the declaration you
     // don't need and to put everything under a single module.
+    // src/main.zig also imports src/tts_client.zig directly (relative
+    // import, separate from the "metanoia" module above), so it needs its
+    // own "aikit"/"build_options" imports too — same conditional-inclusion
+    // reasoning as mod_imports above.
+    var exe_imports = std.ArrayListUnmanaged(std.Build.Module.Import).empty;
+    exe_imports.append(b.allocator, .{ .name = "metanoia", .module = mod }) catch @panic("OOM");
+    exe_imports.append(b.allocator, .{ .name = "kit", .module = kit_mod }) catch @panic("OOM");
+    exe_imports.append(b.allocator, .{ .name = "build_options", .module = build_options_mod }) catch @panic("OOM");
+    if (aikit_mod) |am| exe_imports.append(b.allocator, .{ .name = "aikit", .module = am }) catch @panic("OOM");
+
     const exe = b.addExecutable(.{
         .name = "metanoia",
         .root_module = b.createModule(.{
@@ -107,19 +146,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             // List of modules available for import in source files part of the
             // root module.
-            .imports = &.{
-                // Here "metanoia" is the name you will use in your source code to
-                // import this module (e.g. `@import("metanoia")`). The name is
-                // repeated because you are allowed to rename your imports, which
-                // can be extremely useful in case of collisions (which can happen
-                // importing modules from different packages).
-                .{ .name = "metanoia", .module = mod },
-                .{ .name = "kit", .module = kit_mod },
-                // src/main.zig also imports src/tts_client.zig directly
-                // (relative import, separate from the "metanoia" module
-                // above), so it needs its own "aikit" import too.
-                .{ .name = "aikit", .module = aikit_mod },
-            },
+            .imports = exe_imports.items,
         }),
     });
     // GTK4 library name differs between platforms:
@@ -229,48 +256,50 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_build_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
-    // Real end-to-end native-TTS test, separate from the default `test`
-    // step: it needs the ~1.3GB GGUF weights under vendor/qwentts.cpp/models
-    // (see src/native_tts_test.zig), which normal CI and most local
-    // checkouts won't have. It self-skips (error.SkipZigTest) when the
-    // weights aren't present, but keeping it out of the default `test` step
-    // still avoids paying its (real model load + real synthesis) cost on
-    // every routine `zig build test` for contributors who do have them.
-    const native_tts_test_mod = b.createModule(.{
-        .root_source_file = b.path("src/native_tts_test.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "aikit", .module = aikit_mod },
-        },
-    });
-    const native_tts_test = b.addTest(.{ .root_module = native_tts_test_mod });
-    native_tts_test.root_module.linkSystemLibrary(gtk_lib, .{});
-    native_tts_test.root_module.linkSystemLibrary("sqlite3", .{});
-    native_tts_test.root_module.link_libc = true;
-    const run_native_tts_test = b.addRunArtifact(native_tts_test);
-    const native_tts_test_step = b.step("test-native-tts", "Run the real native-TTS end-to-end test (needs local GGUF weights)");
-    native_tts_test_step.dependOn(&run_native_tts_test.step);
+    // Real end-to-end native-TTS/native-LLM tests — only meaningful (and
+    // only buildable at all, since they need "aikit") when native_ai is
+    // true. When it's not, `zig build test-native-tts`/`test-native-llm`
+    // simply don't exist as steps ("no step named ..." is a clear enough
+    // signal — pass -Dnative-ai=true to get them). Separate from the
+    // default `test` step even when native_ai is true: they need real
+    // multi-hundred-MB model weights under vendor/ (see
+    // src/native_tts_test.zig / src/native_llm_test.zig for exact paths),
+    // which most checkouts — even native-ai-enabled ones — won't have set
+    // up; they self-skip via error.SkipZigTest when absent, but keeping
+    // them out of the default `test` step avoids paying their real
+    // model-load-and-generate cost on every routine `zig build test` for
+    // contributors who do have the weights.
+    if (native_ai) {
+        var native_test_imports = std.ArrayListUnmanaged(std.Build.Module.Import).empty;
+        native_test_imports.append(b.allocator, .{ .name = "aikit", .module = aikit_mod.? }) catch @panic("OOM");
+        native_test_imports.append(b.allocator, .{ .name = "build_options", .module = build_options_mod }) catch @panic("OOM");
 
-    // Real end-to-end native-LLM test, same reasoning/pattern as
-    // test-native-tts above: needs the ~265MB MLX checkpoint at
-    // vendor/llm/qwen2.5-0.5b-instruct-4bit/ (see src/llm_client.zig's
-    // native_model_dir), which normal CI and most local checkouts won't
-    // have — kept out of the default `test` step, self-skips via
-    // error.SkipZigTest when the weights aren't present.
-    const native_llm_test_mod = b.createModule(.{
-        .root_source_file = b.path("src/native_llm_test.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "aikit", .module = aikit_mod },
-        },
-    });
-    const native_llm_test = b.addTest(.{ .root_module = native_llm_test_mod });
-    native_llm_test.root_module.link_libc = true;
-    const run_native_llm_test = b.addRunArtifact(native_llm_test);
-    const native_llm_test_step = b.step("test-native-llm", "Run the real native-LLM end-to-end test (needs local MLX checkpoint)");
-    native_llm_test_step.dependOn(&run_native_llm_test.step);
+        const native_tts_test_mod = b.createModule(.{
+            .root_source_file = b.path("src/native_tts_test.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = native_test_imports.items,
+        });
+        const native_tts_test = b.addTest(.{ .root_module = native_tts_test_mod });
+        native_tts_test.root_module.linkSystemLibrary(gtk_lib, .{});
+        native_tts_test.root_module.linkSystemLibrary("sqlite3", .{});
+        native_tts_test.root_module.link_libc = true;
+        const run_native_tts_test = b.addRunArtifact(native_tts_test);
+        const native_tts_test_step = b.step("test-native-tts", "Run the real native-TTS end-to-end test (needs local GGUF weights)");
+        native_tts_test_step.dependOn(&run_native_tts_test.step);
+
+        const native_llm_test_mod = b.createModule(.{
+            .root_source_file = b.path("src/native_llm_test.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = native_test_imports.items,
+        });
+        const native_llm_test = b.addTest(.{ .root_module = native_llm_test_mod });
+        native_llm_test.root_module.link_libc = true;
+        const run_native_llm_test = b.addRunArtifact(native_llm_test);
+        const native_llm_test_step = b.step("test-native-llm", "Run the real native-LLM end-to-end test (needs local MLX checkpoint)");
+        native_llm_test_step.dependOn(&run_native_llm_test.step);
+    }
 
     // Just like flags, top level steps are also listed in the `--help` menu.
     //

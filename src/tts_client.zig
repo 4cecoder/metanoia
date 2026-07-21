@@ -1,6 +1,14 @@
 const std = @import("std");
 const gtk = @import("gtk.zig");
-const aikit = @import("aikit");
+// `aikit` (and everything native-backend-related below) is only importable
+// when the app was built with `-Dnative-ai=true` (see root build.zig) —
+// that flag exists so a default `zig build`/`zig build test` (CI included)
+// doesn't require qwentts.cpp/mlx-c/whisper-cpp to be built/installed just
+// to compile. `shouldUseNativeBackend` still defaults to "remote" either
+// way, so this only changes whether the *code path* exists, not runtime
+// behavior for anyone not opting into native mode.
+const build_options = @import("build_options");
+const aikit = if (build_options.native_ai) @import("aikit") else struct {};
 
 pub const TTSRequest = struct {
     text: []const u8,
@@ -90,7 +98,7 @@ pub fn generate_speech(engine: std.Io, text: []const u8, voice: []const u8, spee
     // server/network involved. Branches away entirely before the remote
     // path's request-building/curl logic below, which stays untouched.
     if (shouldUseNativeBackend(tts_backend)) {
-        try generateSpeechNative(engine, allocator, text, voice, out_audio_path);
+        try NativeBackend.generate(engine, allocator, text, voice, out_audio_path);
         return try allocator.dupe(u8, out_audio_path);
     }
 
@@ -155,6 +163,11 @@ pub fn generate_speech(engine: std.Io, text: []const u8, voice: []const u8, spee
 
 // --- Native backend (aikit / qwentts.cpp) -----------------------------
 //
+// Wrapped in a comptime-selected namespace (real implementation only when
+// `-Dnative-ai=true`, a stub otherwise) so this whole section — and its
+// dependency on `aikit`/qwentts.cpp/mlx-c — simply isn't analyzed/linked
+// for a default build. See the `aikit` import's doc comment above.
+//
 // Model weights: expected at vendor/qwentts.cpp/models/*.gguf, relative to
 // the metanoia repo root — same location aikit/examples/tommy_test.zig
 // already downloads them to (via ../vendor/qwentts.cpp/models when run from
@@ -163,156 +176,184 @@ pub fn generate_speech(engine: std.Io, text: []const u8, voice: []const u8, spee
 // metanoia-owned data/ or models/ dir: they're qwentts.cpp's own vendored
 // build+model tree, and duplicating ~1.3GB of weights into a second
 // location would be wasteful with no benefit.
-const native_model_path = "vendor/qwentts.cpp/models/qwen-talker-0.6b-base-Q8_0.gguf";
-const native_codec_path = "vendor/qwentts.cpp/models/qwen-tokenizer-12hz-Q8_0.gguf";
+const NativeBackend = if (build_options.native_ai) struct {
+    const native_model_path = "vendor/qwentts.cpp/models/qwen-talker-0.6b-base-Q8_0.gguf";
+    const native_codec_path = "vendor/qwentts.cpp/models/qwen-tokenizer-12hz-Q8_0.gguf";
 
-// Loaded lazily on first native-backend synthesis and kept for the life of
-// the process — loading is the expensive part (~1.3GB of weights), and
-// generate_speech is called once per verse/regeneration, so reloading per
-// call would be prohibitively slow. `native_synth_mutex` both guards the
-// lazy init and serializes calls into the (Metal/GGML) backend across
-// concurrent callers — src/services/tts_engine.zig can have a lookahead
-// thread and a "regenerate verse" thread both calling generate_speech at
-// once — mirroring tools/metanoia_server's own `gpu_lock = Semaphore(1)`
-// that serializes all generation through the engine.
-var native_synth_mutex: std.Io.Mutex = .init;
-var native_synth: ?aikit.models.qwen3_tts.Qwen3TTS = null;
+    // Loaded lazily on first native-backend synthesis and kept for the life
+    // of the process — loading is the expensive part (~1.3GB of weights),
+    // and generate_speech is called once per verse/regeneration, so
+    // reloading per call would be prohibitively slow. `native_synth_mutex`
+    // both guards the lazy init and serializes calls into the (Metal/GGML)
+    // backend across concurrent callers — src/services/tts_engine.zig can
+    // have a lookahead thread and a "regenerate verse" thread both calling
+    // generate_speech at once — mirroring tools/metanoia_server's own
+    // `gpu_lock = Semaphore(1)` that serializes all generation through the
+    // engine.
+    var native_synth_mutex: std.Io.Mutex = .init;
+    var native_synth: ?aikit.models.qwen3_tts.Qwen3TTS = null;
 
-/// Releases the lazily-loaded native model, if one was loaded. Not called
-/// anywhere in normal app operation — `generate_speech`'s native path is
-/// designed to keep the model resident for the process's whole lifetime
-/// (see `native_synth`'s doc comment), and the OS reclaims everything on
-/// exit regardless. This exists purely so short-lived processes that use
-/// the native backend just once (namely `src/native_tts_test.zig`) can
-/// explicitly release Metal/GGML resources before exiting — ggml-metal's
-/// own global device-registry destructor otherwise asserts
-/// (`[rsets->data count] == 0`) if a loaded context's residency sets were
-/// never released via `qt_free` before process teardown.
-pub fn shutdownNativeBackendForTesting() void {
-    if (native_synth) |*synth| {
-        synth.synthesizer().deinit();
-        native_synth = null;
+    /// Releases the lazily-loaded native model, if one was loaded. Not
+    /// called anywhere in normal app operation — `generate_speech`'s
+    /// native path is designed to keep the model resident for the
+    /// process's whole lifetime (see `native_synth`'s doc comment), and
+    /// the OS reclaims everything on exit regardless. This exists purely
+    /// so short-lived processes that use the native backend just once
+    /// (namely `src/native_tts_test.zig`) can explicitly release
+    /// Metal/GGML resources before exiting — ggml-metal's own global
+    /// device-registry destructor otherwise asserts
+    /// (`[rsets->data count] == 0`) if a loaded context's residency sets
+    /// were never released via `qt_free` before process teardown.
+    fn shutdown() void {
+        if (native_synth) |*synth| {
+            synth.synthesizer().deinit();
+            native_synth = null;
+        }
     }
-}
 
-const VoiceReference = struct {
-    audio_path: []const u8,
-    text: []const u8,
+    const VoiceReference = struct {
+        audio_path: []const u8,
+        text: []const u8,
+    };
+
+    /// Resolves `voice` (e.g. "tommy") to its ICL reference clip +
+    /// transcript via data/voices.json, mirroring how
+    /// tools/metanoia_server/routes/generation.py resolves the same file
+    /// for the remote backend (lowercased lookup, `"audio"`/`"text"`
+    /// fields). Returns null — rather than an error — when the voice
+    /// isn't found or has no reference clip (e.g. the "custom" placeholder
+    /// voices in voices.json with `"audio": null`), so callers can
+    /// honestly fall back to the backend's base voice instead of failing
+    /// outright, same spirit as aikit/examples/tommy_test.zig's own
+    /// missing-reference fallback.
+    fn loadVoiceReference(io: std.Io, allocator: std.mem.Allocator, voice: []const u8) !?VoiceReference {
+        const data = std.Io.Dir.cwd().readFileAlloc(io, "data/voices.json", allocator, std.Io.Limit.limited(1 << 20)) catch return null;
+        defer allocator.free(data);
+
+        const parsed = std.json.parseFromSlice(std.json.Value, allocator, data, .{}) catch return null;
+        defer parsed.deinit();
+        if (parsed.value != .object) return null;
+
+        const voice_lower = try allocator.alloc(u8, voice.len);
+        defer allocator.free(voice_lower);
+        for (voice, 0..) |c, i| voice_lower[i] = std.ascii.toLower(c);
+
+        const entry = parsed.value.object.get(voice_lower) orelse return null;
+        if (entry != .object) return null;
+
+        const audio_val = entry.object.get("audio") orelse return null;
+        const text_val = entry.object.get("text") orelse return null;
+        if (audio_val != .string or text_val != .string) return null;
+
+        return VoiceReference{
+            .audio_path = try allocator.dupe(u8, audio_val.string),
+            .text = try allocator.dupe(u8, text_val.string),
+        };
+    }
+
+    /// Minimal canonical-PCM WAV writer, same format
+    /// aikit/examples/tommy_test.zig writes (44-byte header, mono/stereo
+    /// S16) — kept local to tts_client.zig rather than added to aikit's
+    /// public interface, since it's purely a metanoia-side integration
+    /// concern (aikit's `Audio` type is backend-agnostic and intentionally
+    /// has no file-format opinion).
+    fn writeWavFile(io: std.Io, path: []const u8, audio: aikit.tts.Audio) !void {
+        const byte_rate = audio.sample_rate * @as(u32, audio.channels) * 2;
+        const block_align: u16 = @as(u16, audio.channels) * 2;
+        const data_size: u32 = @intCast(audio.samples.len * 2);
+
+        var header: [44]u8 = undefined;
+        @memcpy(header[0..4], "RIFF");
+        std.mem.writeInt(u32, header[4..8], 36 + data_size, .little);
+        @memcpy(header[8..12], "WAVE");
+        @memcpy(header[12..16], "fmt ");
+        std.mem.writeInt(u32, header[16..20], 16, .little);
+        std.mem.writeInt(u16, header[20..22], 1, .little);
+        std.mem.writeInt(u16, header[22..24], audio.channels, .little);
+        std.mem.writeInt(u32, header[24..28], audio.sample_rate, .little);
+        std.mem.writeInt(u32, header[28..32], byte_rate, .little);
+        std.mem.writeInt(u16, header[32..34], block_align, .little);
+        std.mem.writeInt(u16, header[34..36], 16, .little);
+        @memcpy(header[36..40], "data");
+        std.mem.writeInt(u32, header[40..44], data_size, .little);
+
+        try std.Io.Dir.cwd().createDirPath(io, "cache");
+        const file = try std.Io.Dir.cwd().createFile(io, path, .{});
+        defer file.close(io);
+
+        var write_buf: [64 * 1024]u8 = undefined;
+        var file_writer = file.writer(io, &write_buf);
+        try file_writer.interface.writeAll(&header);
+
+        var sample_bytes: [4096]u8 = undefined;
+        var i: usize = 0;
+        while (i < audio.samples.len) {
+            var n: usize = 0;
+            while (i < audio.samples.len and n + 2 <= sample_bytes.len) : (i += 1) {
+                std.mem.writeInt(i16, sample_bytes[n..][0..2], audio.samples[i], .little);
+                n += 2;
+            }
+            try file_writer.interface.writeAll(sample_bytes[0..n]);
+        }
+        try file_writer.interface.flush();
+    }
+
+    /// Synthesizes `text` via aikit's native GGML/Metal backend and writes
+    /// the result to `out_audio_path`. Voice cloning: if `voice` resolves
+    /// to a reference clip in data/voices.json, uses ICL cloning against
+    /// it (same clip+transcript the remote/Python backend would use for
+    /// that voice); otherwise falls back to the backend's base voice
+    /// honestly rather than failing.
+    fn generate(engine: std.Io, allocator: std.mem.Allocator, text: []const u8, voice: []const u8, out_audio_path: []const u8) !void {
+        native_synth_mutex.lockUncancelable(engine);
+        defer native_synth_mutex.unlock(engine);
+
+        if (native_synth == null) {
+            native_synth = try aikit.models.qwen3_tts.Qwen3TTS.init(native_model_path, native_codec_path);
+        }
+        const synthesizer = native_synth.?.synthesizer();
+
+        const maybe_ref = loadVoiceReference(engine, allocator, voice) catch null;
+        defer if (maybe_ref) |ref| {
+            allocator.free(ref.audio_path);
+            allocator.free(ref.text);
+        };
+
+        const options: aikit.tts.SynthesizeOptions = if (maybe_ref) |ref| .{
+            .reference_audio_path = ref.audio_path,
+            .reference_text = ref.text,
+        } else .{};
+
+        const audio = synthesizer.synthesize(engine, allocator, text, options) catch |err| {
+            std.debug.print("Native TTS synthesis failed: {any}\n", .{err});
+            return error.TtsServerError;
+        };
+        defer audio.deinit(allocator);
+
+        try writeWavFile(engine, out_audio_path, audio);
+    }
+} else struct {
+    // Not built with -Dnative-ai=true: shouldUseNativeBackend still exists
+    // and still defaults to "remote", so this path is only ever reached if
+    // someone explicitly sets `tts_backend: "native"` in data/config.json
+    // without also rebuilding with the flag — a clear error beats a
+    // missing-symbol build failure they'd otherwise never see coming.
+    fn shutdown() void {}
+    fn generate(engine: std.Io, allocator: std.mem.Allocator, text: []const u8, voice: []const u8, out_audio_path: []const u8) !void {
+        _ = engine;
+        _ = allocator;
+        _ = text;
+        _ = voice;
+        _ = out_audio_path;
+        return error.NativeBackendNotBuilt;
+    }
 };
 
-/// Resolves `voice` (e.g. "tommy") to its ICL reference clip + transcript
-/// via data/voices.json, mirroring how
-/// tools/metanoia_server/routes/generation.py resolves the same file for
-/// the remote backend (lowercased lookup, `"audio"`/`"text"` fields).
-/// Returns null — rather than an error — when the voice isn't found or has
-/// no reference clip (e.g. the "custom" placeholder voices in voices.json
-/// with `"audio": null`), so callers can honestly fall back to the
-/// backend's base voice instead of failing outright, same spirit as
-/// aikit/examples/tommy_test.zig's own missing-reference fallback.
-fn loadVoiceReference(io: std.Io, allocator: std.mem.Allocator, voice: []const u8) !?VoiceReference {
-    const data = std.Io.Dir.cwd().readFileAlloc(io, "data/voices.json", allocator, std.Io.Limit.limited(1 << 20)) catch return null;
-    defer allocator.free(data);
-
-    const parsed = std.json.parseFromSlice(std.json.Value, allocator, data, .{}) catch return null;
-    defer parsed.deinit();
-    if (parsed.value != .object) return null;
-
-    const voice_lower = try allocator.alloc(u8, voice.len);
-    defer allocator.free(voice_lower);
-    for (voice, 0..) |c, i| voice_lower[i] = std.ascii.toLower(c);
-
-    const entry = parsed.value.object.get(voice_lower) orelse return null;
-    if (entry != .object) return null;
-
-    const audio_val = entry.object.get("audio") orelse return null;
-    const text_val = entry.object.get("text") orelse return null;
-    if (audio_val != .string or text_val != .string) return null;
-
-    return VoiceReference{
-        .audio_path = try allocator.dupe(u8, audio_val.string),
-        .text = try allocator.dupe(u8, text_val.string),
-    };
-}
-
-/// Minimal canonical-PCM WAV writer, same format aikit/examples/tommy_test.zig
-/// writes (44-byte header, mono/stereo S16) — kept local to tts_client.zig
-/// rather than added to aikit's public interface, since it's purely a
-/// metanoia-side integration concern (aikit's `Audio` type is
-/// backend-agnostic and intentionally has no file-format opinion).
-fn writeWavFile(io: std.Io, path: []const u8, audio: aikit.tts.Audio) !void {
-    const byte_rate = audio.sample_rate * @as(u32, audio.channels) * 2;
-    const block_align: u16 = @as(u16, audio.channels) * 2;
-    const data_size: u32 = @intCast(audio.samples.len * 2);
-
-    var header: [44]u8 = undefined;
-    @memcpy(header[0..4], "RIFF");
-    std.mem.writeInt(u32, header[4..8], 36 + data_size, .little);
-    @memcpy(header[8..12], "WAVE");
-    @memcpy(header[12..16], "fmt ");
-    std.mem.writeInt(u32, header[16..20], 16, .little);
-    std.mem.writeInt(u16, header[20..22], 1, .little);
-    std.mem.writeInt(u16, header[22..24], audio.channels, .little);
-    std.mem.writeInt(u32, header[24..28], audio.sample_rate, .little);
-    std.mem.writeInt(u32, header[28..32], byte_rate, .little);
-    std.mem.writeInt(u16, header[32..34], block_align, .little);
-    std.mem.writeInt(u16, header[34..36], 16, .little);
-    @memcpy(header[36..40], "data");
-    std.mem.writeInt(u32, header[40..44], data_size, .little);
-
-    try std.Io.Dir.cwd().createDirPath(io, "cache");
-    const file = try std.Io.Dir.cwd().createFile(io, path, .{});
-    defer file.close(io);
-
-    var write_buf: [64 * 1024]u8 = undefined;
-    var file_writer = file.writer(io, &write_buf);
-    try file_writer.interface.writeAll(&header);
-
-    var sample_bytes: [4096]u8 = undefined;
-    var i: usize = 0;
-    while (i < audio.samples.len) {
-        var n: usize = 0;
-        while (i < audio.samples.len and n + 2 <= sample_bytes.len) : (i += 1) {
-            std.mem.writeInt(i16, sample_bytes[n..][0..2], audio.samples[i], .little);
-            n += 2;
-        }
-        try file_writer.interface.writeAll(sample_bytes[0..n]);
-    }
-    try file_writer.interface.flush();
-}
-
-/// Synthesizes `text` via aikit's native GGML/Metal backend and writes the
-/// result to `out_audio_path`. Voice cloning: if `voice` resolves to a
-/// reference clip in data/voices.json, uses ICL cloning against it (same
-/// clip+transcript the remote/Python backend would use for that voice);
-/// otherwise falls back to the backend's base voice honestly rather than
-/// failing.
-fn generateSpeechNative(engine: std.Io, allocator: std.mem.Allocator, text: []const u8, voice: []const u8, out_audio_path: []const u8) !void {
-    native_synth_mutex.lockUncancelable(engine);
-    defer native_synth_mutex.unlock(engine);
-
-    if (native_synth == null) {
-        native_synth = try aikit.models.qwen3_tts.Qwen3TTS.init(native_model_path, native_codec_path);
-    }
-    const synthesizer = native_synth.?.synthesizer();
-
-    const maybe_ref = loadVoiceReference(engine, allocator, voice) catch null;
-    defer if (maybe_ref) |ref| {
-        allocator.free(ref.audio_path);
-        allocator.free(ref.text);
-    };
-
-    const options: aikit.tts.SynthesizeOptions = if (maybe_ref) |ref| .{
-        .reference_audio_path = ref.audio_path,
-        .reference_text = ref.text,
-    } else .{};
-
-    const audio = synthesizer.synthesize(engine, allocator, text, options) catch |err| {
-        std.debug.print("Native TTS synthesis failed: {any}\n", .{err});
-        return error.TtsServerError;
-    };
-    defer audio.deinit(allocator);
-
-    try writeWavFile(engine, out_audio_path, audio);
+/// See `NativeBackend`'s doc comment. Public name/signature preserved
+/// regardless of `-Dnative-ai` so callers (namely `src/native_tts_test.zig`)
+/// don't need their own comptime branching.
+pub fn shutdownNativeBackendForTesting() void {
+    NativeBackend.shutdown();
 }
 
 test "shouldUseNativeBackend picks native only for the exact string \"native\"" {

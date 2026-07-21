@@ -12,7 +12,12 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const ollama = @import("ollama_client.zig");
-const aikit = @import("aikit");
+// Only importable when built with `-Dnative-ai=true` (see root build.zig)
+// — that flag exists so a default `zig build`/`zig build test` (CI
+// included) doesn't require mlx-c to be installed just to compile.
+// `shouldUseNativeLLMBackend` still defaults to "remote" either way.
+const build_options = @import("build_options");
+const aikit = if (build_options.native_ai) @import("aikit") else struct {};
 
 /// Pure decision: does `cfg_llm_backend` (the raw `llm_backend` string from
 /// `data/config.json`, see `src/models/config.zig`) select the native
@@ -73,14 +78,11 @@ pub fn generate_response(allocator: std.mem.Allocator, io: std.Io, prompt: []con
 // own home.
 const native_model_dir = "vendor/llm/qwen2.5-0.5b-instruct-4bit";
 
-/// aikit's `models.qwen2_mlx` (MLX backend) is macOS-only — see
-/// `aikit/src/backend/mlx.zig`'s comptime guard and `aikit/src/root.zig`'s
-/// `void` fallback on other platforms. Mirror that guard here so this file
-/// still compiles (native path simply reports "unsupported on this
-/// platform" at runtime) when metanoia itself is built for Linux/Windows,
-/// same spirit as `aikit/README.md`'s "Cross-platform GPU" section notes
-/// for TTS.
-const NativeLLM = if (builtin.os.tag == .macos) aikit.models.qwen2_mlx.Qwen2LLM else void;
+/// True only when built with `-Dnative-ai=true` AND on macOS (aikit's MLX
+/// backend is macOS-only — see `aikit/src/backend/mlx.zig`'s comptime
+/// guard and `aikit/src/root.zig`'s `void` fallback on other platforms).
+const native_llm_available = build_options.native_ai and builtin.os.tag == .macos;
+const NativeLLM = if (native_llm_available) aikit.models.qwen2_mlx.Qwen2LLM else void;
 
 // Loaded lazily on first native-backend call and kept for the life of the
 // process (loading the checkpoint is the expensive part) — same pattern
@@ -94,7 +96,7 @@ var native_llm: ?NativeLLM = null;
 /// resources explicitly before exit rather than relying on the (never
 /// reached, for a long-running app) process-exit cleanup.
 pub fn shutdownNativeLLMBackendForTesting() void {
-    if (comptime builtin.os.tag != .macos) return;
+    if (comptime !native_llm_available) return;
     if (native_llm) |*model| {
         model.deinit();
         native_llm = null;
@@ -102,7 +104,12 @@ pub fn shutdownNativeLLMBackendForTesting() void {
 }
 
 fn generateResponseNative(io: std.Io, allocator: std.mem.Allocator, prompt: []const u8) ![]const u8 {
-    if (comptime builtin.os.tag != .macos) {
+    if (comptime !native_llm_available) {
+        // Not built with -Dnative-ai=true (or not macOS): shouldUseNativeLLMBackend
+        // still defaults to "remote", so this is only reached if someone
+        // explicitly set `llm_backend: "native"` without also rebuilding
+        // with the flag on a supported platform — a clear error beats a
+        // missing-symbol build failure they'd otherwise never see coming.
         return error.NativeLLMUnsupportedPlatform;
     }
 
