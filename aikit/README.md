@@ -57,22 +57,39 @@ validated on the project's actual target hardware and passed.
 aikit/
 ├── build.zig / build.zig.zon   # standalone package — own identity, own deps
 ├── README.md
+├── examples/                    # runnable, real-checkpoint-verified demos
+│   ├── tommy_test.zig            # TTS: ICL voice cloning
+│   ├── llm_spike.zig              # LLM: Phase 0 safetensors/dequant/matmul spike
+│   ├── llm_forward_pass.zig        # LLM: single-forward-pass next-token prediction
+│   ├── llm_generate.zig             # LLM: full KV-cache multi-token generation
+│   └── stt_transcribe.zig            # STT: real whisper.cpp transcription
 └── src/
-    ├── root.zig                 # public API surface, re-exports below
-    ├── capabilities/
-    │   └── tts.zig               # backend-agnostic Synthesizer interface
-    ├── backend/
-    │   └── ggml.zig               # raw C FFI to a native inference library
-    └── models/
-        └── qwen3_tts.zig           # Qwen3-TTS impl of the Synthesizer interface
+    ├── root.zig                 # public API surface, re-exports everything below
+    ├── tokenizer.zig             # byte-level BPE (HF tokenizer.json / GPT-2 family)
+    ├── capabilities/             # WHAT each capability means — backend-agnostic
+    │   ├── tts.zig                # Synthesizer vtable interface
+    │   ├── llm.zig                 # Generator vtable interface
+    │   └── stt.zig                  # Transcriber vtable interface
+    ├── backend/                  # raw C FFI to native inference/tensor libraries
+    │   ├── ggml.zig                # qwentts.cpp (TTS) — grandfathered exception
+    │   ├── mlx.zig                  # Apple mlx-c tensor primitives — grandfathered
+    │   │                             # exception; also what the LLM's clean-room
+    │   │                             # forward pass is hand-written on top of
+    │   └── whisper.zig               # whisper.cpp (STT) — deliberate 2nd exception
+    └── models/                   # ONE implementation of a capability's interface
+        ├── qwen3_tts.zig          # Qwen3-TTS on backend/ggml.zig (FFI)
+        ├── qwen2_mlx.zig           # Qwen2 forward pass hand-written on backend/mlx.zig
+        │                            # (clean-room — no LLM-specific library wrapped)
+        └── whisper_stt.zig          # Whisper on backend/whisper.zig (FFI)
 ```
 
 **The core idea is the split between `capabilities/` and `models/`.**
-`capabilities/tts.zig` defines *what it means to be a TTS backend* — a small
-vtable interface (`Synthesizer`), independent of any specific model or
-inference runtime. `models/qwen3_tts.zig` is *one implementation* of that
-interface, wrapping `backend/ggml.zig`'s raw FFI. A caller only ever holds a
-`tts.Synthesizer` value:
+`capabilities/*.zig` each define *what it means to be* that kind of backend
+— a small vtable interface, independent of any specific model or inference
+runtime. `models/*.zig` are implementations of those interfaces, each
+wrapping either a `backend/*.zig` FFI layer or hand-written math on top of
+one. A caller only ever holds a capability value (`tts.Synthesizer`,
+`llm.Generator`, `stt.Transcriber`), never a model or backend type directly:
 
 ```zig
 const aikit = @import("aikit");
@@ -87,14 +104,15 @@ const audio = try model.synthesizer().synthesize(allocator, "For God so loved th
 defer audio.deinit(allocator);
 ```
 
-**Adding a new capability** (say, LLM inference or native STT): add
-`src/capabilities/llm.zig` with its own small interface (don't reuse `tts`'s
-shape just because it's there — design each interface around what that
-capability actually needs), then a `src/models/<whatever>.zig` implementing
-it. `root.zig` re-exports both. Nothing in `capabilities/` or `backend/`
-should ever import from `models/` — the dependency direction is strictly
-`models/` → `capabilities/` + `backend/`, never the reverse, or the
-interface stops being backend-agnostic.
+**Adding a new capability**: add `src/capabilities/<name>.zig` with its own
+small interface (don't reuse an existing one's shape just because it's
+there — design each interface around what that capability actually needs,
+the way `llm.Generator` and `stt.Transcriber` are each their own shape, not
+copies of `tts.Synthesizer`), then a `src/models/<whatever>.zig`
+implementing it. `root.zig` re-exports both. Nothing in `capabilities/` or
+`backend/` should ever import from `models/` — the dependency direction is
+strictly `models/` → `capabilities/` + `backend/`, never the reverse, or
+the interface stops being backend-agnostic.
 
 ## LLM inference (working capability, native + remote)
 
