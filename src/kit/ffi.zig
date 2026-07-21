@@ -94,7 +94,13 @@ pub extern fn gtk_label_new(str: ?[*:0]const u8) ?*GtkWidget;
 pub extern fn gtk_label_set_text(label: ?*GtkLabel, str: [*:0]const u8) void;
 pub extern fn gtk_label_set_markup(label: ?*GtkLabel, str: [*:0]const u8) void;
 pub extern fn gtk_label_set_wrap(label: ?*GtkLabel, setting: bool) void;
+pub extern fn gtk_label_set_wrap_mode(label: ?*GtkLabel, wrap_mode: i32) void;
+pub extern fn gtk_label_set_max_width_chars(label: ?*GtkLabel, n_chars: i32) void;
 pub extern fn gtk_label_set_xalign(label: ?*GtkLabel, xalign: f32) void;
+
+pub const PANGO_WRAP_WORD = 0;
+pub const PANGO_WRAP_CHAR = 1;
+pub const PANGO_WRAP_WORD_CHAR = 2;
 
 // ──────────────── Image ────────────────
 
