@@ -27,7 +27,10 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     linkQwen(mod, qwen_build_dir);
-    if (target.result.os.tag == .macos) linkMlx(mod);
+    if (target.result.os.tag == .macos) {
+        linkMlx(mod);
+        linkWhisper(mod);
+    }
 
     const mod_tests = b.addTest(.{ .root_module = mod });
     const run_tests = b.addRunArtifact(mod_tests);
@@ -147,6 +150,46 @@ pub fn build(b: *std.Build) void {
         const run_llm_generate_step = b.step("run-llm-generate", "Build and run examples/llm_generate.zig (KV-cache multi-token generation)");
         run_llm_generate_step.dependOn(&run_llm_generate.step);
         b.installArtifact(llm_generate_exe);
+
+        // STT Phase 0/1: whisper.cpp-backed real transcription (see
+        // backend/whisper.zig / models/whisper_stt.zig doc comments), run
+        // end to end against a real ggml-*.bin checkpoint and a real WAV
+        // file. Not part of any "generation" phasing like the LLM's —
+        // this is the whole capability in one pass, since whisper.cpp
+        // already implements the full model (no per-layer port needed,
+        // unlike the LLM's clean-room MLX build).
+        const stt_model_path = b.option(
+            []const u8,
+            "stt-model",
+            "Path to a ggml-*.bin Whisper checkpoint for examples/stt_transcribe.zig",
+        ) orelse "../vendor/whisper.cpp/models/ggml-tiny.en.bin";
+        const stt_audio_path = b.option(
+            []const u8,
+            "stt-audio",
+            "Path to a WAV file to transcribe, for examples/stt_transcribe.zig",
+        ) orelse "../data/tommy.wav";
+        const stt_options = b.addOptions();
+        stt_options.addOption([]const u8, "model_path", stt_model_path);
+        stt_options.addOption([]const u8, "audio_path", stt_audio_path);
+
+        const stt_exe = b.addExecutable(.{
+            .name = "stt_transcribe",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("examples/stt_transcribe.zig"),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "aikit", .module = mod },
+                },
+            }),
+        });
+        stt_exe.root_module.addOptions("build_options", stt_options);
+        linkWhisper(stt_exe.root_module);
+        const run_stt = b.addRunArtifact(stt_exe);
+        run_stt.step.dependOn(b.getInstallStep());
+        const run_stt_step = b.step("run-stt-transcribe", "Build and run examples/stt_transcribe.zig (real whisper.cpp transcription)");
+        run_stt_step.dependOn(&run_stt.step);
+        b.installArtifact(stt_exe);
     }
 }
 
@@ -178,5 +221,45 @@ fn linkMlx(mod: *std.Build.Module) void {
     mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
     mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
     mod.linkSystemLibrary("mlxc", .{});
+    mod.link_libc = true;
+}
+
+/// Links src/backend/whisper.zig's dependency — macOS only for now (see
+/// that file's comptime guard; whisper.cpp itself is cross-platform, but
+/// this binding hasn't been pointed at a non-Homebrew build layout yet —
+/// see backend/whisper.zig's doc comment for the honest scope note).
+/// `whisper-cpp` is expected via Homebrew (`brew install whisper-cpp`;
+/// confirmed present in this environment: 1.9.1, headers/dylibs under
+/// /opt/homebrew/opt/whisper-cpp). Same direct-Homebrew-path pattern as
+/// `linkMlx` above (mlx-c is also Homebrew-installed, unlike qwentts.cpp's
+/// own hand-built `vendor/` tree).
+///
+/// Explicitly links (and rpaths) the separate `ggml` Homebrew formula
+/// too, not just `whisper-cpp` — found the hard way: linking only
+/// `-lwhisper` builds and runs, but crashes
+/// (`GGML_ASSERT(device) failed` inside `make_buft_list`, "devices = 0,
+/// backends = 0") the moment `whisper_init_from_file_with_params` runs.
+/// ggml's `ggml_backend_load_all()` (which `models/whisper_stt.zig` calls
+/// before init — see that file) dynamically `dlopen`s its actual
+/// CPU/Metal backend implementations from `/opt/homebrew/Cellar/ggml/*/libexec/*.so`
+/// (confirmed by directly inspecting that directory — Homebrew's ggml
+/// ships backends as separate plugin objects, not statically linked into
+/// libggml itself), and that discovery only succeeds when `ggml`'s own
+/// lib dir is in this binary's rpath, not just whisper-cpp's — reproduced
+/// and fixed via a standalone `zig build-exe` test with explicit
+/// `-L/-rpath /opt/homebrew/opt/ggml/lib` before landing this fix here.
+fn linkWhisper(mod: *std.Build.Module) void {
+    mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/opt/whisper-cpp/include" });
+    mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/opt/whisper-cpp/lib" });
+    mod.addRPath(.{ .cwd_relative = "/opt/homebrew/opt/whisper-cpp/lib" });
+    mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/opt/ggml/lib" });
+    mod.addRPath(.{ .cwd_relative = "/opt/homebrew/opt/ggml/lib" });
+    // linkSystemLibrary("whisper", .{}) already pulls in -lggml/-lggml-base
+    // transitively (Zig auto-discovers whisper.pc's pkg-config Libs line,
+    // which lists them) — declaring them again here would duplicate-link
+    // the same dylib and dyld aborts on that at process start. Only the
+    // extra library path/rpath above (for ggml_backend_load_all's plugin
+    // discovery, see this function's doc comment) were actually missing.
+    mod.linkSystemLibrary("whisper", .{});
     mod.link_libc = true;
 }

@@ -11,15 +11,25 @@ existing TTS backends (`backend/ggml.zig` → qwentts.cpp, `backend/mlx.zig`
 verified working before this principle was set, and are not being ripped
 out. But they're the exception, not the pattern to repeat: don't reach for
 "just FFI-bind an existing library" as the default move for the next
-capability (STT, LLM, etc.) the way it was for TTS. A clean-room
-implementation means hand-writing the actual model forward pass (attention,
-matmul, whatever the architecture needs) plus its own weight-loading code,
-using nothing beyond the Zig standard library (and OS/GPU-vendor system
-frameworks where compute genuinely requires them — e.g. Metal/Vulkan
-compute shaders can't be pure Zig, but "don't link someone else's ML
-inference library" is the actual rule being enforced here). This is a large
-undertaking per capability — budget for it accordingly, and scope/spike
-first (same as TTS's Phase 0) rather than assuming it's a quick add.
+capability the way it was for TTS. A clean-room implementation means
+hand-writing the actual model forward pass (attention, matmul, whatever the
+architecture needs) plus its own weight-loading code, using nothing beyond
+the Zig standard library (and OS/GPU-vendor system frameworks where compute
+genuinely requires them — e.g. Metal/Vulkan compute shaders can't be pure
+Zig, but "don't link someone else's ML inference library" is the actual
+rule being enforced here). This is a large undertaking per capability —
+budget for it accordingly, and scope/spike first (same as TTS's Phase 0)
+rather than assuming it's a quick add.
+
+**How this actually played out for the next two capabilities:** LLM
+inference followed the principle — `models/qwen2_mlx.zig` is a hand-written
+Qwen2 forward pass on top of `backend/mlx.zig`'s tensor primitives, no
+LLM-specific library wrapped (see the "LLM inference" section below). STT
+did not — `models/whisper_stt.zig` FFI-binds whisper.cpp, a second explicit,
+documented exception alongside TTS's (see the "STT" section below for the
+reasoning and the clean-room-Zig-Whisper backlog item that exception
+creates). Two capabilities, two different honest calls — not a rule that
+silently stopped being followed.
 
 Not tied to metanoia. No imports of GTK, sqlite, or anything app-shaped
 anywhere under `src/`. It has its own `build.zig`/`build.zig.zon` so it can
@@ -86,37 +96,123 @@ should ever import from `models/` — the dependency direction is strictly
 `models/` → `capabilities/` + `backend/`, never the reverse, or the
 interface stops being backend-agnostic.
 
-## LLM inference (research spike, not yet a capability)
+## LLM inference (working capability, native + remote)
 
-Goal: replace metanoia's Ollama dependency (`src/ollama_client.zig`, a
-`curl` subprocess to a locally-running Ollama server) with native in-process
-LLM inference — same "keep the old path available" pattern as TTS's
-`tts_backend` switch.
+Replaces metanoia's Ollama dependency (`src/ollama_client.zig`, a `curl`
+subprocess to a locally-running Ollama server) with native in-process LLM
+inference, kept alongside the old path exactly like TTS's `tts_backend`
+switch — `data/config.json`'s `llm_backend: "native" | "remote"` (default
+`"remote"`), see `src/llm_client.zig`.
 
-A feasibility spike (`examples/llm_spike.zig`, `zig build run-llm-spike`)
-proved the approach end-to-end against a real downloaded checkpoint
-(`mlx-community/Qwen2.5-0.5B-Instruct-4bit`, ~265MB): `backend/mlx.zig`'s
-`Checkpoint.load`/`.get`, `Array.dequantizeAffine`, `Array.transpose` load
-real MLX-format safetensors weights, dequantize a real 4-bit-quantized
-weight matrix to plausible float32 values, and run a real matmul against
-it. Per aikit's "no new external native deps" principle above, this stays
-within mlx-c's *tensor primitives* — no llama.cpp/ONNX/candle. mlx-c
-0.6.0 turns out to already expose fused `mlx_fast_scaled_dot_product_attention`,
-`mlx_fast_rope`, `mlx_fast_rms_norm`, `mlx_softmax`, and `mlx_gather` (embedding
-lookup) — everything numerically hard a Qwen2-style transformer needs, so
-this is closer to "write the architecture, mlx-c does the math" than a
-from-scratch tensor engine.
+`capabilities/llm.zig` (`Generator` interface) + `models/qwen2_mlx.zig`
+(`Model`, `KVCache`, `Qwen2LLM`) implement this end to end against a real
+`mlx-community/Qwen2.5-0.5B-Instruct-4bit` checkpoint (~265MB): a from-scratch
+Zig BPE tokenizer (`src/tokenizer.zig`) for Qwen's `tokenizer.json`; the full
+per-layer forward pass (embed → 24×[RMSNorm → GQA attention w/ RoPE →
+residual → RMSNorm → SwiGLU MLP → residual] → final norm → tied lm_head)
+on top of `backend/mlx.zig`'s fused ops (`mlx_fast_scaled_dot_product_attention`,
+`mlx_fast_rope`, `mlx_fast_rms_norm`, quantized matmul); a KV cache so
+autoregressive decoding only computes attention for each new token against
+the cached prefix, not the whole sequence every step; and greedy generation,
+verified token-for-token against a real `mlx_lm` Python reference (`"The
+capital of France is"` → the same 10 greedily-decoded token ids the Python
+run produces, exactly). `Qwen2LLM` wraps this with the checkpoint's own
+ChatML instruct template for the app-facing text-in/text-out `Generator`
+interface `src/llm_client.zig` calls into.
 
-**Honest scope for an actual capability** (`capabilities/llm.zig` +
-`models/qwen2_mlx.zig` implementing it): 1-2 weeks, not days. What's proven:
-loading and dequantizing real weights. What's not yet done: a Zig BPE
-tokenizer for Qwen's `tokenizer.json`, the actual per-layer forward pass
-(embed → N×[RMSNorm → attention → RMSNorm → SwiGLU MLP] → final norm →
-lm_head) wired through all 24+ layers, a KV cache, and sampling — plus real
-correctness debugging against a Python/MLX reference output (the spike
-already hit one silent FFI-ABI bug this way: `mlx_dequantize`'s `dtype`
-parameter is a struct, not a bare `c_int` — silently wrong output, not a
-crash, until caught by comparing against expected value ranges).
+Model weights: expected at `vendor/llm/qwen2.5-0.5b-instruct-4bit/`
+(`tokenizer.json` + `model.safetensors`), gitignored — see
+`src/llm_client.zig`'s `native_model_dir` doc comment.
+
+Along the way, this hit exactly the class of silent FFI-ABI bug this
+section used to warn about in the abstract: `mlx_dequantize`'s `dtype`
+parameter being a struct, not a bare `c_int`, caught only by comparing
+against expected value ranges rather than a crash. Worth remembering for
+the next FFI surface (see the STT section below, which hit its own
+version of this with `whisper_full_params`).
+
+## STT (speech-to-text): whisper.cpp now, clean-room Zig later (backlog)
+
+**A deliberate, explicitly-acknowledged new exception to "no new external
+native deps going forward" above — not a quiet reach for the easy option.**
+`capabilities/stt.zig` (`Transcriber` interface) is implemented by
+`models/whisper_stt.zig` on top of `backend/whisper.zig`, a raw FFI binding
+to [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (installed via
+`brew install whisper-cpp`, 1.9.1 — real Metal GPU support on Apple
+Silicon, same `ggml` lineage as `backend/ggml.zig`/qwentts.cpp). This is
+a second FFI exception on top of TTS's grandfathered one, chosen for the
+same reason: a real, battle-tested, already-correct Whisper implementation
+now is worth more than a from-scratch encoder/decoder port up front, and
+the `capabilities/stt.zig` seam keeps a future clean-room replacement a
+drop-in swap for callers rather than a rewrite.
+
+**Backlog: clean-room Zig Whisper port.** The eventual replacement — a
+hand-written Whisper encoder/decoder (conv stem → transformer encoder →
+cross-attention transformer decoder) on top of `backend/mlx.zig`'s
+primitives, mirroring the LLM capability's own FFI-spike → clean-room
+trajectory — is **not started**, and not scoped in detail yet. Roughly
+comparable in size to the LLM build (Whisper's architecture is smaller
+per-layer than a modern LLM but needs a mel-spectrogram frontend and
+cross-attention, neither of which the LLM work needed). Filed here as an
+explicit backlog item, not assumed to happen automatically just because
+the seam exists.
+
+**Verified against real audio and a real checkpoint**
+(`examples/stt_transcribe.zig`, `zig build run-stt-transcribe`): loads
+`ggml-tiny.en.bin` (downloaded from
+`https://huggingface.co/ggerganov/whisper.cpp`) and transcribes
+`data/tommy.wav` (24kHz mono — resampled to the 16kHz mono float32
+`whisper_full` requires by a from-scratch linear-interpolation resampler
+in `models/whisper_stt.zig`, so this capability doesn't pull in a *second*
+new dependency — e.g. whisper.cpp's own CLI tools use a vendored
+`miniaudio` for this, which this binding deliberately doesn't link
+against). Real output: `" Okay. I do believe I am alive."` — a real
+transcription, not a hardcoded/mocked one (compare `whisper-cli`'s own
+CLI, run standalone against the same file/model with its different
+default decoding strategy — beam search 5 + best-of-5 vs. this binding's
+greedy default — which produced the very similar `" I do believe I am
+live."`; the difference is decoding-strategy noise on a short, slightly
+ambiguous utterance, not a correctness bug).
+
+**FFI struct layout, done the careful way (see this section's own
+close call):** `whisper_full_params` is a large (~50-field) struct passed
+*by value* to `whisper_full`. An earlier draft of this binding declared
+only the leading fields this capability actually sets and left the rest
+implicit — that's **not safe** for a by-value C call (unlike reading
+through an already-correctly-sized pointer): the C ABI needs the caller's
+declared struct size to match the real one, or trailing fields (including
+several callback function pointers) get read from uninitialized/adjacent
+stack memory. `backend/whisper.zig` transcribes every field from the
+installed `whisper.h` in exact order instead — the only safe way to pass
+this type by value. A sanity-check test (`@sizeOf(WhisperFullParams) >
+150`) guards against the layout collapsing silently in a future edit, but
+isn't a substitute for the real-transcription test above.
+
+**A second real gotcha, found empirically, not predicted:**
+`whisper_init_from_file_with_params` crashed
+(`GGML_ASSERT(device) failed` inside `make_buft_list`, "devices = 0,
+backends = 0") the first time this ran, despite `whisper-cli` (Homebrew's
+own prebuilt binary) working fine against the identical model/library
+install. Root cause: ggml's `ggml_backend_load_all()` (which
+`models/whisper_stt.zig` now calls before every `whisper_init_from_file_with_params`
+— required, not automatic) `dlopen`s its actual CPU/Metal backends from
+separate plugin files under `/opt/homebrew/Cellar/ggml/*/libexec/*.so` —
+discovered by inspecting that directory directly, since neither
+`whisper-cpp`'s nor `ggml`'s own `lib/` dirs contain them. That discovery
+only succeeded once this binary's own rpath included `ggml`'s `lib/` dir
+too, not just `whisper-cpp`'s (see `build.zig`'s `linkWhisper` for the fix
+and the standalone `zig build-exe` repro that isolated it). Filed here
+because it's exactly the kind of "worked in the reference CLI, silently
+different in a fresh binding" trap this README's LLM section already
+warned about in the abstract — this is what it looks like in practice for
+a second, unrelated FFI surface.
+
+**Not wired into the app.** Unlike TTS/LLM, metanoia currently has no
+existing speech-input feature/call site to swap a backend under — this is
+new capability infrastructure, not a drop-in replacement for something
+that already existed. Wiring it into the app (a dictation/voice-note
+feature, or whatever the actual product need turns out to be) is separate,
+unscoped follow-up work.
 
 ## Cross-platform GPU: Vulkan on Windows/Linux (verified, not yet built)
 
