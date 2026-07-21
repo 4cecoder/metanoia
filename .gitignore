@@ -38,7 +38,14 @@ mobile/models/
 !aikit/src/models/
 
 # Data & databases
+# The app can't run without data/bible.db (base verse text, opened as a bare
+# relative path in main.zig) or the wav clips actually referenced by
+# data/voices.json — those are tracked as an explicit exception below so
+# release packaging doesn't need a separate data-fetch step. Everything else
+# under data/ (raw/unused dev recordings, scraped html/txt fixtures) stays
+# ignored. See docs/MAINTENANCE.md and docs/PACKAGING.md.
 data/*.db
+!data/bible.db
 data/*.wav
 data/*.html
 data/*.txt
@@ -67,6 +74,18 @@ mobile/app/src/main/assets/*.npy
 *.wav
 *.mp3
 *.m4a
+
+# Exceptions to the *.wav / data/*.wav blanket rules above — these are the
+# only voice clips actually referenced by data/voices.json (must come after
+# every other *.wav-matching pattern in this file; gitignore uses last-match-
+# wins, so negations earlier in the file get re-ignored by these).
+!data/tommy.wav
+!data/lennox_ref.wav
+!data/mari_ref.wav
+!data/jordan_ref.wav
+!data/shamoun_ref.wav
+!data/roumie_perfect_15s.wav
+!data/shapiro.wav
 
 # Coverage reports
 htmlcov/

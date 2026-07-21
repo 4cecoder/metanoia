@@ -1,0 +1,70 @@
+name: test
+
+# Runs the regression suite (zig build test + mobile unit tests) on every
+# push/PR. Nothing else in this repo did this before — release.yml and
+# release-unix.yml only build release artifacts on a tag push, so the tests
+# added alongside a change were never actually enforced anywhere. This is
+# the thing that turns "we wrote a test" into "the test caught something."
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+
+jobs:
+  zig-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK4/SQLite3 deps (macOS)
+        if: runner.os == 'macOS'
+        run: brew install gtk4 pango cairo glib sqlite3
+
+      - name: Install GTK4/SQLite3 deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libsqlite3-dev pkg-config build-essential
+
+      - name: Install Zig (pinned master nightly, mirrors release-unix.yml)
+        run: |
+          set -euo pipefail
+          case "$(uname -s)-$(uname -m)" in
+            Darwin-arm64|Darwin-aarch64) ZIG_TARGET="aarch64-macos" ;;
+            Darwin-x86_64) ZIG_TARGET="x86_64-macos" ;;
+            Linux-x86_64) ZIG_TARGET="x86_64-linux" ;;
+            Linux-aarch64|Linux-arm64) ZIG_TARGET="aarch64-linux" ;;
+            *) echo "unsupported platform $(uname -s)-$(uname -m)" >&2; exit 1 ;;
+          esac
+          JSON="$(curl -fsSL https://ziglang.org/download/index.json)"
+          URL="$(echo "$JSON" | jq -r ".master[\"$ZIG_TARGET\"].tarball")"
+          echo "Installing zig from $URL"
+          curl -fsSL "$URL" -o "$RUNNER_TEMP/zig.tar.xz"
+          mkdir -p "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Verify zig
+        run: zig version
+
+      - name: zig build test
+        run: zig build test --summary all
+
+  mobile-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: gradlew testDebugUnitTest
+        working-directory: mobile
+        run: ./gradlew testDebugUnitTest --no-daemon

@@ -80,8 +80,8 @@
     "mode": "speedy"
   },
   "trump": {
-    "audio": "data/trump.wav",
-    "text": "Before I even arrive at the Oval Office, I will have the disastrous war between Russia and Ukraine settled.  It will be settled quickly, quickly.",
-    "mode": "speedy"
+    "audio": null,
+    "text": null,
+    "mode": "custom"
   }
 }

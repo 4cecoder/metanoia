@@ -1,3 +1,5 @@
+import json
+import os
 import sqlite3
 import requests
 from bs4 import BeautifulSoup, UnicodeDammit
@@ -5,18 +7,42 @@ import sys
 import re
 import unicodedata
 
+try:
+    from tools.scraper_common import fetch_with_retry
+except ImportError:
+    from scraper_common import fetch_with_retry
+
+_BIBLE_BOOKS_PATH = os.path.join(os.path.dirname(__file__), "bible_books.json")
+
+
+def load_testament_map():
+    """Canonical book->testament map, kept in sync with src/bible_db.zig's
+    BIBLE_BOOKS by a Zig regression test (see bible_db.zig test
+    "BIBLE_BOOKS testament data matches tools/bible_books.json")."""
+    with open(_BIBLE_BOOKS_PATH, "r", encoding="utf-8") as f:
+        return {entry["name"]: entry["testament"] for entry in json.load(f)}
+
+
+def language_prefix(book, testament_map):
+    # Old Testament -> Hebrew, everything else (New/EthiopiaExpanded) -> Greek.
+    return "H" if testament_map.get(book) == "Old" else "G"
+
+
 def scrape_interlinear(book, chapter):
-    # Determine language prefix based on book (basic NT/OT logic)
-    ot_books = ["Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy", "Joshua", "Judges", "Ruth", "1Samuel", "2Samuel", "1Kings", "2Kings", "1Chronicles", "2Chronicles", "Ezra", "Nehemiah", "Esther", "Job", "Psalms", "Proverbs", "Ecclesiastes", "Song of Solomon", "Isaiah", "Jeremiah", "Lamentations", "Ezekiel", "Daniel", "Hosea", "Joel", "Amos", "Obadiah", "Jonah", "Micah", "Nahum", "Habakkuk", "Zephaniah", "Haggai", "Zechariah", "Malachi"]
-    prefix = "H" if book in ot_books else "G"
+    prefix = language_prefix(book, load_testament_map())
 
     book_url = book.lower().replace(" ", "")
     url = f"https://biblehub.com/interlinear/{book_url}/{chapter}.htm"
     print(f"Scraping: {url} (Prefix: {prefix})")
-    
+
     headers = {'User-Agent': 'Mozilla/5.0'}
-    response = requests.get(url, headers=headers)
-    
+    try:
+        response = fetch_with_retry(url, headers=headers, timeout=15)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"Failed to fetch {url}: {e}")
+        sys.exit(1)
+
     dammit = UnicodeDammit(response.content, ["utf-8", "windows-1253", "iso-8859-7"])
     soup = BeautifulSoup(dammit.unicode_markup, 'html.parser')
 

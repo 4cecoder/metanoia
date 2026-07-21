@@ -67,6 +67,15 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
+    // `mod` re-exports bible_db.zig (see src/root.zig), whose tests exercise
+    // real SQLite calls (in-memory db round trips) — it needs the same
+    // sqlite3/libc link as the exe below so `zig build test` can actually
+    // run them, not just the exe-linked test target.
+    const mod_gtk_lib = if (target.result.os.tag == .windows) "gtk-4" else "gtk4";
+    mod.linkSystemLibrary(mod_gtk_lib, .{});
+    mod.linkSystemLibrary("sqlite3", .{});
+    mod.link_libc = true;
+
     // Here we define an executable. An executable needs to have a root module
     // which needs to expose a `main` function. While we could add a main function
     // to the module defined above, it's sometimes preferable to split business

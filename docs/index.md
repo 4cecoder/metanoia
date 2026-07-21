@@ -11,6 +11,8 @@ Architecture and reference documentation for the Metanoia Bible study app.
 | [SETTINGS_IMPLEMENTATION.md](SETTINGS_IMPLEMENTATION.md) | `test-automator` | Settings panel TDD coverage, network discovery |
 | [GEMINI.md](GEMINI.md) | `build-engineer` | Zig 0.16+ IO/stdlib migration cheatsheet |
 | [WINDOWS_SETUP.md](WINDOWS_SETUP.md) | `deployment-engineer` | MSYS2 + Zig + GTK4 Windows build instructions |
+| [PACKAGING.md](PACKAGING.md) | `deployment-engineer` | macOS/Linux/Android release packaging, Homebrew formula |
+| [MAINTENANCE.md](MAINTENANCE.md) | — | Caching architecture, testing strategy, quick-wins backlog |
 | [ZIG_DISCOVERIES.md](ZIG_DISCOVERIES.md) | `llm-architect` | Zig versioning, memory management, GTK FFI gotchas |
 | [AGENTS.md](AGENTS.md) | `task-distributor` | Subagent task definitions for doc maintenance |
 

@@ -87,6 +87,11 @@ pub const Sidebar = struct {
 
         self.summary_label = @ptrCast(ffi.gtk_label_new("No summary loaded"));
         ffi.gtk_label_set_wrap(self.summary_label, true);
+        ffi.gtk_label_set_wrap_mode(self.summary_label, ffi.PANGO_WRAP_WORD_CHAR);
+        ffi.gtk_label_set_max_width_chars(self.summary_label, 1);
+        ffi.gtk_label_set_xalign(self.summary_label, 0);
+        ffi.gtk_widget_set_hexpand(@ptrCast(self.summary_label), true);
+        ffi.gtk_widget_set_halign(@ptrCast(self.summary_label), ffi.GTK_ALIGN_FILL);
         ffi.gtk_widget_add_css_class(@ptrCast(self.summary_label), "sidebar-label");
         ffi.gtk_expander_set_child(@ptrCast(expander), @ptrCast(self.summary_label));
     }
@@ -107,6 +112,11 @@ pub const Sidebar = struct {
 
         self.word_study_label = @ptrCast(ffi.gtk_label_new("Click a word to begin study"));
         ffi.gtk_label_set_wrap(self.word_study_label, true);
+        ffi.gtk_label_set_wrap_mode(self.word_study_label, ffi.PANGO_WRAP_WORD_CHAR);
+        ffi.gtk_label_set_max_width_chars(self.word_study_label, 1);
+        ffi.gtk_label_set_xalign(self.word_study_label, 0);
+        ffi.gtk_widget_set_hexpand(@ptrCast(self.word_study_label), true);
+        ffi.gtk_widget_set_halign(@ptrCast(self.word_study_label), ffi.GTK_ALIGN_FILL);
         ffi.gtk_widget_add_css_class(@ptrCast(self.word_study_label), "sidebar-label");
         ffi.gtk_box_append(@ptrCast(word_study_box), @ptrCast(self.word_study_label));
     }

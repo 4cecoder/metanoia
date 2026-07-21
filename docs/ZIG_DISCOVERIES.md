@@ -26,6 +26,8 @@ First-hand findings from building a GTK4 desktop app in Zig nightly.
 - [Thread Safety Patterns](#thread-safety-patterns)
   - [Atomic flags for stop signaling](#atomic-flags-for-stop-signaling)
   - [Mutex pattern with IO](#mutex-pattern-with-io)
+  - [std.Thread.Mutex disappeared](#stdthreadmutex-disappeared-0170-dev1422e863bf3be)
+  - [std.json.parseFromSlice for a canonical data file](#stdjsonparsefromslice-for-a-canonical-data-file)
   - [Thread join sequence](#thread-join-sequence)
 
 ---
@@ -34,7 +36,7 @@ First-hand findings from building a GTK4 desktop app in Zig nightly.
 
 ### Nightly API churn
 
-This project targets `0.17.0-dev.1398+cb5635714`. Zig nightly breaks APIs weekly, so pinning the exact version is essential.
+This project tracks Zig **master nightly**. As of 2026-07-19 that's `0.17.0-dev.1422+e863bf3be` (up from `0.17.0-dev.1398+cb5635714` — `std.Thread.Mutex` disappeared between those two builds, see "Thread Safety Patterns" below). Zig nightly breaks APIs weekly, so pinning the exact version and re-verifying after every upgrade is essential — don't assume a section of this doc still matches current `HEAD` without checking.
 
 **Key observations:**
 
@@ -274,6 +276,46 @@ defer e.mutex.unlock(e.io);
 ```
 
 The `lockUncancelable` variant prevents the lock from being interrupted by POSIX signals.
+
+### `std.Thread.Mutex` disappeared (0.17.0-dev.1422+e863bf3be)
+
+Blocking mutexes moved under the IO engine: `std.Io.Mutex`. Its `lock`/`unlock`/`lockUncancelable` all take an `Io` parameter (see the "Mutex pattern with IO" example above) — fine when the struct already carries an `io: std.Io` field (like `TTSEngine` does), but a real cost if it doesn't: every caller now needs an `Io` threaded in just to take a lock.
+
+For `src/bible_db.zig`, none of the public functions carry an `Io` (they're plain `db: *sqlite3` + params), and threading one through every signature (plus every call site in `main.zig`/`llm_engine.zig`) wasn't worth it just for a lock. `std.atomic.Mutex` still exists and needs no `Io` — but it's lock-free-primitive-only (`tryLock`/`unlock`, no blocking `lock`). The fix is a two-line blocking wrapper:
+
+```zig
+var db_mutex: std.atomic.Mutex = .unlocked;
+
+fn lockDb() void {
+    while (!db_mutex.tryLock()) std.Thread.yield() catch {};
+}
+fn unlockDb() void {
+    db_mutex.unlock();
+}
+```
+
+A yield-spin loop is fine here specifically because the critical sections are a handful of `sqlite3_prepare_v2`/`step`/`finalize` calls — microseconds, not something worth a park/wake futex for. Don't reach for this pattern for anything longer-held; use `std.Io.Mutex` (thread the `Io` through) once a critical section does real work.
+
+**Why this mutex needed to exist at all:** the system libsqlite3 linked on this project (both Homebrew macOS and apt Linux commonly) is compiled `-DSQLITE_THREADSAFE=2` ("multi-thread" mode — verified via `sqlite3_threadsafe()`), which explicitly forbids using *the same connection* from more than one OS thread concurrently. `llm_engine.zig` fires background work on detached GTK threads (`g_thread_new`) against the single `state.db` connection opened once in `main()` — before this mutex, a `zig build test` regression test that fired 8 concurrent writers at a shared in-memory connection reliably **SEGV'd**. This is a real crash-risk race condition in the shipped app whenever two background operations touch the db at once, not just a test artifact.
+
+### `std.json.parseFromSlice` for a canonical data file
+
+```zig
+const Entry = struct { name: []const u8, testament: Testament }; // Testament: enum { Old, New, ... }
+const parsed = try std.json.parseFromSlice([]const Entry, allocator, json_bytes, .{});
+defer parsed.deinit();
+// parsed.value is []const Entry — enum fields parse straight from matching string tags.
+```
+
+Reading the file itself needs the `std.Io.Dir` pattern from above, not `std.fs` (`std.fs.zig` in this nightly has no `cwd()` at all anymore — filesystem access is fully IO-engine-mediated now):
+
+```zig
+var threaded_io = std.Io.Threaded.init(allocator, .{});
+defer threaded_io.deinit();
+const contents = try std.Io.Dir.cwd().readFileAlloc(threaded_io.io(), "path.json", allocator, std.Io.Limit.limited(1024 * 1024));
+```
+
+Used in `src/bible_db.zig`'s `"BIBLE_BOOKS testament data matches tools/bible_books.json"` test — a regression guard that fails the build if the Zig-side canonical book/testament list and the JSON copy Python reads ever drift again (this is exactly how the original Hebrew/Greek mis-tagging bug happened).
 
 ### Thread join sequence
 

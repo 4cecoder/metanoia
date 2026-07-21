@@ -46,13 +46,18 @@ var child = try std.process.spawn(io, .{
     .stdout = .pipe,
 });
 
-// Waiting
+// Waiting — Term is a tagged union: .exited(u8) / .signal / .stopped / .unknown.
+// `term == .exited and term.exited != 0` does NOT compile (can't compare a
+// union to a bare tag and also read the payload in one expression) — switch
+// on the tag, or just use the .success() helper:
 const term = try child.wait(io);
-if (term == .exited and term.exited != 0) { ... }
+if (!term.success()) { ... } // false for non-zero exit AND signal/stopped/unknown
 
 // Killing
 child.kill(io);
 ```
+
+> **Verified 2026-07-19** against `0.17.0-dev.1422+e863bf3be` — see `src/scraper_client.zig`'s `runScraperScript()` for the real usage this was extracted from (it turns a failed scraper subprocess into `error.ScraperFailed` instead of silently discarding the exit status, which was the root cause of one of this project's "verses don't cache" bugs).
 
 ## 3. JSON Handling (`std.json`)
 `std.json.stringify` is no longer a top-level function. Use the `Stringify` struct.

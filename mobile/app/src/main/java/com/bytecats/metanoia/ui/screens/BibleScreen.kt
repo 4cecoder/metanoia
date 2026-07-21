@@ -70,6 +70,27 @@ fun BibleScreen(viewModel: MainViewModel) {
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val completionMap = remember { bibleManager.getBookCompletion() }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scrapeError by bibleManager.scrapeError.collectAsState()
+
+    // Surface scrape/network failures instead of leaving the screen looking
+    // like it's "still loading" forever with no error and no retry signal.
+    fun retryDownload() {
+        val b = selectedBook ?: return
+        scope.launch {
+            bibleManager.scrapeChapter(b.name, selectedChapter, settings.bibleGatewayVersion)
+            bibleManager.scrapeInterlinear(b.name, selectedChapter)
+            currentChapterContent = bibleManager.getChapter(b.name, selectedChapter)
+            highlights = bibleManager.getHighlights(b.name, selectedChapter)
+        }
+    }
+
+    LaunchedEffect(scrapeError) {
+        scrapeError?.let {
+            val result = snackbarHostState.showSnackbar(it, actionLabel = "Retry", withDismissAction = true)
+            if (result == SnackbarResult.ActionPerformed) retryDownload()
+        }
+    }
 
     fun navigate(dir: Int) {
         val b = selectedBook ?: return
@@ -92,6 +113,7 @@ fun BibleScreen(viewModel: MainViewModel) {
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             Column {
                 TopAppBar(
@@ -127,7 +149,7 @@ fun BibleScreen(viewModel: MainViewModel) {
                                     }
                                 )
                             ) { Icon(Icons.Default.PlayCircle, null) }
-                            IconButton({ scope.launch { bibleManager.scrapeChapter(selectedBook!!.name, selectedChapter, settings.bibleGatewayVersion); bibleManager.scrapeInterlinear(selectedBook!!.name, selectedChapter); currentChapterContent = bibleManager.getChapter(selectedBook!!.name, selectedChapter); highlights = bibleManager.getHighlights(selectedBook!!.name, selectedChapter) } }) { Icon(Icons.Default.CloudDownload, null) } 
+                            IconButton({ retryDownload() }) { Icon(Icons.Default.CloudDownload, null) }
                         }
                     }
                 )
