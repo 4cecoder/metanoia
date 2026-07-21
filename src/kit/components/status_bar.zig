@@ -102,39 +102,49 @@ pub const StatusBar = struct {
     }
 
     pub fn updateStatus(self: *StatusBar, message: []const u8, is_error: bool) void {
+        // Captures only the specific widgets + allocator this callback needs
+        // (same pattern as updateVoice/updateEngine below), not a `*StatusBar`
+        // — this used to hold `self_ptr: *StatusBar` and dereference the
+        // whole struct from inside the idle callback, which would be a real
+        // use-after-free if `StatusBar.deinit()` ran while this callback was
+        // still queued (idle callbacks aren't guaranteed to run before the
+        // next main-loop iteration, so that's not just a theoretical
+        // ordering). Every field needed is a plain widget pointer or a copy
+        // of the allocator interface, neither of which is invalidated by
+        // freeing the StatusBar struct itself.
         const UpdateUI = struct {
-            self_ptr: *StatusBar,
+            status_label: ?*ffi.GtkLabel,
+            status_icon: ?*ffi.GtkWidget,
+            allocator: std.mem.Allocator,
             msg: [*:0]const u8,
             err: bool,
             fn update(ptr: ffi.gpointer) callconv(.c) bool {
                 const ctx: *@This() = @ptrCast(@alignCast(ptr));
-                const status_bar = ctx.self_ptr;
                 const msg_ptr = ctx.msg;
                 const is_err = ctx.err;
 
                 const color = if (is_err) "#f7768e" else "#7aa2f7";
                 const icon = if (is_err) "dialog-error-symbolic" else "emblem-system-symbolic";
 
-                const escaped = text.escape(status_bar.allocator, std.mem.span(msg_ptr)) catch {
-                    status_bar.allocator.free(std.mem.span(msg_ptr));
-                    status_bar.allocator.destroy(ctx);
+                const escaped = text.escape(ctx.allocator, std.mem.span(msg_ptr)) catch {
+                    ctx.allocator.free(std.mem.span(msg_ptr));
+                    ctx.allocator.destroy(ctx);
                     return false;
                 };
-                defer status_bar.allocator.free(escaped);
+                defer ctx.allocator.free(escaped);
 
-                const fmt_markup = std.fmt.allocPrintSentinel(status_bar.allocator, "<span foreground='{s}'>{s}</span>", .{ color, escaped }, 0) catch {
-                    status_bar.allocator.free(escaped);
-                    status_bar.allocator.free(std.mem.span(msg_ptr));
-                    status_bar.allocator.destroy(ctx);
+                const fmt_markup = std.fmt.allocPrintSentinel(ctx.allocator, "<span foreground='{s}'>{s}</span>", .{ color, escaped }, 0) catch {
+                    ctx.allocator.free(std.mem.span(msg_ptr));
+                    ctx.allocator.destroy(ctx);
                     return false;
                 };
 
-                ffi.gtk_label_set_markup(status_bar.status_label, fmt_markup.ptr);
-                ffi.gtk_image_set_from_icon_name(status_bar.status_icon, icon);
+                ffi.gtk_label_set_markup(ctx.status_label, fmt_markup.ptr);
+                ffi.gtk_image_set_from_icon_name(ctx.status_icon, icon);
 
-                status_bar.allocator.free(fmt_markup);
-                status_bar.allocator.free(std.mem.span(msg_ptr));
-                status_bar.allocator.destroy(ctx);
+                ctx.allocator.free(fmt_markup);
+                ctx.allocator.free(std.mem.span(msg_ptr));
+                ctx.allocator.destroy(ctx);
                 return false;
             }
         };
@@ -145,7 +155,9 @@ pub const StatusBar = struct {
             return;
         };
         ctx.* = .{
-            .self_ptr = self,
+            .status_label = self.status_label,
+            .status_icon = self.status_icon,
+            .allocator = self.allocator,
             .msg = msg,
             .err = is_error,
         };
