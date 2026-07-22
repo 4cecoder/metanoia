@@ -75,4 +75,17 @@ class SettingsManager(context: Context) {
     var scraperUserAgent: String
         get() = prefs.getString("scraper_user_agent", "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro)") ?: "Mozilla/5.0"
         set(value) = prefs.edit().putString("scraper_user_agent", value).apply()
+
+    // --- Updates ---
+    var nightlyUpdatesEnabled: Boolean
+        get() = prefs.getBoolean("nightly_updates_enabled", false)
+        set(value) = prefs.edit().putBoolean("nightly_updates_enabled", value).apply()
+
+    var lastUpdateCheckMillis: Long
+        get() = prefs.getLong("last_update_check_millis", 0L)
+        set(value) = prefs.edit().putLong("last_update_check_millis", value).apply()
+
+    var dismissedUpdateSha: String
+        get() = prefs.getString("dismissed_update_sha", "") ?: ""
+        set(value) = prefs.edit().putString("dismissed_update_sha", value).apply()
 }

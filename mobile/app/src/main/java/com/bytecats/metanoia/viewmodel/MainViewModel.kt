@@ -1,5 +1,6 @@
 package com.bytecats.metanoia.viewmodel
 
+import com.bytecats.metanoia.BuildConfig
 import android.app.Application
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
@@ -15,6 +16,8 @@ import com.bytecats.metanoia.settings.SettingsManager
 import com.bytecats.metanoia.stt.STTManager
 import com.bytecats.metanoia.models.RemoteVoice
 import com.bytecats.metanoia.tts.TTSManager
+import com.bytecats.metanoia.update.NightlyUpdateInfo
+import com.bytecats.metanoia.update.UpdateChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -55,6 +58,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     private val _narrationState = mutableStateOf(NarrationState())
     val narrationState: State<NarrationState> = _narrationState
 
+    // Nightly/experimental update notice (opt-in, throttled — see checkForNightlyUpdateIfDue)
+    val availableUpdate = mutableStateOf<NightlyUpdateInfo?>(null)
+
     init {
         gateway = bibleManager.gateway
 
@@ -84,6 +90,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
 
                 // Initial load
                 refreshServerVoices()
+
+                // Opportunistic, throttled nightly-update check (opt-in).
+                checkForNightlyUpdateIfDue()
             } catch (e: Exception) {
                 Log.e("VM", "Hardware fail: ${e.message}")
             }
@@ -121,6 +130,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
             isTestingGateway = false
             onResult(result)
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Updates (opt-in nightly/experimental build checker)
+    // -----------------------------------------------------------------------
+
+    fun checkForNightlyUpdateIfDue() {
+        if (!settingsManager.nightlyUpdatesEnabled) return
+        val elapsed = System.currentTimeMillis() - settingsManager.lastUpdateCheckMillis
+        if (elapsed < 24 * 60 * 60 * 1000L) return
+
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                UpdateChecker.fetchLatest()
+            }
+            settingsManager.lastUpdateCheckMillis = System.currentTimeMillis()
+
+            availableUpdate.value = if (
+                result != null &&
+                result.commitSha != settingsManager.dismissedUpdateSha &&
+                UpdateChecker.isUpdateAvailable(BuildConfig.GIT_COMMIT_SHA, result)
+            ) result else null
+        }
+    }
+
+    fun dismissAvailableUpdate() {
+        settingsManager.dismissedUpdateSha = availableUpdate.value?.commitSha ?: ""
+        availableUpdate.value = null
     }
 
     // -----------------------------------------------------------------------

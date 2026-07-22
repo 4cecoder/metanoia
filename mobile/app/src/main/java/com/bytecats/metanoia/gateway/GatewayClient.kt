@@ -15,13 +15,14 @@ import java.util.concurrent.TimeUnit
  * Unified HTTP client for the AI VM Gateway.
  * All managers (TTS, STT, Bible) route through this.
  */
-class GatewayClient(private val baseUrlProvider: () -> String) {
-
-    private val client = OkHttpClient.Builder()
+class GatewayClient(
+    private val client: Call.Factory = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)   // TTS generation can be slow
         .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+        .build(),
+    private val baseUrlProvider: () -> String
+) {
 
     private val tag = "GatewayClient"
 

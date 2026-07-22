@@ -15,6 +15,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "GIT_COMMIT_SHA", "\"${gitCommitSha()}\"")
     }
 
     buildTypes {
@@ -32,8 +33,30 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    testOptions {
+        unitTests {
+            // Some code paths under test (e.g. GatewayClient's catch-and-log
+            // swallow) call android.util.Log, which is a stub that throws by
+            // default under plain JUnit (no Robolectric). This makes Log.*
+            // calls return default values instead of throwing, matching the
+            // documented AGP recommendation for JVM unit tests.
+            isReturnDefaultValues = true
+        }
     }
 }
+
+fun gitCommitSha(): String = try {
+    val process = ProcessBuilder("git", "rev-parse", "HEAD")
+        .directory(rootDir)
+        .redirectErrorStream(true)
+        .start()
+    val output = process.inputStream.bufferedReader().readText().trim()
+    process.waitFor()
+    if (output.matches(Regex("^[0-9a-f]{40}$"))) output else "unknown"
+} catch (e: Exception) { "unknown" }
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
@@ -62,6 +85,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito:mockito-core:5.11.0")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
+    testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation(platform("androidx.compose:compose-bom:2025.02.00"))
