@@ -8,6 +8,27 @@ android {
     namespace = "com.bytecats.metanoia"
     compileSdk = 35
 
+    // Pinned debug keystore (mobile/debug.keystore, checked into git — not
+    // sensitive, this is Android's own "debug" convention: fixed alias
+    // "androiddebugkey", password "android"). Without this, AGP falls back
+    // to ~/.android/debug.keystore, which is stable on one dev machine but
+    // does NOT exist on GitHub Actions runners (fresh/ephemeral every run),
+    // so every CI-built APK got signed with a different random key. Since
+    // Android refuses to install an update whose signature doesn't match
+    // the already-installed app (and uninstalling first wipes app-private
+    // storage — the local bible.db cache, notes, highlights, favorites —
+    // rendering the "rolling nightly release" pointless), every nightly
+    // build must share this exact signing identity to actually update in
+    // place instead of silently requiring a wipe-and-reinstall.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("../debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.bytecats.metanoia"
         minSdk = 28

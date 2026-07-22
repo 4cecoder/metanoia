@@ -9,6 +9,22 @@ import java.io.File
 class BibleDatabase(private val context: Context) {
     private val dbFile = File(context.filesDir, "bible.db")
 
+    companion object {
+        /**
+         * SQLiteDatabase.openDatabase with OPEN_READWRITE alone throws
+         * SQLITE_CANTOPEN (error 14) if dbFile doesn't exist yet — it does
+         * NOT create it. On a clean install (no bible.db in filesDir yet),
+         * that meant every write, including this class's own init() block,
+         * threw immediately and was silently swallowed, so the file was
+         * never created and every scrape/gateway fetch "succeeded" over the
+         * network but failed to persist, with no visible error pointing at
+         * the real cause.
+         */
+        fun openFlags(readOnly: Boolean): Int =
+            if (readOnly) SQLiteDatabase.OPEN_READONLY
+            else SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.CREATE_IF_NECESSARY
+    }
+
     init {
         try {
             val db = open(false)
@@ -27,10 +43,7 @@ class BibleDatabase(private val context: Context) {
     fun exists(): Boolean = dbFile.exists()
 
     fun open(readOnly: Boolean = true): SQLiteDatabase {
-        return SQLiteDatabase.openDatabase(
-            dbFile.absolutePath, null,
-            if (readOnly) SQLiteDatabase.OPEN_READONLY else SQLiteDatabase.OPEN_READWRITE
-        )
+        return SQLiteDatabase.openDatabase(dbFile.absolutePath, null, openFlags(readOnly))
     }
 
     fun sizeMb(): Double = dbFile.length() / (1024.0 * 1024.0)
