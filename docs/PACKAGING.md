@@ -22,6 +22,31 @@ uploads its own artifact to the same GitHub Release via
 job already behaves and multiple jobs/workflows can append files to one
 release without conflict.
 
+## Continuous "latest" releases (no tag needed)
+
+Separately, `.github/workflows/release-latest.yml` runs on **every push to
+master** — no tag required. It builds all four platforms (Windows, macOS,
+Linux, Android) and republishes them under a single rolling GitHub Release
+tagged `latest` (https://github.com/4cecoder/metanoia/releases/tag/latest),
+overwriting each platform's asset every push. This is for quick
+distribution/testing off the tip of master, not a substitute for the
+versioned tag releases above.
+
+Each platform's build job (`build-windows`/`build-macos`/`build-linux`/
+`build-android`) is gated on its own test job (`test-zig` for the three
+native ones, `test-kotlin` for Android) so a broken build never overwrites
+a working `latest` asset. A dedicated `move-tag` job force-moves the `latest`
+git tag to the new commit before any build job publishes against it —
+`softprops/action-gh-release` does not move an already-existing tag on its
+own, so skipping this step would leave the release's tag pointing at a
+stale commit even though the uploaded files are fresh.
+
+The Android job is debug-signed only (same caveat as below); Windows/macOS/
+Linux builds use the same `packaging/*.sh` scripts as the tag-triggered
+flow, which already produce stable, non-versioned filenames (arch-based, no
+git tag baked in) — so no script changes were needed to make them safe for
+a rolling release with a fixed asset name.
+
 ## Data distribution — resolved
 
 `data/` was originally entirely gitignored (110MB, including a lot of unused

@@ -1,0 +1,274 @@
+name: release-latest
+
+# Continuous "latest" release: every push to master rebuilds Windows,
+# macOS, Linux, and Android artifacts and republishes them under a single
+# rolling GitHub Release tagged "latest", overwriting each platform's asset
+# on every push. Fully separate from the tag-triggered release.yml /
+# release-unix.yml, which still drive the versioned desktop releases —
+# untouched by this file. Supersedes the old release-android.yml (folded
+# in here so all four platforms share one tag-move step instead of racing
+# to force-push "latest" independently).
+on:
+  push:
+    branches: ["master"]
+
+concurrency:
+  group: release-latest
+  cancel-in-progress: true
+
+jobs:
+  # Moves the rolling "latest" tag to this commit exactly once, before any
+  # build job publishes a release against it — softprops/action-gh-release
+  # does NOT move an already-existing tag's target commit on its own.
+  move-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Move the rolling "latest" tag to this commit
+        run: |
+          git tag -f latest
+          git push origin latest --force
+
+  test-kotlin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: gradlew testDebugUnitTest
+        working-directory: mobile
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+  test-zig:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK4/SQLite3 deps (macOS)
+        if: runner.os == 'macOS'
+        run: brew install gtk4 pango cairo glib sqlite3
+
+      - name: Install GTK4/SQLite3 deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libsqlite3-dev pkg-config build-essential
+
+      - name: Install Zig (pinned master nightly)
+        run: |
+          set -euo pipefail
+          case "$(uname -s)-$(uname -m)" in
+            Darwin-arm64|Darwin-aarch64) ZIG_TARGET="aarch64-macos" ;;
+            Darwin-x86_64) ZIG_TARGET="x86_64-macos" ;;
+            Linux-x86_64) ZIG_TARGET="x86_64-linux" ;;
+            Linux-aarch64|Linux-arm64) ZIG_TARGET="aarch64-linux" ;;
+            *) echo "unsupported platform $(uname -s)-$(uname -m)" >&2; exit 1 ;;
+          esac
+          JSON="$(curl -fsSL https://ziglang.org/download/index.json)"
+          URL="$(echo "$JSON" | jq -r ".master[\"$ZIG_TARGET\"].tarball")"
+          echo "Installing zig from $URL"
+          curl -fsSL "$URL" -o "$RUNNER_TEMP/zig.tar.xz"
+          mkdir -p "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Verify zig
+        run: zig version
+
+      - name: zig build test
+        run: zig build test --summary all
+
+  build-android:
+    needs: [move-tag, test-kotlin]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build debug-signed APK
+        run: bash packaging/build-android.sh
+
+      - name: Publish rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest (master @ ${{ github.sha }})"
+          body: |
+            Android build is DEBUG-SIGNED (sideload only, not from the Play
+            Store) — see docs/PACKAGING.md. Rebuilt from `${{ github.sha }}`,
+            replaced on every push to master.
+          prerelease: true
+          files: dist/metanoia-android-debug.apk
+
+  build-macos:
+    needs: [move-tag, test-zig]
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK4/SQLite3 deps
+        run: brew install gtk4 pango cairo glib sqlite3
+
+      - name: Install Zig (pinned master nightly)
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            arm64|aarch64) ZIG_TARGET="aarch64-macos" ;;
+            x86_64) ZIG_TARGET="x86_64-macos" ;;
+            *) echo "unsupported arch $(uname -m)" >&2; exit 1 ;;
+          esac
+          JSON="$(curl -fsSL https://ziglang.org/download/index.json)"
+          URL="$(echo "$JSON" | jq -r ".master[\"$ZIG_TARGET\"].tarball")"
+          echo "Installing zig from $URL"
+          curl -fsSL "$URL" -o "$RUNNER_TEMP/zig.tar.xz"
+          mkdir -p "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Verify zig
+        run: zig version
+
+      - name: Build macOS .app bundle
+        run: bash packaging/build-macos.sh
+
+      - name: Publish rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest (master @ ${{ github.sha }})"
+          body: |
+            macOS build (unsigned/ad-hoc-signed — see docs/PACKAGING.md for
+            the Gatekeeper caveat). Unzip and run Metanoia.app. Rebuilt from
+            `${{ github.sha }}`, replaced on every push to master.
+          prerelease: true
+          files: dist/Metanoia-macos-*.tar.gz
+
+  build-linux:
+    needs: [move-tag, test-zig]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK4/SQLite3 deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libsqlite3-dev pkg-config build-essential
+
+      - name: Install Zig (pinned master nightly)
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            x86_64) ZIG_TARGET="x86_64-linux" ;;
+            aarch64|arm64) ZIG_TARGET="aarch64-linux" ;;
+            *) echo "unsupported arch $(uname -m)" >&2; exit 1 ;;
+          esac
+          JSON="$(curl -fsSL https://ziglang.org/download/index.json)"
+          URL="$(echo "$JSON" | jq -r ".master[\"$ZIG_TARGET\"].tarball")"
+          echo "Installing zig from $URL"
+          curl -fsSL "$URL" -o "$RUNNER_TEMP/zig.tar.xz"
+          mkdir -p "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Verify zig
+        run: zig version
+
+      - name: Build Linux tarball + .deb
+        run: bash packaging/build-linux.sh
+
+      - name: Publish rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest (master @ ${{ github.sha }})"
+          body: |
+            Linux build: universal tarball (with install.sh) + .deb for
+            Debian/Ubuntu — see docs/PACKAGING.md. Rebuilt from
+            `${{ github.sha }}`, replaced on every push to master.
+          prerelease: true
+          files: |
+            dist/Metanoia-linux-*.tar.gz
+            dist/*.deb
+
+  build-windows:
+    needs: move-tag
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-pkg-config
+            mingw-w64-ucrt-x86_64-sqlite3
+            mingw-w64-ucrt-x86_64-curl
+            mingw-w64-ucrt-x86_64-git
+            mingw-w64-ucrt-x86_64-nsis
+
+      - name: Install Zig
+        shell: pwsh
+        run: |
+          $json = Invoke-RestMethod https://ziglang.org/download/index.json
+          $url = $json.master."x86_64-windows".tarball
+          $zip = "$env:TEMP\zig.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Expand-Archive $zip -DestinationPath "$env:USERPROFILE\zig" -Force
+          $dir = (Get-ChildItem "$env:USERPROFILE\zig" -Recurse -Filter "zig.exe").DirectoryName
+          echo "$dir" | Out-File $env:GITHUB_PATH -Append
+
+      - name: Build
+        shell: msys2 {0}
+        env:
+          MSYS2_PATH_TYPE: inherit
+        run: bash ci/fix-msys2-libs.sh && zig build
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $dist = "dist\Metanoia"
+          New-Item $dist -ItemType Directory -Force
+          Copy-Item "zig-out\bin\*" $dist -Recurse
+          Copy-Item "assets\metanoia.ico" $dist
+          Compress-Archive -Path "$dist\*" -DestinationPath "dist\Metanoia-latest.zip" -Force
+
+      - name: Publish rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest (master @ ${{ github.sha }})"
+          body: |
+            Portable Windows build — unzip and run metanoia.exe. Rebuilt
+            from `${{ github.sha }}`, replaced on every push to master.
+          prerelease: true
+          files: dist/Metanoia-latest.zip
