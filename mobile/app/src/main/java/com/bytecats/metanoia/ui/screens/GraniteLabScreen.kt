@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -19,13 +20,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import com.bytecats.metanoia.llm.AIProvider
 import com.bytecats.metanoia.llm.LLMManager
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GraniteLabScreen(logs: List<String>, llm: LLMManager) {
+fun GraniteLabScreen(navController: NavController, logs: List<String>, llm: LLMManager) {
     var query by remember { mutableStateOf("") }
     val chat = remember { mutableStateListOf<Pair<String, String>>() }
     val scope = rememberCoroutineScope()
@@ -46,6 +48,11 @@ fun GraniteLabScreen(logs: List<String>, llm: LLMManager) {
     Scaffold(topBar = { 
         TopAppBar(
             title = { Text("AI LAB") },
+            navigationIcon = {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+            },
             actions = {
                 IconButton({ showConfig = !showConfig }) { Icon(Icons.Default.Settings, "Configure Ollama") }
                 IconButton({ 

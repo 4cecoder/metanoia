@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -14,14 +16,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 import com.bytecats.metanoia.bible.BibleManager
 import com.bytecats.metanoia.models.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TableInspectorScreen(tableName: String, bible: BibleManager) {
+fun TableInspectorScreen(navController: NavController, tableName: String, bible: BibleManager) {
     val rows = remember { bible.getTableRows(tableName) }
-    Scaffold(topBar = { TopAppBar(title = { Text("INSPECT: $tableName") }) }) { innerPadding ->
+    Scaffold(topBar = {
+        TopAppBar(
+            title = { Text("INSPECT: $tableName") },
+            navigationIcon = {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+            }
+        )
+    }) { innerPadding ->
         if (rows.isEmpty()) { 
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { 
                 Text("No records found in $tableName", color = MaterialTheme.colorScheme.outline) 

@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -38,6 +39,9 @@ fun SettingsDashboard(navController: NavController) {
             SettingsLink("Data & Library", "Database Management", Icons.Default.Storage) {
                 navController.navigate("data_management")
             }
+            SettingsLink("Updates", "Nightly / experimental builds", Icons.Default.SystemUpdate) {
+                navController.navigate("settings_updates")
+            }
         }
     }
 }
@@ -64,7 +68,7 @@ fun SettingsLink(title: String, subtitle: String, icon: ImageVector, onClick: ()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GatewaySettingsPage(settings: SettingsManager) {
+fun GatewaySettingsPage(navController: NavController, settings: SettingsManager) {
     var gatewayIp by remember { mutableStateOf(settings.gatewayIp) }
     var gatewayPort by remember { mutableStateOf(settings.gatewayPort) }
     var useGatewayBible by remember { mutableStateOf(settings.useGatewayBible) }
@@ -74,7 +78,16 @@ fun GatewaySettingsPage(settings: SettingsManager) {
 
     val fullUrl = "http://$gatewayIp:$gatewayPort"
 
-    Scaffold(topBar = { TopAppBar(title = { Text("GATEWAY CONNECTION") }) }) { innerPadding ->
+    Scaffold(topBar = {
+        TopAppBar(
+            title = { Text("GATEWAY CONNECTION") },
+            navigationIcon = {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+            }
+        )
+    }) { innerPadding ->
         Column(
             modifier = Modifier.padding(innerPadding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -219,12 +232,21 @@ fun ServiceItem(name: String, description: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AudioSettingsPage(settings: SettingsManager) {
+fun AudioSettingsPage(navController: NavController, settings: SettingsManager) {
     var exp by remember { mutableStateOf(settings.useExperimentalTTS) }
     var talkTap by remember { mutableStateOf(settings.speakDefinitionsOnTap) }
     var voice by remember { mutableStateOf(settings.selectedVoice) }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("AUDIO ENGINE") }) }) { innerPadding ->
+    Scaffold(topBar = {
+        TopAppBar(
+            title = { Text("AUDIO ENGINE") },
+            navigationIcon = {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+            }
+        )
+    }) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
 
             // TTS Mode selector
@@ -283,15 +305,172 @@ fun AudioSettingsPage(settings: SettingsManager) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReaderSettingsPage(settings: SettingsManager) {
+fun ReaderSettingsPage(navController: NavController, settings: SettingsManager) {
     var engSize by remember { mutableStateOf(settings.englishFontSize.toFloat()) }
     var ancSize by remember { mutableStateOf(settings.ancientFontSize.toFloat()) }
-    Scaffold(topBar = { TopAppBar(title = { Text("READER STYLES") }) }) { innerPadding ->
+    Scaffold(topBar = {
+        TopAppBar(
+            title = { Text("READER STYLES") },
+            navigationIcon = {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+            }
+        )
+    }) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
             Text("English Font Size: ${engSize.toInt()}px")
             Slider(engSize, { engSize = it; settings.englishFontSize = it.toInt() }, valueRange = 14f..40f)
             Text("Ancient Font Size: ${ancSize.toInt()}px")
             Slider(ancSize, { ancSize = it; settings.ancientFontSize = it.toInt() }, valueRange = 14f..40f)
+        }
+    }
+}
+
+// -----------------------------------------------------------------------
+// Update Settings (opt-in nightly/experimental build checker)
+// -----------------------------------------------------------------------
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun UpdateSettingsPage(navController: NavController, viewModel: MainViewModel) {
+    val settings = viewModel.settingsManager
+    var nightlyEnabled by remember { mutableStateOf(settings.nightlyUpdatesEnabled) }
+    var isChecking by remember { mutableStateOf(false) }
+    var hasChecked by remember { mutableStateOf(false) }
+    val updateInfo = viewModel.availableUpdate.value
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    var appVersionName by remember { mutableStateOf("-") }
+    var appVersionCode by remember { mutableStateOf("-") }
+    LaunchedEffect(Unit) {
+        try {
+            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            appVersionName = pInfo.versionName ?: "-"
+            appVersionCode = (
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) pInfo.longVersionCode
+                else @Suppress("DEPRECATION") pInfo.versionCode.toLong()
+            ).toString()
+        } catch (e: Exception) {
+            appVersionName = "-"
+            appVersionCode = "-"
+        }
+    }
+
+    Scaffold(topBar = {
+        TopAppBar(
+            title = { Text("UPDATES") },
+            navigationIcon = {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+            }
+        )
+    }) { innerPadding ->
+        Column(
+            modifier = Modifier.padding(innerPadding).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            SettingToggle(
+                "Nightly / Experimental Updates",
+                "Opt in to check GitHub for the latest master build. Sideload-only, may be unstable.",
+                nightlyEnabled
+            ) {
+                nightlyEnabled = it
+                settings.nightlyUpdatesEnabled = it
+            }
+
+            Text(
+                "Current build: ${com.bytecats.metanoia.BuildConfig.GIT_COMMIT_SHA.take(7)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+            Text(
+                "App version: $appVersionName (build $appVersionCode)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+
+            if (!nightlyEnabled) {
+                Text(
+                    "Enable to check for nightly builds",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            } else {
+                HorizontalDivider()
+
+                Button(
+                    onClick = {
+                        isChecking = true
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                com.bytecats.metanoia.update.UpdateChecker.fetchLatest()
+                            }
+                            settings.lastUpdateCheckMillis = System.currentTimeMillis()
+                            val avail = com.bytecats.metanoia.update.UpdateChecker.isUpdateAvailable(
+                                com.bytecats.metanoia.BuildConfig.GIT_COMMIT_SHA, result
+                            )
+                            viewModel.availableUpdate.value = if (result != null && avail) result else null
+                            hasChecked = true
+                            isChecking = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isChecking
+                ) {
+                    if (isChecking) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.SystemUpdate, null, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Check Now")
+                    }
+                }
+
+                val updateAvailable = updateInfo != null
+                val statusText = when {
+                    !hasChecked && !updateAvailable -> "Not checked yet this session"
+                    updateAvailable -> {
+                        val shortSha = updateInfo?.commitSha?.take(7) ?: "unknown"
+                        "Update available (commit $shortSha, published ${updateInfo?.publishedAt ?: "unknown"})"
+                    }
+                    else -> "Up to date"
+                }
+                Text(
+                    statusText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (updateAvailable) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outline
+                )
+
+                if (updateAvailable) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (updateInfo?.downloadUrl != null) {
+                            Button(
+                                onClick = {
+                                    val url = updateInfo.downloadUrl ?: return@Button
+                                    context.startActivity(
+                                        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                    )
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Download, null, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Download APK")
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = { viewModel.dismissAvailableUpdate() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Dismiss")
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -3,6 +3,8 @@ package com.bytecats.metanoia.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -10,14 +12,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 import com.bytecats.metanoia.bible.BibleManager
 import com.bytecats.metanoia.ui.components.StatItemCompact
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LibraryStatsScreen(bible: BibleManager) {
+fun LibraryStatsScreen(navController: NavController, bible: BibleManager) {
     val stats = remember { bible.getStats() }
-    Scaffold(topBar = { TopAppBar(title = { Text("LIBRARY ANALYTICS") }) }) { innerPadding ->
+    Scaffold(topBar = {
+        TopAppBar(
+            title = { Text("LIBRARY ANALYTICS") },
+            navigationIcon = {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+            }
+        )
+    }) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             Text("SCRIPTORIUM METRICS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))) {

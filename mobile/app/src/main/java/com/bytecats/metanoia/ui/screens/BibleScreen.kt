@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import com.bytecats.metanoia.models.BibleBook
 import com.bytecats.metanoia.models.InterlinearWord
 import com.bytecats.metanoia.models.LexiconEntry
@@ -43,7 +44,7 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
-fun BibleScreen(viewModel: MainViewModel) {
+fun BibleScreen(navController: NavController, viewModel: MainViewModel) {
     val bibleManager = viewModel.bibleManager
     val settings = viewModel.settingsManager
     val narration by viewModel.narrationState
@@ -118,7 +119,17 @@ fun BibleScreen(viewModel: MainViewModel) {
             Column {
                 TopAppBar(
                     title = { Text(if (step == "read") "${selectedBook?.name} $selectedChapter" else "BIBLE") },
-                    navigationIcon = { if (step != "book") IconButton({ step = if (step == "read") "chapter" else "book"; isSearchVisible = (step == "book"); viewModel.stopNarration() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
+                    navigationIcon = {
+                        IconButton({
+                            if (step == "book") {
+                                navController.popBackStack()
+                            } else {
+                                step = if (step == "read") "chapter" else "book"
+                                isSearchVisible = (step == "book")
+                                viewModel.stopNarration()
+                            }
+                        }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    },
                     actions = { 
                         if (viewModel.isRemoteTtsActive && narration.isPlaying) {
                             Surface(

@@ -26,41 +26,44 @@ class MainActivity : ComponentActivity() {
             MetanoiaTheme {
                 NavHost(navController = navController, startDestination = "menu") {
                     composable("menu") { MainMenu(navController, viewModel) }
-                    composable("bible") { BibleScreen(viewModel) }
-                    composable("collection") { CollectionScreen(viewModel) }
+                    composable("bible") { BibleScreen(navController, viewModel) }
+                    composable("collection") { CollectionScreen(navController, viewModel) }
                     composable("insights") {
-                        InsightsRepositoryScreen(viewModel) { viewModel.speak(it) }
+                        InsightsRepositoryScreen(navController, viewModel) { viewModel.speak(it) }
                     }
                     composable("stats") {
-                        LibraryStatsScreen(viewModel.bibleManager)
+                        LibraryStatsScreen(navController, viewModel.bibleManager)
                     }
                     composable("experimental_hub") {
                         ExperimentalHub(navController)
                     }
                     composable("ai_lab") {
-                        GraniteLabScreen(viewModel.aiLogs, viewModel.llmManager!!)
+                        GraniteLabScreen(navController, viewModel.aiLogs, viewModel.llmManager!!)
                     }
                     composable("voice_lab") {
-                        VoiceLabScreen(viewModel)
+                        VoiceLabScreen(navController, viewModel)
                     }
                     composable("data_management") {
                         DataManagementScreen(navController, viewModel)
                     }
                     composable("table_inspector/{tableName}") { backStack ->
                         val name = backStack.arguments?.getString("tableName") ?: "unknown"
-                        TableInspectorScreen(name, viewModel.bibleManager)
+                        TableInspectorScreen(navController, name, viewModel.bibleManager)
                     }
                     composable("settings_main") {
                         SettingsDashboard(navController)
                     }
                     composable("settings_gateway") {
-                        GatewaySettingsPage(viewModel.settingsManager)
+                        GatewaySettingsPage(navController, viewModel.settingsManager)
                     }
                     composable("settings_audio") {
-                        AudioSettingsPage(viewModel.settingsManager)
+                        AudioSettingsPage(navController, viewModel.settingsManager)
                     }
                     composable("settings_reader") {
-                        ReaderSettingsPage(viewModel.settingsManager)
+                        ReaderSettingsPage(navController, viewModel.settingsManager)
+                    }
+                    composable("settings_updates") {
+                        UpdateSettingsPage(navController, viewModel)
                     }
                 }
             }

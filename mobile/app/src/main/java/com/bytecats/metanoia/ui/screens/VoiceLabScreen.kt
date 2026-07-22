@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,13 +26,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import com.bytecats.metanoia.models.RemoteVoice
 import com.bytecats.metanoia.viewmodel.MainViewModel
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun VoiceLabScreen(viewModel: MainViewModel) {
+fun VoiceLabScreen(navController: NavController, viewModel: MainViewModel) {
     var text by remember { mutableStateOf("Metanoia: Neural synthesis check.") }
     var selectedVoiceKey by remember { mutableStateOf(viewModel.settingsManager.selectedVoice) }
     var showCreateSheet by remember { mutableStateOf(false) }
@@ -56,6 +58,11 @@ fun VoiceLabScreen(viewModel: MainViewModel) {
         topBar = { 
             TopAppBar(
                 title = { Text("NEURAL STUDIO", fontWeight = FontWeight.Black) },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
                 actions = {
                     IconButton({ viewModel.refreshServerVoices() }) { Icon(Icons.Default.Refresh, null) }
                     IconButton({ viewModel.voiceLogs.clear() }) { Icon(Icons.Default.DeleteSweep, null, tint = Color.Red) }
