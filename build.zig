@@ -161,8 +161,36 @@ pub fn build(b: *std.Build) void {
     // Windows-specific: hide terminal window, add MSYS2 search paths
     if (target.result.os.tag == .windows) {
         exe.subsystem = .Windows;
+        // MSYS2 does NOT always live at "C:\msys64". The msys2/setup-msys2
+        // GitHub Action's default config (release: true, no `location`
+        // override — what this repo's CI workflows use) does a *fresh*
+        // install under "${RUNNER_TEMP}\msys64" (e.g. "D:\a\_temp\msys64"
+        // on GitHub-hosted Windows runners), not the conventional
+        // "C:\msys64" a manual/local install or `release: false` (reuse the
+        // runner image's preinstalled MSYS2) would use. Confirmed from the
+        // actual failing run (29959022548 / job 89055266406): its "Setup
+        // MSYS2" step invoked "D:\a\_temp\setup-msys2\msys2.cmd", i.e. the
+        // real install root that run, was NOT "C:\msys64" — so these
+        // hardcoded paths never pointed at real files, regardless of what
+        // ci/fix-msys2-libs.sh renamed on disk.
+        //
+        // CI passes the setup-msys2 action's own `msys2-location` output
+        // through as the MSYS2_ROOT env var (see .github/workflows/
+        // release-latest.yml and release.yml's build-windows jobs) so we
+        // search the *actual* install location. "C:\msys64" is kept as a
+        // fallback for local dev machines with a real system-wide MSYS2
+        // install at that conventional path (and as a last-ditch guess if
+        // MSYS2_ROOT isn't set for some reason) — the previous
+        // ".\cache\msys64\ucrt64\lib" entry is dropped: git blame traces it
+        // to an earlier local-dev workflow (commit a5086d0, "MSYS2 installs
+        // to .cache/msys64 — nothing outside project folder") that doesn't
+        // reflect how CI actually installs MSYS2 today; it never resolved
+        // in CI (Zig only ever warned "unable to open library directory"
+        // for it) and isn't referenced anywhere else in the repo.
+        const msys2_root = b.graph.environ_map.get("MSYS2_ROOT") orelse "C:\\msys64";
         const msys_libs = [_][]const u8{
-            ".\\cache\\msys64\\ucrt64\\lib",
+            b.fmt("{s}\\ucrt64\\lib", .{msys2_root}),
+            b.fmt("{s}\\mingw64\\lib", .{msys2_root}),
             "C:\\msys64\\ucrt64\\lib",
             "C:\\msys64\\mingw64\\lib",
         };
