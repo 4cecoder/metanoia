@@ -1,0 +1,71 @@
+name: release-android
+
+# Continuous Android release: every push to master rebuilds the APK and
+# republishes it under a single rolling GitHub Release tagged "latest",
+# overwriting the previous asset. This is separate from release-unix.yml's
+# build-android job, which stays tied to the existing dated-tag desktop
+# release flow (untouched by this file). See docs/PACKAGING.md for the
+# debug-signing caveat this build shares with that job.
+on:
+  push:
+    branches: ["master"]
+
+concurrency:
+  group: release-android-latest
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: gradlew testDebugUnitTest
+        working-directory: mobile
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+  build-and-release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build debug-signed APK
+        run: bash packaging/build-android.sh
+
+      - name: Move latest tag
+        run: |
+          git tag -f latest
+          git push origin latest --force
+
+      - name: Publish rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest (master @ ${{ github.sha }})"
+          body: |
+            Automatically rebuilt from the latest commit on `master`
+            (${{ github.sha }}). This asset is replaced on every push.
+
+            Android build is DEBUG-SIGNED (sideload only, not from the Play
+            Store) — see docs/PACKAGING.md for what a real signed release
+            needs.
+          prerelease: true
+          files: dist/metanoia-android-debug.apk
