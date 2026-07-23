@@ -33,8 +33,13 @@ android {
         applicationId = "com.bytecats.metanoia"
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // Was hardcoded to 1/"1.0" forever, so every nightly build looked
+        // identical to Android and to a user checking Settings > App Info —
+        // no way to tell which build is actually installed short of BuildConfig.
+        // versionCode = total commit count: monotonically increasing across
+        // this repo's history by construction, exactly what Android wants.
+        versionCode = gitCommitCount()
+        versionName = "1.0.${gitCommitCount()}-g${gitCommitSha().take(7)}"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GIT_COMMIT_SHA", "\"${gitCommitSha()}\"")
     }
@@ -78,6 +83,16 @@ fun gitCommitSha(): String = try {
     process.waitFor()
     if (output.matches(Regex("^[0-9a-f]{40}$"))) output else "unknown"
 } catch (e: Exception) { "unknown" }
+
+fun gitCommitCount(): Int = try {
+    val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
+        .directory(rootDir)
+        .redirectErrorStream(true)
+        .start()
+    val output = process.inputStream.bufferedReader().readText().trim()
+    process.waitFor()
+    output.toIntOrNull() ?: 1
+} catch (e: Exception) { 1 }
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")

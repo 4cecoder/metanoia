@@ -37,6 +37,17 @@ object UpdateChecker {
     // tolerating surrounding whitespace.
     private val COMMIT_SHA_REGEX = Regex("""(?i)commit:\s*([0-9a-f]{7,40})\s*""")
 
+    // Fallback for when the body doesn't have an explicit "commit:" label —
+    // this happened for real: a release-workflow body-text rewrite dropped
+    // the labeled line while still mentioning the sha in prose (e.g.
+    // "Rebuilt from `<sha>`"), which silently made every update check think
+    // no commit sha was ever available (isUpdateAvailable degrades to
+    // "false" when commitSha is null) — the whole checker looked broken
+    // with no error anywhere. A bare 40-hex-char sha is unambiguous enough
+    // to match unlabeled (unlike a short sha, which is too easily confused
+    // with an unrelated hex-looking token), so this is a safe last resort.
+    private val BARE_FULL_SHA_REGEX = Regex("""(?i)\b([0-9a-f]{40})\b""")
+
     /**
      * Parses a GitHub Releases API JSON response body. Returns null on any
      * malformed input (missing/blank tag_name, invalid JSON, unexpected
@@ -79,11 +90,14 @@ object UpdateChecker {
     }
 
     /**
-     * Extracts the 7-40 char hex commit sha out of a "commit: <sha>" line in
-     * the release body, or null if no such line is present.
+     * Extracts a commit sha from the release body: prefers an explicit
+     * "commit: <sha>" line, falls back to a bare 40-char hex sha anywhere in
+     * the text (see BARE_FULL_SHA_REGEX for why), or null if neither is
+     * present.
      */
     fun extractCommitSha(body: String): String? =
         COMMIT_SHA_REGEX.find(body)?.groupValues?.get(1)
+            ?: BARE_FULL_SHA_REGEX.find(body)?.groupValues?.get(1)
 
     /**
      * Pure comparison: is `fetched` a genuinely different build than the one

@@ -96,6 +96,12 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history, not the default shallow (fetch-depth: 1) clone —
+          # mobile/app/build.gradle.kts derives versionCode from
+          # `git rev-list --count HEAD`, which only sees 1 commit (and so
+          # always resolves to versionCode 1, forever) on a shallow clone.
+          fetch-depth: 0
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -118,6 +124,8 @@ jobs:
             Android build is DEBUG-SIGNED (sideload only, not from the Play
             Store) — see docs/PACKAGING.md. Rebuilt from `${{ github.sha }}`,
             replaced on every push to master.
+
+            commit: ${{ github.sha }}
           prerelease: true
           files: dist/metanoia-android-debug.apk
 
@@ -163,6 +171,8 @@ jobs:
             macOS build (unsigned/ad-hoc-signed — see docs/PACKAGING.md for
             the Gatekeeper caveat). Unzip and run Metanoia.app. Rebuilt from
             `${{ github.sha }}`, replaced on every push to master.
+
+            commit: ${{ github.sha }}
           prerelease: true
           files: dist/Metanoia-macos-*.tar.gz
 
@@ -210,6 +220,8 @@ jobs:
             Linux build: universal tarball (with install.sh) + .deb for
             Debian/Ubuntu — see docs/PACKAGING.md. Rebuilt from
             `${{ github.sha }}`, replaced on every push to master.
+
+            commit: ${{ github.sha }}
           prerelease: true
           files: |
             dist/Metanoia-linux-*.tar.gz
@@ -277,5 +289,7 @@ jobs:
           body: |
             Portable Windows build — unzip and run metanoia.exe. Rebuilt
             from `${{ github.sha }}`, replaced on every push to master.
+
+            commit: ${{ github.sha }}
           prerelease: true
           files: dist/Metanoia-latest.zip

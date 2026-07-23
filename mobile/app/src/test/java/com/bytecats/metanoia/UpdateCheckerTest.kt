@@ -147,6 +147,34 @@ class UpdateCheckerTest {
         assertNull(UpdateChecker.extractCommitSha("nothing relevant"))
     }
 
+    @Test
+    fun extractCommitShaFallsBackToBareFullShaWhenNoCommitLabel() {
+        // Regression test: release-latest.yml's body text was rewritten to
+        // "Rebuilt from `<sha>`, replaced on every push to master." with no
+        // "commit:" label at all, which silently made every update check
+        // think no update was ever available (see isUpdateAvailable) — the
+        // in-app checker looked completely broken with no visible error.
+        val sha = UpdateChecker.extractCommitSha(
+            "Android build is DEBUG-SIGNED. Rebuilt from `$fullShaOne`, replaced on every push to master."
+        )
+        assertEquals(fullShaOne, sha)
+    }
+
+    @Test
+    fun extractCommitShaPrefersLabeledLineOverBareShaWhenBothPresent() {
+        val otherSha = "9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f"
+        val sha = UpdateChecker.extractCommitSha("mentions `$otherSha` in passing\ncommit: $fullShaOne")
+        assertEquals(fullShaOne, sha)
+    }
+
+    @Test
+    fun extractCommitShaDoesNotMatchBareShortShaWithoutLabel() {
+        // Short (non-40-char) shas are too easily confused with unrelated
+        // hex-looking tokens to safely match unlabeled — only the labeled
+        // "commit:" form (tested elsewhere) accepts short shas.
+        assertNull(UpdateChecker.extractCommitSha("built from a1b2c3d today"))
+    }
+
     // -------------------------------------------------------------------
     // isUpdateAvailable
     // -------------------------------------------------------------------
