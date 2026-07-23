@@ -227,6 +227,91 @@ jobs:
             dist/Metanoia-linux-*.tar.gz
             dist/*.deb
 
+  build-appimage:
+    needs: [move-tag, test-zig]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK4/SQLite3 deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libsqlite3-dev pkg-config build-essential
+
+      - name: Install Zig (pinned master nightly)
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            x86_64) ZIG_TARGET="x86_64-linux" ;;
+            aarch64|arm64) ZIG_TARGET="aarch64-linux" ;;
+            *) echo "unsupported arch $(uname -m)" >&2; exit 1 ;;
+          esac
+          JSON="$(curl -fsSL https://ziglang.org/download/index.json)"
+          URL="$(echo "$JSON" | jq -r ".master[\"$ZIG_TARGET\"].tarball")"
+          echo "Installing zig from $URL"
+          curl -fsSL "$URL" -o "$RUNNER_TEMP/zig.tar.xz"
+          mkdir -p "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Verify zig
+        run: zig version
+
+      - name: Build AppImage
+        run: bash packaging/build-appimage.sh
+
+      - name: Publish rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest (master @ ${{ github.sha }})"
+          body: |
+            Portable single-file AppImage — no installation, `chmod +x` and
+            run directly on virtually any x86_64 Linux distro (see
+            docs/PACKAGING.md). Rebuilt from `${{ github.sha }}`, replaced
+            on every push to master.
+
+            commit: ${{ github.sha }}
+          prerelease: true
+          files: dist/Metanoia-x86_64.AppImage
+
+  build-flatpak:
+    needs: [move-tag, test-zig]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
+      options: --privileged
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build .flatpak bundle
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: Metanoia.flatpak
+          manifest-path: packaging/com.bytecats.metanoia.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+          arch: x86_64
+
+      - name: Publish rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest (master @ ${{ github.sha }})"
+          body: |
+            Flatpak single-file bundle — install with `flatpak install
+            Metanoia.flatpak` (no Flathub account/review involved, this is
+            a direct bundle, not a Flathub publish — see
+            docs/PACKAGING.md). Rebuilt from `${{ github.sha }}`, replaced
+            on every push to master.
+
+            commit: ${{ github.sha }}
+          prerelease: true
+          files: Metanoia.flatpak
+
   build-windows:
     needs: move-tag
     runs-on: windows-latest

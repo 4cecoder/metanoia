@@ -1,0 +1,244 @@
+# packaging/com.bytecats.metanoia.yml
+#
+# Flatpak manifest for Metanoia. App-id follows the reverse-DNS convention
+# already established elsewhere in this repo — see
+# mobile/app/build.gradle.kts's `applicationId = "com.bytecats.metanoia"`.
+#
+# Builds a single-file .flatpak bundle (via `flatpak build-bundle`, done in
+# the build-flatpak CI job, not here) — this repo has no Flathub
+# review/publishing set up and that's explicitly out of scope (see the task
+# that produced this file). This is for direct download+install
+# (`flatpak install ./Metanoia.flatpak`), same spirit as the AppImage and
+# the Linux tarball/.deb: no external account, no distro package review,
+# no separate publishing step.
+#
+# ── Runtime choice ──────────────────────────────────────────────────────
+# org.gnome.Platform//50 + org.gnome.Sdk//50: verified as the CURRENT stable
+# GNOME runtime via Flathub's own API (`curl
+# https://flathub.org/api/v2/appstream/org.gnome.Platform` →
+# `"is_eol": false`, `"bundle": {"runtime": "org.gnome.Platform/x86_64/50"}`)
+# rather than guessed — GNOME 49's runtime was EOL'd in this same pattern
+# when 50 shipped (see e.g. GNOME 48 being EOL'd 2026-03-24 on the previous
+# release cadence). The GNOME runtime is layered on top of
+# org.freedesktop.Platform/Sdk and already includes GTK4 — no separate
+# org.freedesktop.Sdk entry or GTK4 module is needed, matching how
+# packaging/build-macos.sh / build-linux.sh both just need "gtk4" satisfied
+# by whatever's already on the system.
+#
+# The matching flathub-infra CI container image for this runtime version
+# (`ghcr.io/flathub-infra/flatpak-github-actions:gnome-50`) is confirmed to
+# exist and be actively built (checked
+# github.com/flathub-infra/actions-images's own
+# .github/workflows/docker.yml build matrix directly — it lists
+# `gnome-50: org.gnome.Platform//50 org.gnome.Sdk//50` alongside gnome-49,
+# freedesktop-24.08/25.08, kde-5.15-25.08/6.9/6.10 as of this writing).
+#
+# ── Zig toolchain acquisition (the "build-must-succeed inside a
+#    network-isolated sandbox" problem) ─────────────────────────────────
+# Flatpak's build step runs each module's build-commands with network
+# access OFF by default (this is enforced, not just a convention — modules
+# don't get `--share=network` at build time unless a manifest explicitly
+# opts in via build-options.build-args, which Flathub disallows and which
+# we don't do here either, to keep this an honest test of the harder,
+# fully-isolated path rather than quietly sidestepping the constraint).
+# Every OTHER CI job in this repo (release-latest.yml's build-macos/
+# build-linux/build-windows) fetches Zig via a live `curl
+# ziglang.org/download/index.json` + tarball download at build time — that
+# approach is simply unavailable here.
+#
+# Instead, the "zig-toolchain" module below declares the pinned nightly
+# build as a plain `archive` **source** with a sha256 — sources are what
+# flatpak-builder fetches *before* entering the sandboxed build phase (this
+# is the network-using part, done by flatpak-builder itself, not by our
+# build-commands), so by the time our own "metanoia" module's
+# build-commands run, the exact Zig tree is already sitting on disk needing
+# no network at all. This is the standard pattern other Flatpak manifests
+# use for "I need a compiler the SDK doesn't ship" (functionally identical
+# to how e.g. Rust/Go toolchain-needing Flatpak apps handle it): pin one
+# specific dated build by hash, accept that (unlike every other platform's
+# CI job in this repo) it does NOT float to the newest nightly
+# automatically, and document that re-pinning means bumping both the URL
+# and sha256 below together. Picked the most recent master nightly
+# available at the time of writing (2026-07-21,
+# 0.17.0-dev.1442+972627084) — its sha256 was verified locally against the
+# actual downloaded tarball, not copied from anywhere.
+#
+# The Zig toolchain itself is a BUILD-time-only dependency of the
+# "metanoia" module below (nothing in the shipped app invokes `zig` at
+# runtime) — it's installed to /app/lib/zig-toolchain only so later modules
+# in the same manifest can see it on PATH, then stripped back out of the
+# final bundle by the top-level `cleanup` list so it doesn't bloat the
+# shipped Flatpak with an entire compiler + std lib.
+#
+# ── Why sqlite3 and curl are also built as modules, not assumed present ──
+# aikit/README.md's "no new external native deps" principle is about this
+# repo's OWN Zig code, not about what a packaging manifest may need to
+# supply for an otherwise-unverifiable sandboxed environment — nothing
+# here adds a new *runtime dependency of Metanoia itself* that
+# build-linux.sh/build-macos.sh don't already have (gtk4 + sqlite3, unchanged;
+# curl was already an existing runtime dependency — see below).
+#
+#   - sqlite3: build.zig's `linkSystemLibrary("sqlite3")` needs sqlite3.pc +
+#     headers to resolve via pkg-config *during the metanoia module's own
+#     build*, and libsqlite3.so.0 to exist in /app/lib at *runtime*.
+#     Whether org.gnome.Sdk//50 happens to bundle sqlite3 dev files could
+#     not be confirmed either way from public docs (freedesktop-sdk does
+#     have an internal `curl`/`sqlite`-adjacent component list, but whether
+#     it's part of the GNOME layer specifically, vs. only pulled in
+#     transitively by something else, isn't documented anywhere
+#     authoritative) — rather than gamble on the build failing partway
+#     through CI, sqlite is built from the plain upstream
+#     sqlite-autoconf-3530300.tar.gz amalgamation (a trivial
+#     ./configure && make && make install, no other deps), sha256 verified
+#     locally against the actual downloaded tarball.
+#   - curl: src/ollama_client.zig, src/tts_client.zig, and
+#     src/services/network_discovery.zig all shell out to a `curl` *binary*
+#     via std.process.spawn (NOT linked libcurl — there is no FFI/library
+#     dependency on curl in this codebase, only a subprocess call, same as
+#     every other platform this app already ships on) to reach the local
+#     TTS server (127.0.0.1:8000), Ollama (127.0.0.1:11434), LAN
+#     auto-discovery (192.168.x.x/10.0.0.x:8000), and
+#     src/native_scraper.zig's biblehub.com fetches. Whether
+#     org.gnome.Platform//50's runtime ships a `curl` CLI at all could not
+#     be confirmed authoritatively either (freedesktop-sdk's
+#     elements/components/curl.bst exists, but its exact runtime-vs-
+#     buildtime-only placement wasn't independently verifiable without an
+#     actual flatpak install, which isn't available on this
+#     macOS-only development machine — see "What could / could not be
+#     verified" in the accompanying report) — so, same reasoning as
+#     sqlite3, curl is built from the current upstream release
+#     (curl-8.21.0.tar.xz, released 2026-06-24, sha256 verified locally)
+#     rather than assumed. Its ./configure is left to auto-detect whatever
+#     TLS backend (if any) the SDK provides — NOT forced via
+#     --with-openssl — so this module still builds successfully even if no
+#     TLS library is found; the honest, flagged consequence of that
+#     fallback is that HTTPS (biblehub.com scraping specifically; the
+#     127.0.0.1/LAN TTS+Ollama traffic is plain HTTP either way) could
+#     silently lack support in that scenario. See the report for this
+#     flagged as a real, unverified gap.
+#
+# ── finish-args ──────────────────────────────────────────────────────────
+# Derived from grepping actual runtime behavior in src/, not copied from a
+# generic template:
+#   --share=network   - every one of the HTTP destinations above (loopback
+#                        TTS/Ollama servers, LAN auto-discovery, biblehub.com)
+#                        requires this; without it a Flatpak app gets its own
+#                        network namespace and can't reach 127.0.0.1 host
+#                        services, let alone the LAN or internet.
+#   --share=ipc        - GTK4's X11 MIT-SHM path (only exercised under the
+#                        --socket=fallback-x11 path below; harmless no-op
+#                        under pure Wayland).
+#   --socket=wayland
+#   --socket=fallback-x11
+#                      - standard GTK4 display-server access, X11 only as a
+#                        fallback when Wayland isn't available (matches
+#                        current GNOME app manifest convention).
+#   --device=dri       - GPU-accelerated rendering for GTK4's GSK renderer.
+# No --filesystem=* entry is declared: config persistence and the app's own
+# data payload are handled entirely through each Flatpak app's automatic,
+# no-permission-needed XDG_DATA_HOME (~/.var/app/<id>/data) — see
+# packaging/flatpak-metanoia-wrapper.sh's own header comment for exactly
+# why and how. Nothing in src/ opens any other host path (checked: no
+# GtkFileChooser / arbitrary-host-path usage found anywhere in src/).
+
+app-id: com.bytecats.metanoia
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: metanoia
+
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /lib/*.la
+  - /lib/*.a
+  - /share/man
+  - /share/doc
+  - /share/aclocal
+  - /share/gtk-doc
+  - /lib/zig-toolchain
+
+modules:
+  - name: sqlite
+    buildsystem: simple
+    build-commands:
+      - ./configure --prefix=/app --disable-static
+      - make -j${FLATPAK_BUILDER_N_JOBS:-4}
+      - make install
+    sources:
+      - type: archive
+        url: https://sqlite.org/2026/sqlite-autoconf-3530300.tar.gz
+        sha256: c917d7db16648ec95f714974ace5e5dcf46b7dc70e26600a0a102a3141125db0
+
+  - name: curl
+    buildsystem: simple
+    build-commands:
+      # No --with-openssl / --with-gnutls forced — auto-detect whatever's
+      # available so this module cannot hard-fail the whole build over a
+      # missing TLS backend. See the manifest header comment for the
+      # honestly-flagged consequence of this fallback.
+      - ./configure --prefix=/app --disable-static --without-libpsl --disable-manual
+      - make -j${FLATPAK_BUILDER_N_JOBS:-4}
+      - make install
+    sources:
+      - type: archive
+        url: https://curl.se/download/curl-8.21.0.tar.xz
+        sha256: aa1b66a70eace83dc624508745646c08ae561de512ab403adffb93ac87fc72e6
+
+  - name: zig-toolchain
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/lib/zig-toolchain
+      - cp -r . /app/lib/zig-toolchain/
+    sources:
+      - type: archive
+        url: https://ziglang.org/builds/zig-x86_64-linux-0.17.0-dev.1442+972627084.tar.xz
+        sha256: 5a07068ced0f5435bf35032bdc406fc9faa9215ca115aa4ad65af14f2114d081
+        strip-components: 1
+
+  - name: metanoia
+    buildsystem: simple
+    build-commands:
+      - export PATH="/app/lib/zig-toolchain:$PATH"
+      - zig build -Doptimize=ReleaseFast
+      - install -Dm755 zig-out/bin/metanoia /app/lib/metanoia/metanoia-bin
+      - cp -r data /app/lib/metanoia/data
+      - cp -r assets /app/lib/metanoia/assets
+      - install -Dm755 packaging/flatpak-metanoia-wrapper.sh /app/bin/metanoia
+      - install -Dm644 assets/metanoia.png /app/share/icons/hicolor/256x256/apps/com.bytecats.metanoia.png
+      - install -Dm644 assets/icon.svg /app/share/icons/hicolor/scalable/apps/com.bytecats.metanoia.svg
+      - |
+        install -Dm644 /dev/stdin /app/share/applications/com.bytecats.metanoia.desktop <<'EOF'
+        [Desktop Entry]
+        Type=Application
+        Name=Metanoia
+        Comment=Bible study app
+        Exec=metanoia
+        Icon=com.bytecats.metanoia
+        Terminal=false
+        Categories=Education;Spirituality;
+        EOF
+    sources:
+      - type: dir
+        path: ..
+        # Keep the sandboxed build's copy of the source tree small and
+        # avoid dragging in unrelated large/irrelevant subtrees (the
+        # Android client's own Gradle project, VCS metadata, and any local
+        # build output that happens to exist on the checkout doing the
+        # packaging). `vendor/` (aikit's native TTS/LLM build deps) is
+        # gitignored and never present in a fresh CI checkout anyway, but
+        # is listed here too for safety on a dirty local checkout.
+        skip:
+          - .git
+          - mobile
+          - dist
+          - zig-out
+          - vendor
+          - aikit/vendor

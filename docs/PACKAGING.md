@@ -155,8 +155,63 @@ that's a separate optimization for another day.
   `.desktop` file described above, and produces two artifacts:
   `dist/Metanoia-linux-<arch>.tar.gz` (universal — untar anywhere, run the
   bundled `install.sh` with sudo) and `dist/metanoia_<version>_<arch>.deb`
-  (via `dpkg-deb --build`, for Debian/Ubuntu). No `.rpm`/AUR/Flatpak/Snap —
+  (via `dpkg-deb --build`, for Debian/Ubuntu). No `.rpm`/AUR/Snap —
   diminishing returns for a same-day ship, noted as future follow-up.
+
+- **`packaging/build-appimage.sh`** — builds (or reuses) the same
+  `zig build -Doptimize=ReleaseFast` binary as `build-linux.sh`, assembles a
+  standard `AppDir`, and runs `linuxdeploy` + `linuxdeploy-plugin-gtk` (both
+  pinned by URL+sha256, matching this repo's Zig-nightly-fetch house style —
+  see the script's own header comment for exactly why each is pinned the
+  way it is; `linuxdeploy-plugin-gtk` has no versioned releases at all, so
+  it's pinned to a specific commit instead) to produce a single portable
+  `dist/Metanoia-x86_64.AppImage` — no installation, `chmod +x` and run on
+  virtually any x86_64 Linux distro. Same cwd/relative-data-path problem as
+  `build-linux.sh` (see "macOS vs. Linux asymmetry" above); solved via a
+  `apprun-hooks/*.sh` hook (the same mechanism `linuxdeploy-plugin-gtk`
+  itself uses to inject GTK env vars) instead of a custom `AppRun`, so it
+  composes with the plugin rather than fighting it. GTK4/SQLite3's `.so`
+  dependency closure is bundled automatically by linuxdeploy's own default
+  behavior (it `ldd`-traces the given executable) — no extra flags needed
+  beyond the gtk plugin, which additionally handles GLib schemas/GDK-Pixbuf
+  loaders/theme bits that raw `.so`-copying wouldn't catch. Not run
+  end-to-end anywhere yet except in CI (this repo's dev machine for this
+  work was macOS, which cannot run ELF AppImage tooling at all).
+
+- **`packaging/com.bytecats.metanoia.yml`** (a Flatpak manifest, not a
+  shell script) — builds a single-file `.flatpak` bundle via
+  `flatpak-builder`/`flatpak build-bundle` (CI job `build-flatpak` in
+  `release-latest.yml`, using the `flatpak/flatpak-github-actions` action).
+  Targets `org.gnome.Platform`//`org.gnome.Sdk` version 50 (verified as the
+  current stable GNOME runtime via Flathub's own API, not guessed), which
+  already includes GTK4. Since Flatpak's sandboxed build step has no
+  network access by default, sqlite3, curl, and a specific pinned Zig
+  nightly are all built/installed as manifest **modules** with hash-verified
+  sources fetched by `flatpak-builder` itself *before* the sandbox closes —
+  sqlite3 and curl because it could not be confirmed whether
+  `org.gnome.Sdk`//50 ships their dev files/CLI at all (this codebase shells
+  out to a real `curl` binary — see `src/tts_client.zig`/
+  `src/ollama_client.zig`/`src/services/network_discovery.zig` — it does not
+  link `libcurl`), Zig because no released Zig version satisfies
+  `build.zig.zon`'s nightly-only `minimum_zig_version` and this repo's other
+  CI jobs acquire it via a live network `curl` unavailable inside a Flatpak
+  build sandbox. `packaging/flatpak-metanoia-wrapper.sh` (installed as
+  `/app/bin/metanoia`, the actual compiled binary lives at
+  `/app/lib/metanoia/metanoia-bin`) solves the same relative-data-path
+  problem as `build-linux.sh`/`build-appimage.sh`, but with one Flatpak-
+  specific wrinkle: `/app` is *always* read-only at runtime (not just
+  root-owned like `/opt/metanoia`), so config persistence needs a genuinely
+  writable location — it symlinks the read-only bundled `data`/`assets`
+  into each Flatpak app's automatic, no-extra-permission-needed
+  `$XDG_DATA_HOME/metanoia`, where `config.json` can then be created for
+  real. `finish-args` are `--share=network` (loopback TTS/Ollama servers,
+  LAN auto-discovery, and `src/native_scraper.zig`'s biblehub.com fetches —
+  all grepped from actual runtime code, not assumed), `--share=ipc`,
+  `--socket=wayland`/`--socket=fallback-x11`, and `--device=dri`; no
+  `--filesystem=*` entries were needed. Not run end-to-end anywhere yet
+  except in CI — `flatpak`/`flatpak-builder` are not installed on this
+  repo's macOS dev machine either, so only YAML-schema-level and manual
+  reasoning-based checks were possible locally.
 
 - **`packaging/build-android.sh`** — thin wrapper around
   `cd mobile && ./gradlew assembleDebug`, copies the resulting APK to
