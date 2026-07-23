@@ -62,7 +62,24 @@ pub const TTSEngine = struct {
         defer self.mutex.unlock(self.io);
         if (self.current_process) |p| {
             if (p.id) |pid| {
-                if (pid != 0) std.posix.kill(pid, std.posix.SIG.TERM) catch {};
+                // std.process.Child.Id is std.posix.pid_t (an integer) on
+                // POSIX but std.os.windows.HANDLE (*anyopaque) on Windows —
+                // std.posix.kill only exists/applies to the former. Using
+                // the higher-level Child.kill() instead isn't safe here: it
+                // blocks until the process exits and reaps/finalizes the
+                // same Child struct that the spawning thread is
+                // concurrently blocked inside child.wait(e.io) on (see
+                // playSequential/playChapter below) — two threads racing to
+                // finalize the same Child. So on Windows this calls the
+                // same raw termination primitive Child.kill() itself uses
+                // internally (std.os.windows.ntdll.NtTerminateProcess),
+                // without its blocking wait-and-cleanup, matching the old
+                // POSIX code's "just signal, let the spawning thread's own
+                // wait() reap it" semantics exactly.
+                switch (builtin.os.tag) {
+                    .windows => _ = std.os.windows.ntdll.NtTerminateProcess(pid, @enumFromInt(1)),
+                    else => if (pid != 0) std.posix.kill(pid, std.posix.SIG.TERM) catch {},
+                }
             }
         }
     }
