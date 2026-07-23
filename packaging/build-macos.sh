@@ -45,6 +45,44 @@ zig build app -Doptimize=ReleaseFast
 APP_DIR="$ROOT/zig-out/${APP_NAME}.app"
 [ -d "$APP_DIR" ] || fail "expected $APP_DIR to exist after 'zig build app'"
 
+# ── 0.5. Lower the binary's minimum macOS version ───────────────
+# `zig build` with no -Dtarget compiles "native", which bakes in the
+# EXACT host machine's current OS version as the binary's LC_BUILD_VERSION
+# minos (confirmed directly: a build on a machine running macOS 26.2
+# produced `minos 26.2`, via `otool -l`). Since GitHub's macos-latest
+# runner's exact OS build can be ahead of whatever a given user has
+# installed, that made the shipped app fail to launch on real user
+# machines with "You can't use this version of the application 'Metanoia'
+# with this version of macOS" — the app was silently requiring an OS
+# NEWER than what the runner happened to be on that day, not any real
+# API dependency.
+#
+# Fix: `vtool` (Apple's Mach-O load-command editor, part of Xcode Command
+# Line Tools, present on every macOS GitHub Actions runner) rewrites the
+# binary's LC_BUILD_VERSION minos/sdk fields in place, after linking but
+# BEFORE codesigning below (patching after signing would invalidate the
+# signature). Passing an explicit -Dtarget to zig instead of doing this
+# was tried and rejected: it makes zig treat the build as cross-compiling
+# even though it's the same arch+OS, which broke native system-library
+# search (Homebrew's gtk4 include paths no longer resolved sqlite3, which
+# macOS ships as a system dylib at /usr/lib — confirmed by reproducing the
+# exact failure locally) — vtool avoids all of that by never touching how
+# the binary is compiled/linked, only its post-link version metadata.
+#
+# 13.0 (Ventura, 2022) is a conservative, multi-year-back floor — well
+# below any realistically current user's OS, while still modern enough
+# for Homebrew's own gtk4/glib/etc. bottles (which target similarly
+# multi-year-back baselines, not bleeding-edge).
+MIN_MACOS="13.0"
+if command -v vtool >/dev/null 2>&1; then
+  info "Lowering minimum macOS version to $MIN_MACOS (was $(otool -l "$APP_DIR/Contents/MacOS/metanoia" | awk '/minos/{print $2; exit}'))..."
+  vtool -set-build-version macos "$MIN_MACOS" "$MIN_MACOS" -replace \
+    -output "$APP_DIR/Contents/MacOS/metanoia" \
+    "$APP_DIR/Contents/MacOS/metanoia"
+else
+  fail "vtool not found — cannot set a portable minimum macOS version (shipping without this fix reproduces the exact 'can't use this version' bug on any user machine older than the CI runner's current OS)"
+fi
+
 # ── 1. Ad-hoc codesign (no paid cert needed) ────────────────────
 # This does NOT satisfy Gatekeeper/notarization (users will still see an
 # "unidentified developer" prompt on first launch — right-click > Open, or
