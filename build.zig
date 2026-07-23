@@ -195,6 +195,25 @@ pub fn build(b: *std.Build) void {
             "C:\\msys64\\mingw64\\lib",
         };
         for (msys_libs) |p| exe.root_module.addLibraryPath(.{ .cwd_relative = p });
+
+        // On macOS/Linux, linkSystemLibrary("gtk4") resolves via pkg-config,
+        // which follows gtk4.pc's own `Requires: glib-2.0 gobject-2.0 gio-2.0`
+        // chain automatically. On Windows, the MSYS2 package's pkg-config
+        // name is "gtk4" (no hyphen) while this file links it as "gtk-4"
+        // (matching the actual import-lib filename, not the pkg-config
+        // name — see the comment above linking gtk_lib), so pkg-config
+        // lookup fails by name and Zig falls back to its naive
+        // 'paths_first' file-search strategy, which just finds gtk-4's own
+        // library file and never follows any dependency chain. Confirmed
+        // from a real CI run (29974557481): the exe compiled and gtk-4/
+        // sqlite3 both linked fine, but 14 core GLib/GObject/GIO symbols
+        // (g_signal_connect_data, g_thread_new, g_object_unref,
+        // g_application_run, g_menu_new, etc.) were undefined at link time.
+        // Link them explicitly here since Windows can't discover them
+        // transitively the way macOS/Linux do.
+        exe.root_module.linkSystemLibrary("gio-2.0", .{});
+        exe.root_module.linkSystemLibrary("gobject-2.0", .{});
+        exe.root_module.linkSystemLibrary("glib-2.0", .{});
     }
 
     // macOS .app bundle (only on macOS)
