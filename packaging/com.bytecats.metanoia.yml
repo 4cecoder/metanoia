@@ -212,8 +212,14 @@ modules:
   - name: metanoia
     buildsystem: simple
     build-commands:
-      - export PATH="/app/lib/zig-toolchain:$PATH"
-      - zig build -Doptimize=ReleaseFast
+      # Confirmed from a real flatpak-builder CI run: each build-commands
+      # list entry runs as its own separate shell invocation, so `export
+      # PATH=...` in one entry does NOT persist to the next ("zig: command
+      # not found" — the export silently had zero effect on the following
+      # command). Invoking zig by its absolute path sidesteps this
+      # entirely rather than fighting flatpak-builder's per-command shell
+      # isolation.
+      - /app/lib/zig-toolchain/zig build -Doptimize=ReleaseFast
       - install -Dm755 zig-out/bin/metanoia /app/lib/metanoia/metanoia-bin
       - cp -r data /app/lib/metanoia/data
       - cp -r assets /app/lib/metanoia/assets
