@@ -13,6 +13,8 @@ import kotlinx.coroutines.withContext
 class BibleManager(private val context: Context) {
     val db = BibleDatabase(context)
     private val scraper = BibleScraper()
+    private val apocryphaScraper = WikisourceApocryphaScraper()
+    private val enochScraper = WikisourceEnochScraper()
     private val settings = SettingsManager(context)
     val gateway: GatewayClient = GatewayClient { settings.gatewayUrl }
 
@@ -73,15 +75,34 @@ class BibleManager(private val context: Context) {
     // --- Scraper passthroughs ---
 
     suspend fun scrapeChapter(book: String, chapter: Int, version: String = "NKJV") {
+        // Deuterocanonical/Ethiopian-canon books with a known upstream gap
+        // (no BibleGateway page — see docs/MAINTENANCE.md and
+        // src/bible_db.zig's `books_with_no_verse_text`). For the 13 of
+        // these 18 with no viable source at all, don't even attempt a
+        // network call: that would just fail identically to a normal
+        // network error, indistinguishable from "still loading" to the UI.
+        if (book in DeuterocanonRouting.NO_SOURCE_BOOKS) {
+            Log.w("BibleManager", "scrapeChapter: no source available for $book $chapter")
+            _scrapeError.value = DeuterocanonRouting.noSourceMessage(book)
+            return
+        }
+        fun persistVerse(vNum: Int, text: String) {
+            db.open(false).apply {
+                execSQL(
+                    "INSERT OR REPLACE INTO verses (book, chapter, verse, text, version) VALUES (?, ?, ?, ?, ?)",
+                    arrayOf(book, chapter, vNum, text, version)
+                )
+                close()
+            }
+        }
         try {
-            scraper.scrapeChapter(book, chapter, version) { vNum, text ->
-                db.open(false).apply {
-                    execSQL(
-                        "INSERT OR REPLACE INTO verses (book, chapter, verse, text, version) VALUES (?, ?, ?, ?, ?)",
-                        arrayOf(book, chapter, vNum, text, version)
-                    )
-                    close()
-                }
+            when {
+                book in WikisourceApocryphaScraper.SUPPORTED_BOOKS ->
+                    apocryphaScraper.scrapeChapter(book, chapter, ::persistVerse)
+                book == WikisourceEnochScraper.BOOK_NAME ->
+                    enochScraper.scrapeChapter(chapter, ::persistVerse)
+                else ->
+                    scraper.scrapeChapter(book, chapter, version, ::persistVerse)
             }
             _scrapeError.value = null
         } catch (e: Exception) {
