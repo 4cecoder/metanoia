@@ -1,5 +1,43 @@
 const std = @import("std");
 
+/// Runs `git rev-parse HEAD` in the build root and returns the trimmed
+/// output, or the literal string `"unknown"` on any failure (spawn failure,
+/// non-zero exit, non-hex/wrong-length output). Mirrors
+/// mobile/app/build.gradle.kts's `gitCommitSha()` Kotlin function exactly —
+/// same subprocess-call approach, same "unknown" sentinel, same 40-hex-char
+/// validation — so the desktop and Android update-checkers agree on what
+/// "we couldn't determine the build's commit" means.
+///
+/// Uses `b.runFallible` (this Zig-nightly's non-panicking sibling of
+/// `b.run`, see std/Build.zig) rather than raw `std.process.Child` so we get
+/// the build graph's own `Io` (`b.graph.io`) and cache-friendly stdout
+/// capture for free. `cwd` is left as the default (`.inherit`, i.e. the
+/// process's actual working directory) rather than resolved from `b.root`:
+/// `zig build` is conventionally invoked from the repo root, and if it ever
+/// isn't, `git rev-parse HEAD` simply fails (wrong directory, not a git
+/// repo) and we fall back to "unknown" — which is exactly the correct,
+/// intentional behavior for "couldn't determine the commit", not a bug to
+/// route around.
+fn gitCommitSha(b: *std.Build) []const u8 {
+    const result = b.runFallible(&.{ "git", "rev-parse", "HEAD" }, .{
+        .stderr_behavior = .ignore,
+        .stdout_limit = .limited(4096),
+    });
+    const stdout = switch (result) {
+        .success => |out| out,
+        .spawn_failed, .bad_exit_code, .crashed => return "unknown",
+    };
+    const trimmed = std.mem.trim(u8, stdout, " \t\r\n");
+    if (trimmed.len != 40) return "unknown";
+    for (trimmed) |c| {
+        switch (c) {
+            '0'...'9', 'a'...'f' => {},
+            else => return "unknown",
+        }
+    }
+    return trimmed;
+}
+
 // Although this function looks imperative, it does not perform the build
 // directly and instead it mutates the build graph (`b`) that will be then
 // executed by an external runner. The functions in `std.Build` implement a DSL
@@ -40,6 +78,13 @@ pub fn build(b: *std.Build) void {
 
     const native_ai_opts = b.addOptions();
     native_ai_opts.addOption(bool, "native_ai", native_ai);
+    // Baked in for src/services/update_checker.zig's opt-in update notice
+    // (desktop mirror of mobile's UpdateChecker.kt — see that file's
+    // BuildConfig.GIT_COMMIT_SHA usage for the equivalent Android piece).
+    // "unknown" (see gitCommitSha() above) means "couldn't determine it",
+    // which the checker treats as "assume out of date, show the notice"
+    // rather than silently skipping the check.
+    native_ai_opts.addOption([]const u8, "git_commit_sha", gitCommitSha(b));
     const build_options_mod = native_ai_opts.createModule();
 
     // aikit's own build.zig defaults its "qwen-build-dir" option to

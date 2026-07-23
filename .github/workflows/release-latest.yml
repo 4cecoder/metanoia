@@ -248,7 +248,7 @@ jobs:
       - name: Install GTK4/SQLite3 deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libsqlite3-dev pkg-config build-essential
+          sudo apt-get install -y libgtk-4-dev libsqlite3-dev pkg-config build-essential zsync
 
       - name: Install Zig (pinned master nightly)
         run: |
@@ -281,11 +281,15 @@ jobs:
             Portable single-file AppImage — no installation, `chmod +x` and
             run directly on virtually any x86_64 Linux distro (see
             docs/PACKAGING.md). Rebuilt from `${{ github.sha }}`, replaced
-            on every push to master.
+            on every push to master. Carries embedded AppImageUpdate
+            information — with appimageupdatetool installed, `appimageupdatetool
+            ./Metanoia-x86_64.AppImage` checks/applies updates in place.
 
             commit: ${{ github.sha }}
           prerelease: true
-          files: dist/Metanoia-x86_64.AppImage
+          files: |
+            dist/Metanoia-x86_64.AppImage
+            dist/Metanoia-x86_64.AppImage.zsync
 
   build-flatpak:
     needs: [move-tag, test-zig]

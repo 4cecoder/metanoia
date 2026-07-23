@@ -130,6 +130,17 @@ fetch_pinned() {
 command -v zig >/dev/null 2>&1 || fail "zig not found on PATH"
 [ -f "$ROOT/data/bible.db" ] || fail "data/bible.db is missing (expected to be checked out from git — see .gitignore's data/*.db exception)."
 [ -f "$ROOT/assets/metanoia.png" ] || fail "assets/metanoia.png missing (AppImage/.desktop icon — see docs/PACKAGING.md)."
+# zsyncmake is what makes linuxdeploy-plugin-appimage actually emit a
+# .zsync control file alongside the AppImage when LDAI_UPDATE_INFORMATION
+# is set below (see appimagetool's own --help: "-u, --updateinformation
+# Embed update information STRING; if zsyncmake is installed, generate
+# zsync file" — it's a silent no-op, not an error, when zsyncmake is
+# missing, hence a warning here rather than a fail). CI installs it via the
+# apt package "zsync" (provides both zsync and zsyncmake — see
+# .github/workflows/release-latest.yml's build-appimage job); a local dev
+# machine without it will still produce a working (just non-updatable)
+# AppImage.
+command -v zsyncmake >/dev/null 2>&1 || warn "zsyncmake not found on PATH — the AppImage will build fine, but no .zsync file will be produced, so AppImageUpdate/appimageupdatetool won't be able to find updates for it (apt install zsync)."
 
 # ── 1. Build (reuse packaging/build-linux.sh's own build output if already
 #      produced by an earlier step in the same CI run; otherwise build). ──
@@ -226,6 +237,24 @@ EOF
 info "Running linuxdeploy (+ gtk, appimage plugins)..."
 export LINUXDEPLOY_PLUGIN_GTK_SCRIPT="$TOOLS_DIR/linuxdeploy-plugin-gtk.sh"
 export PATH="$TOOLS_DIR:$PATH"
+
+# Embedded AppImage update information (AppImageUpdate/appimageupdatetool's
+# well-established convention — see
+# https://github.com/AppImage/AppImageSpec/blob/master/draft.md#update-information
+# and linuxdeploy-plugin-appimage's own README for LDAI_UPDATE_INFORMATION).
+# `--output appimage` below invokes linuxdeploy-plugin-appimage internally
+# (bundled inside the linuxdeploy AppImage itself, or the separately pinned
+# copy in $TOOLS_DIR if that's found first on PATH — see the plugin
+# discovery order in linuxdeploy's own docs); that plugin reads this env
+# var, embeds it in the AppImage, and (if zsyncmake is on PATH — see the
+# precondition check above) writes a matching "<output-name>.zsync" file
+# alongside the AppImage. Format: gh-releases-zsync|<owner>|<repo>|<tag>|
+# <zsync-filename-pattern> — no wildcard needed in the filename here since,
+# unlike upstream examples that version their filenames (e.g.
+# "Subsurface-*x86_64.AppImage.zsync"), this repo's release-latest.yml
+# always republishes the exact same filename to the same rolling "latest"
+# tag.
+export LDAI_UPDATE_INFORMATION="gh-releases-zsync|4cecoder|metanoia|latest|Metanoia-x86_64.AppImage.zsync"
 # linuxdeploy discovers plugins named `linuxdeploy-plugin-<name>` on PATH,
 # or (for scripts) any executable of that name on PATH — hence adding
 # TOOLS_DIR to PATH above and naming the gtk script accordingly instead of
@@ -250,10 +279,27 @@ if [ -z "$PRODUCED" ]; then
 fi
 [ -n "$PRODUCED" ] || fail "linuxdeploy did not produce an .AppImage in $ROOT"
 
+# appimagetool (invoked by the appimage plugin above) writes the .zsync
+# control file as "<PRODUCED>.zsync" in the same directory, alongside (not
+# instead of) the AppImage — must be captured before PRODUCED itself is
+# renamed/moved below, since its filename is derived from PRODUCED's
+# original name. Absent entirely (rather than failing the build) if
+# zsyncmake wasn't on PATH — see the precondition warning above.
+PRODUCED_ZSYNC="${PRODUCED}.zsync"
+APPIMAGE_ZSYNC_OUT="$OUT_DIR/Metanoia-x86_64.AppImage.zsync"
+
 mkdir -p "$OUT_DIR"
 rm -f "$APPIMAGE_OUT"
 mv "$PRODUCED" "$APPIMAGE_OUT"
 chmod +x "$APPIMAGE_OUT"
+
+rm -f "$APPIMAGE_ZSYNC_OUT"
+if [ -f "$PRODUCED_ZSYNC" ]; then
+  mv "$PRODUCED_ZSYNC" "$APPIMAGE_ZSYNC_OUT"
+  info "Update info embedded, .zsync control file at $APPIMAGE_ZSYNC_OUT"
+else
+  warn "No .zsync file was produced (zsyncmake missing?) — this AppImage build has embedded update information but no zsync control file, so AppImageUpdate can't actually use it yet."
+fi
 
 rm -rf "$STAGE"
 

@@ -9,6 +9,8 @@ const ollama = @import("ollama_client.zig");
 const scraper = @import("scraper_client.zig");
 const tts_engine_mod = @import("services/tts_engine.zig");
 const llm_engine_mod = @import("services/llm_engine.zig");
+const update_checker = @import("services/update_checker.zig");
+const build_options = @import("build_options");
 const kit = @import("kit");
 const kit_flow_picker = kit.components.FlowPicker;
 const kit_search = kit.components.Search;
@@ -876,7 +878,179 @@ fn flowPickerComplete(selected: []const usize) void {
     onNavNavigate(book, chapter, verse);
 }
 
-// Settings
+// Settings — TTS model download status/progress
+//
+// Ownership rule to avoid use-after-free across the GTK main thread and the
+// background curl-worker threads: `ctx` is freed in exactly one of two
+// places, gated so they're mutually exclusive — the window's "destroy"
+// handler frees it only if no worker is in flight (`!ctx.busy`); otherwise
+// it just marks `ctx.alive = false` and leaves freeing to that worker's
+// completion callback, which frees it if it observes `!ctx.alive`. Both
+// checks only ever run on the single-threaded GTK main loop (the destroy
+// handler and every idle/timeout callback), so there's no race on the
+// bools themselves — only the curl call itself runs off-thread.
+const ModelStatus = struct {
+    downloaded: bool = false,
+    downloading: bool = false,
+    progress_pct: f64 = 0.0,
+    err: ?[]const u8 = null,
+};
+
+const ModelSectionCtx = struct {
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    base_url: []const u8,
+    status_label: ?*GtkWidget,
+    download_btn: ?*GtkWidget,
+    alive: bool = true,
+    busy: bool = false,
+    timeout_id: u32 = 0,
+};
+
+fn fetchModelStatus(allocator: std.mem.Allocator, io: std.Io, base_url: []const u8) ?ModelStatus {
+    const url = std.fmt.allocPrint(allocator, "{s}/models/status", .{base_url}) catch return null;
+    defer allocator.free(url);
+    const out_path = "cache/model_status.json";
+
+    var child = std.process.spawn(io, .{
+        .argv = &.{ "curl", "-s", "-f", "--connect-timeout", "3", "--max-time", "10", url, "-o", out_path },
+    }) catch return null;
+    const term = child.wait(io) catch return null;
+    if (!(term == .exited and term.exited == 0)) return null;
+
+    const res_file = std.Io.Dir.cwd().openFile(io, out_path, .{}) catch return null;
+    defer res_file.close(io);
+    var r_buf: [1024]u8 = undefined;
+    var fr = res_file.reader(io, &r_buf);
+    const content = fr.interface.allocRemaining(allocator, std.Io.Limit.limited(1024 * 1024)) catch return null;
+    defer allocator.free(content);
+
+    const Parsed = struct {
+        downloaded: bool = false,
+        downloading: bool = false,
+        progress_pct: f64 = 0.0,
+        @"error": ?[]const u8 = null,
+    };
+    const parsed = std.json.parseFromSlice(Parsed, allocator, content, .{ .ignore_unknown_fields = true }) catch return null;
+    defer parsed.deinit();
+    return ModelStatus{
+        .downloaded = parsed.value.downloaded,
+        .downloading = parsed.value.downloading,
+        .progress_pct = parsed.value.progress_pct,
+        .err = if (parsed.value.@"error") |e| (allocator.dupe(u8, e) catch null) else null,
+    };
+}
+
+fn triggerModelDownload(allocator: std.mem.Allocator, io: std.Io, base_url: []const u8) void {
+    const url = std.fmt.allocPrint(allocator, "{s}/models/download", .{base_url}) catch return;
+    defer allocator.free(url);
+    var child = std.process.spawn(io, .{
+        .argv = &.{ "curl", "-s", "-f", "--connect-timeout", "3", "--max-time", "10", "-X", "POST", url, "-o", "cache/model_download_start.json" },
+    }) catch return;
+    _ = child.wait(io) catch {};
+}
+
+fn modelStatusLabelText(allocator: std.mem.Allocator, status: ModelStatus) [:0]const u8 {
+    if (status.err) |e| {
+        return std.fmt.allocPrintSentinel(allocator, "<span foreground='#f7768e'>⚠ {s}</span>", .{e}, 0) catch
+            (allocator.dupeSentinel(u8, "<span foreground='#f7768e'>⚠ Error</span>", 0) catch "");
+    }
+    if (status.downloaded) {
+        return allocator.dupeSentinel(u8, "<span foreground='#9ece6a'>✅ Downloaded</span>", 0) catch "";
+    }
+    if (status.downloading) {
+        return std.fmt.allocPrintSentinel(allocator, "<span foreground='#e0af68'>⬇ Downloading… {d:.0}%</span>", .{status.progress_pct}, 0) catch "";
+    }
+    return allocator.dupeSentinel(u8, "<span foreground='#565f89'>Not downloaded</span>", 0) catch "";
+}
+
+fn modelStatusTick(data: gpointer) callconv(.c) bool {
+    const ctx: *ModelSectionCtx = @ptrCast(@alignCast(data));
+    ctx.timeout_id = 0;
+    if (!ctx.alive) {
+        ctx.allocator.free(ctx.base_url);
+        ctx.allocator.destroy(ctx);
+        return false;
+    }
+    if (ctx.busy) return false;
+    ctx.busy = true;
+    _ = gtk.g_thread_new("model-status-poll", &modelStatusPollThread, ctx);
+    return false;
+}
+
+fn postModelStatusUpdate(ctx: *ModelSectionCtx, status: ModelStatus) void {
+    const StatusUpdate = struct {
+        ctx: *ModelSectionCtx,
+        status: ModelStatus,
+        fn run(p: gpointer) callconv(.c) bool {
+            const self: *@This() = @ptrCast(@alignCast(p));
+            const c = self.ctx;
+            defer {
+                if (self.status.err) |e| c.allocator.free(e);
+                c.allocator.destroy(self);
+            }
+            c.busy = false;
+            if (!c.alive) {
+                c.allocator.free(c.base_url);
+                c.allocator.destroy(c);
+                return false;
+            }
+            const text = modelStatusLabelText(c.allocator, self.status);
+            defer c.allocator.free(text);
+            if (c.status_label) |l| gtk.gtk_label_set_markup(@ptrCast(l), text);
+            if (c.download_btn) |b| gtk.gtk_widget_set_sensitive(b, !self.status.downloaded and !self.status.downloading);
+            if (self.status.downloading) {
+                c.timeout_id = gtk.g_timeout_add(1500, &modelStatusTick, c);
+            }
+            return false;
+        }
+    };
+    if (ctx.allocator.create(StatusUpdate)) |u| {
+        u.* = .{ .ctx = ctx, .status = status };
+        _ = gtk.g_idle_add(&StatusUpdate.run, u);
+    } else |_| {}
+}
+
+fn modelStatusPollThread(data: gpointer) callconv(.c) ?*anyopaque {
+    const ctx: *ModelSectionCtx = @ptrCast(@alignCast(data));
+    const status = fetchModelStatus(ctx.allocator, ctx.io, ctx.base_url) orelse
+        ModelStatus{ .err = ctx.allocator.dupe(u8, "Could not reach TTS server") catch null };
+    postModelStatusUpdate(ctx, status);
+    return null;
+}
+
+fn modelDownloadStartThread(data: gpointer) callconv(.c) ?*anyopaque {
+    const ctx: *ModelSectionCtx = @ptrCast(@alignCast(data));
+    triggerModelDownload(ctx.allocator, ctx.io, ctx.base_url);
+    const status = fetchModelStatus(ctx.allocator, ctx.io, ctx.base_url) orelse
+        ModelStatus{ .err = ctx.allocator.dupe(u8, "Could not reach TTS server") catch null };
+    postModelStatusUpdate(ctx, status);
+    return null;
+}
+
+fn onDownloadModelClicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
+    _ = btn;
+    const ctx: *ModelSectionCtx = @ptrCast(@alignCast(user_data));
+    if (ctx.busy) return;
+    ctx.busy = true;
+    if (ctx.download_btn) |b| gtk.gtk_widget_set_sensitive(b, false);
+    if (ctx.status_label) |l| gtk.gtk_label_set_markup(@ptrCast(l), "<span foreground='#e0af68'>⏳ Starting download…</span>");
+    _ = gtk.g_thread_new("model-download-start", &modelDownloadStartThread, ctx);
+}
+
+fn onModelSectionWindowDestroy(_: ?*anyopaque, data: gpointer) callconv(.c) void {
+    const ctx: *ModelSectionCtx = @ptrCast(@alignCast(data));
+    ctx.alive = false;
+    if (ctx.timeout_id != 0) {
+        _ = gtk.g_source_remove(ctx.timeout_id);
+        ctx.timeout_id = 0;
+    }
+    if (!ctx.busy) {
+        ctx.allocator.free(ctx.base_url);
+        ctx.allocator.destroy(ctx);
+    }
+}
+
 fn onSettingsSaveKit(field_values: []const kit.components.SettingsFieldValue) void {
     for (field_values) |f| {
         const key = std.mem.span(f.label);
@@ -906,7 +1080,39 @@ fn onSettingsBtnClicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void
     const retry_str = std.fmt.allocPrintSentinel(state.allocator, "{d}", .{state.config.tts_retry_count}, 0) catch return;
     defer state.allocator.free(retry_str);
 
+    const model_status_row = gtk.gtk_box_new(gtk.GTK_ORIENTATION_HORIZONTAL, 12);
+    const model_status_label = gtk.gtk_label_new(null);
+    gtk.gtk_label_set_markup(@ptrCast(model_status_label), "<span foreground='#565f89'>Checking…</span>");
+    gtk.gtk_label_set_xalign(model_status_label, 0.0);
+    gtk.gtk_widget_set_hexpand(model_status_label, true);
+    gtk.gtk_box_append(@ptrCast(model_status_row), model_status_label);
+    const model_download_btn = gtk.gtk_button_new_with_label("Download Model");
+    gtk.gtk_widget_add_css_class(model_download_btn, "btn-secondary");
+    gtk.gtk_box_append(@ptrCast(model_status_row), model_download_btn);
+
+    const model_base_url = state.allocator.dupe(u8, state.config.tts_server_url) catch state.config.tts_server_url;
+    const model_ctx = state.allocator.create(ModelSectionCtx) catch null;
+    if (model_ctx) |c| {
+        c.* = .{
+            .allocator = state.allocator,
+            .io = state.io,
+            .base_url = model_base_url,
+            .status_label = model_status_label,
+            .download_btn = model_download_btn,
+        };
+        _ = gtk.g_signal_connect_data(model_download_btn, "clicked", @ptrCast(&onDownloadModelClicked), c, null, 0);
+        c.busy = true;
+        _ = gtk.g_thread_new("model-status-initial", &modelStatusPollThread, c);
+    }
+
     const sections = [_]kit.components.SettingsSection{
+        .{
+            .title = "TTS Model",
+            .icon = "📦",
+            .icon_color = "#7dcfff",
+            .description = "Local Qwen3-TTS voice model (~2.4GB) — required for on-device speech synthesis.",
+            .custom_content = model_status_row,
+        },
         .{
             .title = "Audio Engine",
             .icon = "🔊",
@@ -942,7 +1148,32 @@ fn onSettingsBtnClicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void
         &sections,
         .{ .onSave = onSettingsSaveKit },
     );
+    if (model_ctx) |c| {
+        _ = gtk.g_signal_connect_data(kit_sb.window, "destroy", @ptrCast(&onModelSectionWindowDestroy), c, null, 0);
+    }
     kit_sb.show();
+}
+
+// Opt-in "is a newer build available?" check against the rolling `latest`
+// GitHub Release (see src/services/update_checker.zig and
+// .github/workflows/release-latest.yml). Runs once on startup on a
+// background thread (same g_thread_new pattern as modelStatusPollThread
+// above) so it never blocks the GTK main loop on network I/O; on success it
+// posts a plain-text notice straight to the existing StatusBar rather than
+// building a new dialog/toast -- deliberately notify-and-link only, no
+// silent auto-download/self-replace (see src/services/update_checker.zig's
+// header comment for the full rationale).
+fn onUpdateCheckThread(data: gpointer) callconv(.c) ?*anyopaque {
+    _ = data;
+    const release = update_checker.fetchLatestRelease(state.io, state.allocator);
+    defer if (release) |r| r.deinit(state.allocator);
+    if (!update_checker.isUpdateAvailable(build_options.git_commit_sha, release)) return null;
+
+    // StatusBar.updateStatus dupes `message` itself before handing off to
+    // the GLib idle callback, so a static string literal (no allocation
+    // needed here) is fine.
+    if (state.main_status_bar) |sb| sb.updateStatus("Update available — see https://github.com/4cecoder/metanoia/releases/tag/latest", false);
+    return null;
 }
 
 // Activate - GTK Window Assembly
@@ -1050,6 +1281,7 @@ fn activate(app: ?*GtkApplication, user_data: gpointer) callconv(.c) void {
     state.main_status_bar = kit_status_bar.init(state.allocator);
     state.main_status_bar.?.updateVoice(state.config.selected_voice);
     gtk.gtk_box_append(@ptrCast(main_layout), state.main_status_bar.?.box);
+    _ = gtk.g_thread_new("update-check", &onUpdateCheckThread, null);
 
     state.main_sidebar = kit_sidebar.init(state.allocator, .{ .onColorClicked = onColorClickedSimple });
     gtk.gtk_widget_set_visible(state.main_sidebar.?.box, false);
