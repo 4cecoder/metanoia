@@ -248,6 +248,7 @@ jobs:
             mingw-w64-ucrt-x86_64-curl
             mingw-w64-ucrt-x86_64-git
             mingw-w64-ucrt-x86_64-nsis
+            mingw-w64-ucrt-x86_64-adwaita-icon-theme
 
       - name: Install Zig
         shell: pwsh
@@ -272,14 +273,40 @@ jobs:
           MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
         run: bash ci/fix-msys2-libs.sh && zig build
 
-      - name: Package
+      - name: Package (assemble real standalone dist folder)
+        shell: msys2 {0}
+        env:
+          MSYS2_PATH_TYPE: inherit
+          MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
+        # Replaces the old bare `Copy-Item zig-out\bin\*` (which shipped
+        # only metanoia.exe — no DLLs, no data/, no GTK runtime resources,
+        # and so could not run at all on a machine without a full MSYS2
+        # install). See packaging/build-windows.sh for the full DLL-closure
+        # + GTK4-resource-discovery reasoning. Runs in the same msys2 shell
+        # as the Build step (not pwsh) because it needs `ldd` and live
+        # `/ucrt64/...` POSIX paths.
+        run: bash packaging/build-windows.sh
+
+      - name: Zip the portable distribution
         shell: pwsh
         run: |
-          $dist = "dist\Metanoia"
-          New-Item $dist -ItemType Directory -Force
-          Copy-Item "zig-out\bin\*" $dist -Recurse
-          Copy-Item "assets\metanoia.ico" $dist
-          Compress-Archive -Path "$dist\*" -DestinationPath "dist\Metanoia-latest.zip" -Force
+          Compress-Archive -Path "dist\Metanoia\*" -DestinationPath "dist\Metanoia-latest.zip" -Force
+
+      - name: Build NSIS installer
+        shell: msys2 {0}
+        env:
+          MSYS2_PATH_TYPE: inherit
+          MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
+        # makensis.exe ships in mingw-w64-ucrt-x86_64-nsis (installed
+        # above, unused until now) at /ucrt64/bin — on PATH in this shell
+        # the same way zig-build's other MSYS2-provided tools are. Only
+        # APP_VERSION is passed — DIST_DIR/OUT_FILE/icon path are
+        # deliberately NOT overridden from here; see the path-resolution
+        # comment at the top of packaging/windows-installer.nsi for why
+        # (their defaults are relative to the .nsi file's own directory,
+        # verified against a real makensis, not the repo root).
+        run: |
+          makensis -DAPP_VERSION="latest-${{ github.sha }}" packaging/windows-installer.nsi
 
       - name: Publish rolling release
         uses: softprops/action-gh-release@v2
@@ -287,9 +314,14 @@ jobs:
           tag_name: latest
           name: "Latest (master @ ${{ github.sha }})"
           body: |
-            Portable Windows build — unzip and run metanoia.exe. Rebuilt
-            from `${{ github.sha }}`, replaced on every push to master.
+            Portable Windows build: unzip Metanoia-latest.zip and run
+            metanoia.exe (no installation needed) — or run
+            Metanoia-Setup.exe for a normal installed app with a Start Menu
+            shortcut and uninstaller. Rebuilt from `${{ github.sha }}`,
+            replaced on every push to master.
 
             commit: ${{ github.sha }}
           prerelease: true
-          files: dist/Metanoia-latest.zip
+          files: |
+            dist/Metanoia-latest.zip
+            dist/Metanoia-Setup.exe

@@ -77,6 +77,27 @@ The existing Windows `release.yml` pipeline still never copies `data/` into
 `release.yml`), but now that the data is a normal tracked file, fixing that
 is a small, low-risk follow-up whenever someone picks Windows back up.
 
+**Update:** Windows *was* picked back up — `release-latest.yml`'s
+`build-windows` job now runs `packaging/build-windows.sh` (real recursive
+DLL-dependency bundling via `ldd`, plus GDK-Pixbuf loaders and an
+Adwaita/hicolor icon theme for GTK4's runtime resource discovery) and
+`packaging/windows-installer.nsi` (an NSIS installer, built with
+`makensis`, producing `Metanoia-Setup.exe` alongside the existing portable
+zip). `release.yml` (the tag-triggered versioned release) deliberately was
+**not** touched yet — same "don't touch it in this pass" reasoning as
+above, now doubled: it's the real user-facing release channel, and this
+approach is unproven on real Windows CI. Once a real `release-latest.yml`
+run confirms metanoia.exe actually launches on a clean Windows box, port
+the same two steps into `release.yml` — it has the identical bare
+`Copy-Item` gap today. See `packaging/build-windows.sh`'s header comment
+for exactly what could and couldn't be verified without a Windows/MSYS2
+environment (there was none available), and its inline comments for the
+system-vs-MSYS2-DLL distinction and the GDK-Pixbuf `loaders.cache`
+relocatable-path limitation that's still open for the portable zip
+specifically (the NSIS installer fixes it properly via a post-install
+`gdk-pixbuf-query-loaders --update-cache` step; the zip does not, since
+there's no "install step" to hook).
+
 Android is unaffected either way — the mobile client doesn't bundle
 `data/bible.db` the same way (it's Gradle/Kotlin, separate assets pipeline).
 
