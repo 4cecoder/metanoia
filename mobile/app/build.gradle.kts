@@ -110,8 +110,7 @@ dependencies {
     
     // --- CORE ENGINES ---
     implementation("com.microsoft.onnxruntime:onnxruntime-mobile:1.18.0")
-    implementation("com.google.mediapipe:tasks-genai:0.10.14")
-    
+
     // --- UTILS ---
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jsoup:jsoup:1.17.2")

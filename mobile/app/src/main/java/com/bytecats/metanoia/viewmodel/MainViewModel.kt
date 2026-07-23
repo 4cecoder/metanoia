@@ -10,7 +10,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bytecats.metanoia.bible.BibleManager
 import com.bytecats.metanoia.gateway.GatewayClient
-import com.bytecats.metanoia.llm.LLMManager
 import com.bytecats.metanoia.models.*
 import com.bytecats.metanoia.settings.SettingsManager
 import com.bytecats.metanoia.stt.STTManager
@@ -38,12 +37,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     val bibleManager = BibleManager(context)
     var ttsManager: TTSManager? = null
     var sttManager: STTManager? = null
-    var llmManager: LLMManager? = null
     var gateway: GatewayClient? = null
     private var systemTts: TextToSpeech? = null
 
     val voiceLogs = mutableStateListOf<String>()
-    val aiLogs = mutableStateListOf<String>()
 
     // Detailed voice state
     var serverVoices = mutableStateListOf<RemoteVoice>()
@@ -81,9 +78,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
                     voiceLogs.add("[${currentTime()}] $msg")
                 }
                 sttManager = STTManager(context)
-                llmManager = LLMManager(context) { msg ->
-                    aiLogs.add("[${currentTime()}] $msg")
-                }
 
                 // Check gateway on startup
                 checkGatewayConnection()

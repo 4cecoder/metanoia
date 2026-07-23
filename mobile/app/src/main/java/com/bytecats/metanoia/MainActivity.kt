@@ -37,9 +37,6 @@ class MainActivity : ComponentActivity() {
                     composable("experimental_hub") {
                         ExperimentalHub(navController)
                     }
-                    composable("ai_lab") {
-                        GraniteLabScreen(navController, viewModel.aiLogs, viewModel.llmManager!!)
-                    }
                     composable("voice_lab") {
                         VoiceLabScreen(navController, viewModel)
                     }
