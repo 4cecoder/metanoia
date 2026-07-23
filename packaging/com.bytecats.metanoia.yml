@@ -108,14 +108,14 @@
 #     verified" in the accompanying report) — so, same reasoning as
 #     sqlite3, curl is built from the current upstream release
 #     (curl-8.21.0.tar.xz, released 2026-06-24, sha256 verified locally)
-#     rather than assumed. Its ./configure is left to auto-detect whatever
-#     TLS backend (if any) the SDK provides — NOT forced via
-#     --with-openssl — so this module still builds successfully even if no
-#     TLS library is found; the honest, flagged consequence of that
-#     fallback is that HTTPS (biblehub.com scraping specifically; the
-#     127.0.0.1/LAN TTS+Ollama traffic is plain HTTP either way) could
-#     silently lack support in that scenario. See the report for this
-#     flagged as a real, unverified gap.
+#     rather than assumed. UPDATE (confirmed via a real flatpak-builder CI
+#     run): leaving ./configure to "auto-detect whatever TLS backend the
+#     SDK provides" does NOT gracefully fall back to no-TLS — it hard-errors
+#     ("select TLS backend(s) or disable TLS with --without-ssl") and fails
+#     the whole build. Now forced via --with-openssl, which org.gnome.Sdk
+#     ships (a full desktop SDK) — needed for real HTTPS support
+#     (biblehub.com scraping specifically; the 127.0.0.1/LAN TTS+Ollama
+#     traffic is plain HTTP either way).
 #
 # ── finish-args ──────────────────────────────────────────────────────────
 # Derived from grepping actual runtime behavior in src/, not copied from a
@@ -180,11 +180,17 @@ modules:
   - name: curl
     buildsystem: simple
     build-commands:
-      # No --with-openssl / --with-gnutls forced — auto-detect whatever's
-      # available so this module cannot hard-fail the whole build over a
-      # missing TLS backend. See the manifest header comment for the
-      # honestly-flagged consequence of this fallback.
-      - ./configure --prefix=/app --disable-static --without-libpsl --disable-manual
+      # Confirmed via a real flatpak-builder CI run: NOT forcing a TLS
+      # backend does not gracefully fall back to no-TLS the way the
+      # previous comment here assumed — curl's ./configure hard-errors
+      # ("select TLS backend(s) or disable TLS with --without-ssl") when it
+      # can't auto-detect one, failing the whole build. org.gnome.Sdk//50
+      # (a full desktop SDK) ships OpenSSL, so --with-openssl is the
+      # standard, well-established choice for curl-in-Flatpak — needed for
+      # real HTTPS support (src/native_scraper.zig's biblehub.com fetches
+      # use it; the loopback/LAN traffic is plain HTTP and wouldn't need
+      # this, but the scraper path does).
+      - ./configure --prefix=/app --disable-static --without-libpsl --disable-manual --with-openssl
       - make -j${FLATPAK_BUILDER_N_JOBS:-4}
       - make install
     sources:
