@@ -22,7 +22,13 @@ pub const SettingsSection = struct {
     icon: [*:0]const u8,
     description: ?[*:0]const u8 = null,
     icon_color: ?[*:0]const u8 = null,
-    fields: []const SettingsField,
+    fields: []const SettingsField = &.{},
+    /// Escape hatch for sections that need more than label+entry rows (e.g.
+    /// a status label + action button). Rendered as-is after the header/
+    /// description and before `fields`. Keeps this component decoupled from
+    /// any specific non-text-field UI need rather than teaching it every
+    /// widget shape callers might eventually want.
+    custom_content: ?*ffi.GtkWidget = null,
 };
 
 /// A single field value as returned by the save callback.
@@ -193,6 +199,10 @@ pub const SettingsPanel = struct {
             ffi.gtk_widget_add_css_class(desc_lbl, "text-dim");
             ffi.gtk_label_set_xalign(desc_lbl, 0.0);
             ffi.gtk_box_append(@ptrCast(sec_box), desc_lbl);
+        }
+
+        if (section.custom_content) |content| {
+            ffi.gtk_box_append(@ptrCast(sec_box), content);
         }
 
         // Fields

@@ -108,6 +108,7 @@ pub extern fn gtk_widget_remove_css_class(widget: ?*GtkWidget, css_class: [*:0]c
 pub extern fn gtk_widget_add_controller(widget: ?*GtkWidget, controller: ?*anyopaque) void;
 
 pub extern fn g_timeout_add(interval: u32, function: ?*const fn (data: gpointer) callconv(.c) bool, data: gpointer) u32;
+pub extern fn g_source_remove(tag: u32) bool;
 
 pub extern fn gtk_drop_down_new_from_strings(strings: [*]const ?[*:0]const u8) ?*GtkWidget;
 pub extern fn gtk_drop_down_get_selected(self: ?*anyopaque) u32;
