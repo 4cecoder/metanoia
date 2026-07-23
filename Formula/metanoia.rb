@@ -7,17 +7,21 @@
 #
 # This formula lives in this repo for convenience, but Homebrew formulae must
 # be installed from a "tap" (a separate Git repo Homebrew knows how to find,
-# named `homebrew-<something>`). This repo is NOT a tap. Before this formula
-# is usable via `brew install`, you (the maintainer) need to:
-#   1. Create a new GitHub repo named `homebrew-metanoia` under the 4cecoder org/user
-#      (Homebrew's naming convention: homebrew-<tap-name>).
-#   2. Copy this file into that repo at Formula/metanoia.rb.
-#   3. Cut a real release (push a "20*.*.*" tag) so release-unix.yml uploads
-#      Metanoia-macos-arm64.tar.gz to a GitHub Release.
-#   4. Fill in the TODOs below (url version + sha256) from that release.
-#   5. Users then run: brew tap 4cecoder/metanoia && brew install metanoia
+# named `homebrew-<something>`). This repo is NOT a tap. url/version/sha256
+# below are real and current (release 2026.07.23-f04ce77, verified via
+# `shasum -a 256` against the actual downloaded asset) — release-unix.yml's
+# `permissions: contents: write` gap (it could never actually publish a
+# release before that was fixed) is resolved, so re-cutting this against a
+# newer tag later is just: push a new "20*.*.*" tag, then update url/version/
+# sha256 here from that release the same way.
 #
-# To compute the sha256 once a release exists:
+# Still needed before `brew install` actually works for anyone:
+#   1. Create a new GitHub repo named `homebrew-metanoia` under the 4cecoder
+#      org/user (Homebrew's naming convention: homebrew-<tap-name>).
+#   2. Copy this file into that repo at Formula/metanoia.rb.
+#   3. Users then run: brew tap 4cecoder/metanoia && brew install metanoia
+#
+# To compute the sha256 for a future release:
 #   curl -fsSL -o /tmp/Metanoia-macos-arm64.tar.gz \
 #     https://github.com/4cecoder/metanoia/releases/download/<TAG>/Metanoia-macos-arm64.tar.gz
 #   shasum -a 256 /tmp/Metanoia-macos-arm64.tar.gz
@@ -32,11 +36,9 @@ class Metanoia < Formula
   homepage "https://github.com/4cecoder/metanoia"
 
   if Hardware::CPU.arm?
-    # TODO: fill in after first release is cut (see instructions above).
-    url "https://github.com/4cecoder/metanoia/releases/download/CHANGEME_TAG/Metanoia-macos-arm64.tar.gz"
-    version "CHANGEME_TAG"
-    # TODO: sha256 "<fill in after first release>"
-    sha256 "0000000000000000000000000000000000000000000000000000000000000"
+    url "https://github.com/4cecoder/metanoia/releases/download/2026.07.23-f04ce77/Metanoia-macos-arm64.tar.gz"
+    version "2026.07.23-f04ce77"
+    sha256 "f233b59018ab41ccbc5f6fc1f1a2d4ffd4e3bcdb0cb63af8c01c15da2e5f0a03"
   else
     odie "Metanoia: no prebuilt Intel (x86_64) macOS build is published yet. " \
          "See Formula/metanoia.rb for how to add one."
