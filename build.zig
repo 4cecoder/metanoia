@@ -214,6 +214,40 @@ pub fn build(b: *std.Build) void {
         exe.root_module.linkSystemLibrary("gio-2.0", .{});
         exe.root_module.linkSystemLibrary("gobject-2.0", .{});
         exe.root_module.linkSystemLibrary("glib-2.0", .{});
+
+        // With that in place, the same naive-linking gap reappeared one
+        // layer down: MSYS2's static archives for glib/gobject/gio each
+        // pull in their OWN C-level dependencies, which pkg-config's static
+        // expansion normally supplies but our explicit -l list doesn't.
+        // Confirmed from a real CI run (29974956210) with the exact
+        // complete set of ~104 undefined symbols this time (not a guess —
+        // every library below maps to specific symbols actually reported):
+        //   ffi_call, ffi_prep_cif, ffi_type_*        -> libffi (GObject's
+        //     closure/signal marshaling, gclosure.c)
+        //   g_module_*                                 -> gmodule-2.0
+        //   inflate, inflateEnd, inflateInit_, etc.     -> zlib
+        //   pcre2_*_8                                   -> pcre2-8 (GRegex)
+        //   libiconv, libiconv_open                      -> iconv
+        //   accept/bind/socket/WSA*/htonl/inet_*/etc.    -> ws2_32 (Winsock,
+        //     GIO's GSocket backend on Windows)
+        //   CoCreateInstance/CoInitializeEx/CoTaskMemAlloc/etc. -> ole32
+        //   SHLoadIndirectString, StrRetToStrW           -> shlwapi
+        //   GetAdaptersAddresses, GetIpForwardTable2,
+        //     NotifyRouteChange2, CancelMibChangeNotify2,
+        //     if_nametoindex                              -> iphlpapi (GIO's
+        //     network-monitor backend)
+        //   DnsFree, DnsQuery_UTF8                        -> dnsapi (GIO's
+        //     resolver backend)
+        exe.root_module.linkSystemLibrary("gmodule-2.0", .{});
+        exe.root_module.linkSystemLibrary("ffi", .{});
+        exe.root_module.linkSystemLibrary("z", .{});
+        exe.root_module.linkSystemLibrary("pcre2-8", .{});
+        exe.root_module.linkSystemLibrary("iconv", .{});
+        exe.root_module.linkSystemLibrary("ws2_32", .{});
+        exe.root_module.linkSystemLibrary("ole32", .{});
+        exe.root_module.linkSystemLibrary("shlwapi", .{});
+        exe.root_module.linkSystemLibrary("iphlpapi", .{});
+        exe.root_module.linkSystemLibrary("dnsapi", .{});
     }
 
     // macOS .app bundle (only on macOS)
