@@ -385,7 +385,7 @@ jobs:
       - name: Zip the portable distribution
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist\Metanoia\*" -DestinationPath "dist\Metanoia-latest.zip" -Force
+          Compress-Archive -Path "dist\Metanoia\*" -DestinationPath "dist\Metanoia-windows-x86_64.zip" -Force
 
       - name: Build NSIS installer
         shell: msys2 {0}
@@ -409,7 +409,7 @@ jobs:
           tag_name: latest
           name: "Latest (master @ ${{ github.sha }})"
           body: |
-            Portable Windows build: unzip Metanoia-latest.zip and run
+            Windows: unzip Metanoia-windows-x86_64.zip and run
             metanoia.exe (no installation needed) — or run
             Metanoia-Setup.exe for a normal installed app with a Start Menu
             shortcut and uninstaller. Rebuilt from `${{ github.sha }}`,
@@ -418,5 +418,5 @@ jobs:
             commit: ${{ github.sha }}
           prerelease: true
           files: |
-            dist/Metanoia-latest.zip
+            dist/Metanoia-windows-x86_64.zip
             dist/Metanoia-Setup.exe
