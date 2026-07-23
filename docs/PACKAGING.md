@@ -150,6 +150,42 @@ that's a separate optimization for another day.
   bundle (`codesign --force --deep --sign -`, no paid cert needed/used), tars
   it to `dist/Metanoia-macos-<arch>.tar.gz`.
 
+- **`packaging/build-macos-dmg.sh`** — takes the already-built, already-signed
+  `zig-out/Metanoia.app` (delegating to `build-macos.sh` first if it isn't
+  present yet — not a duplicate build pipeline, just a call to the one that
+  already owns the build/vtool/codesign ordering) and assembles a polished,
+  standard drag-to-Applications installer at `dist/Metanoia-<arch>.dmg` via
+  [`create-dmg`](https://github.com/create-dmg/create-dmg) (`brew install
+  create-dmg`). Produces a 660×400 Finder window with `Metanoia.app` and an
+  `Applications` symlink side by side (128px icons, positioned at (180,170)
+  and (480,170)), a custom Tokyo-Night-themed background
+  (`assets/dmg-background.png` — dark navy `#1a1b26`→`#20222f` gradient, the
+  "METANOIA" wordmark and a small arrow in the brand accent blue `#7aa2f7`,
+  generated with ImageMagick; the exact recipe is in the script's header
+  comment for easy regeneration/tweaking), and a custom volume icon (reusing
+  `assets/Metanoia.icns`). This does **not** re-run or duplicate
+  `build-macos.sh`'s vtool-minos-patch/codesign steps, and does not
+  re-codesign anything itself — it only copies the already-signed `.app`
+  into a disk image, so the embedded signature is untouched (verified:
+  `codesign -dv` on the `.app` as mounted from a real built DMG shows the
+  identical `CodeDirectory`/`Signature=adhoc` as the source bundle). Verified
+  end-to-end on a real macOS machine: the DMG was actually built, mounted
+  read-only, and inspected — Finder window bounds queried via AppleScript
+  came back exactly `660x400` at the position the script requested, per-icon
+  positions queried the same way matched `(180,170)`/`(480,170)` exactly,
+  the `Applications` item resolved to a real symlink to `/Applications`,
+  `GetFileInfo` on the mounted volume showed the custom-icon flag set, and
+  the background PNG was present at `.background/dmg-background.png` inside
+  the volume. The one thing *not* independently confirmed is the pixel-exact
+  rendered appearance of the background image at every possible Retina/non-
+  Retina display scaling — Finder's folder-background mechanism doesn't
+  reliably honor an `@2x` HiDPI pair the way app icons do, so the background
+  is shipped at exactly the window's 1x pixel size (660×400, the same
+  convention virtually all `create-dmg`-based tutorials use) rather than a
+  higher-resolution asset that could render at the wrong scale; expect it to
+  look slightly softer than a native asset on a Retina display, not blurry
+  or broken.
+
 - **`packaging/build-linux.sh`** — `zig build -Doptimize=ReleaseFast`,
   assembles the `/opt/metanoia` prefix layout + `/usr/bin` wrapper +
   `.desktop` file described above, and produces two artifacts:

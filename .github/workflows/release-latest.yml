@@ -162,6 +162,12 @@ jobs:
       - name: Build macOS .app bundle
         run: bash packaging/build-macos.sh
 
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Build macOS installer DMG
+        run: bash packaging/build-macos-dmg.sh
+
       - name: Publish rolling release
         uses: softprops/action-gh-release@v2
         with:
@@ -169,12 +175,16 @@ jobs:
           name: "Latest (master @ ${{ github.sha }})"
           body: |
             macOS build (unsigned/ad-hoc-signed — see docs/PACKAGING.md for
-            the Gatekeeper caveat). Unzip and run Metanoia.app. Rebuilt from
-            `${{ github.sha }}`, replaced on every push to master.
+            the Gatekeeper caveat). Either double-click Metanoia-*.dmg and
+            drag Metanoia.app to Applications, or unzip the tarball and run
+            Metanoia.app directly. Rebuilt from `${{ github.sha }}`, replaced
+            on every push to master.
 
             commit: ${{ github.sha }}
           prerelease: true
-          files: dist/Metanoia-macos-*.tar.gz
+          files: |
+            dist/Metanoia-macos-*.tar.gz
+            dist/Metanoia-*.dmg
 
   build-linux:
     needs: [move-tag, test-zig]
