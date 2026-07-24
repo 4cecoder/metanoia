@@ -311,6 +311,30 @@ else
   warn "No bundled usr/lib/gtk-4.0/*/media/libmedia-gstreamer.so found to remove — either linuxdeploy-plugin-gtk changed its layout, or GTK wasn't built with gstreamer media support this time. Not fatal either way; just noting the expected file wasn't there."
 fi
 
+# ── 4.6. Add libfribidi dependency ─────────────────────────────────
+# Some GTK4/Pango text-shaping backends require libfribidi.so.0 for
+# bidirectional text support. linuxdeploy's automatic ldd tracing sometimes
+# misses this indirect dependency (it's pulled in via dlopen at runtime,
+# not via static linkage). Manual bundling ensures it's available on
+# all distros, particularly Fedora 38+ where it's a hard requirement.
+FRIBIDI_SRC="$(ldconfig -p | grep 'libfribidi.so.0' | head -1 | cut -d'>' -f2 | xargs)"
+if [ -n "$FRIBIDI_SRC" ] && [ -f "$FRIBIDI_SRC" ]; then
+  FRIBIDI_DEST="$APPDIR/usr/lib/$(basename "$FRIBIDI_SRC")"
+  info "Bundling libfribidi.so.0 from $FRIBIDI_SRC to $FRIBIDI_DEST"
+  cp -L "$FRIBIDI_SRC" "$FRIBIDI_DEST"
+  # Also copy the symlink target if it's a symlink
+  if [ -L "$FRIBIDI_SRC" ]; then
+    FRIBIDI_REAL="$(readlink -f "$FRIBIDI_SRC")"
+    if [ -f "$FRIBIDI_REAL" ]; then
+      FRIBIDI_REAL_DEST="$APPDIR/usr/lib/$(basename "$FRIBIDI_REAL")"
+      info "Bundling libfribidi symlink target $FRIBIDI_REAL to $FRIBIDI_REAL_DEST"
+      cp -L "$FRIBIDI_REAL" "$FRIBIDI_REAL_DEST"
+    fi
+  fi
+else
+  warn "libfribidi.so.0 not found on system — AppImage may fail on some distros. Install libfribidi-dev/libfribidi-dev."
+fi
+
 info "Running linuxdeploy --output appimage (package the now-adjusted AppDir)..."
 "$TOOLS_DIR/linuxdeploy-x86_64.AppImage" \
   --appdir "$APPDIR" \
