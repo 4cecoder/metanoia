@@ -77,6 +77,7 @@ class BibleManager(private val context: Context) {
     fun recordChapterRead(book: String, chapter: Int) = db.recordChapterRead(book, chapter)
     fun getReadCompletion(): Map<String, Float> = db.getReadCompletion()
     fun getMostReadBooks(limit: Int = 5): List<Pair<String, Int>> = db.getMostReadBooks(limit)
+    fun getHotChapters(limit: Int = 10): List<HotChapter> = db.getHotChapters(limit)
     fun getReadingEventCounts(sinceMillis: Long): Int = db.getReadingEventCounts(sinceMillis)
     fun getFirstEverReadTimestamp(): Long? = db.getFirstEverReadTimestamp()
     fun getReadEpochDaysDescending(): List<Long> = db.getReadEpochDaysDescending()

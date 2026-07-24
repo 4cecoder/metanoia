@@ -377,6 +377,24 @@ class BibleDatabase(private val context: Context) {
     }
 
     /**
+     * The individual chapters (not whole books) with the highest view
+     * count, most-viewed first -- same "including repeats" semantics as
+     * getMostReadBooks(), just grouped one level finer.
+     */
+    fun getHotChapters(limit: Int = 10): List<HotChapter> {
+        if (!exists()) return emptyList()
+        val list = mutableListOf<HotChapter>()
+        val db = open()
+        val cursor = db.rawQuery(
+            "SELECT book, chapter, COUNT(*) as cnt FROM reading_events GROUP BY book, chapter ORDER BY cnt DESC LIMIT ?",
+            arrayOf(limit.toString())
+        )
+        while (cursor.moveToNext()) list.add(HotChapter(cursor.getString(0), cursor.getInt(1), cursor.getInt(2)))
+        cursor.close(); db.close()
+        return list
+    }
+
+    /**
      * Count of chapter-views at or after `sinceMillis`. Callers compute
      * rolling-window cutoffs (e.g. now - 7d) rather than this method doing
      * any calendar-boundary bucketing -- see ReadingStats.kt.
@@ -584,3 +602,6 @@ data class InterlinearWordWithVerse(
     val verse: Int, val wordIndex: Int,
     val original: String, val translation: String, val strongs: String
 )
+
+/** One row of BibleDatabase.getHotChapters() -- a single chapter's view count. */
+data class HotChapter(val book: String, val chapter: Int, val views: Int)

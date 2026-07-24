@@ -1,6 +1,7 @@
 package com.bytecats.metanoia.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.bytecats.metanoia.bible.ReadingStats
+import com.bytecats.metanoia.bible.VerseReference
 import com.bytecats.metanoia.models.BOOKS
 import com.bytecats.metanoia.ui.components.ConfirmActionDialog
 import com.bytecats.metanoia.ui.components.StatItemCompact
@@ -64,6 +66,7 @@ fun ReadingAnalyticsScreen(navController: NavController, viewModel: MainViewMode
     var showResetDialog by remember { mutableStateOf(false) }
 
     val mostRead = remember(resetNonce) { bible.getMostReadBooks(5) }
+    val hotChapters = remember(resetNonce) { bible.getHotChapters(10) }
     val now = remember(resetNonce) { System.currentTimeMillis() }
     val weekCount = remember(resetNonce) { bible.getReadingEventCounts(ReadingStats.weekCutoff(now)) }
     val monthCount = remember(resetNonce) { bible.getReadingEventCounts(ReadingStats.monthCutoff(now)) }
@@ -248,6 +251,44 @@ fun ReadingAnalyticsScreen(navController: NavController, viewModel: MainViewMode
                                 Text("$count view${if (count == 1) "" else "s"}", color = MaterialTheme.colorScheme.primary)
                             }
                             if (idx < mostRead.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        }
+                    }
+                }
+            }
+            Text("HOT CHAPTERS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))) {
+                if (hotChapters.isEmpty()) {
+                    Text(
+                        "Nothing read yet -- open a chapter to start tracking.",
+                        modifier = Modifier.padding(24.dp),
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                } else {
+                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                        hotChapters.forEachIndexed { idx, hot ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.pendingDeepLink = VerseReference(hot.book, hot.chapter, null)
+                                        navController.navigate("bible")
+                                    }
+                                    .padding(horizontal = 24.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "${idx + 1}",
+                                        modifier = Modifier.width(24.dp),
+                                        color = MaterialTheme.colorScheme.outline,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text("${hot.book} ${hot.chapter}", fontWeight = FontWeight.Bold)
+                                }
+                                Text("${hot.views} view${if (hot.views == 1) "" else "s"}", color = TokyoAmber)
+                            }
+                            if (idx < hotChapters.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         }
                     }
                 }
