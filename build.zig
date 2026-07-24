@@ -205,7 +205,14 @@ pub fn build(b: *std.Build) void {
 
     // Windows-specific: hide terminal window, add MSYS2 search paths
     if (target.result.os.tag == .windows) {
-        exe.subsystem = .Windows;
+        // `.Windows` was a deprecated backward-compat alias for `.windows`
+        // (confirmed: still present but explicitly marked "to be removed"
+        // in this session's locally-installed 0.17.0-dev.1426 std lib) —
+        // removed entirely in a newer nightly CI picked up
+        // (0.17.0-dev.1454), breaking every build with "enum 'zig.Subsystem'
+        // has no member named 'Windows'". This project tracks Zig master
+        // nightly, which churns exactly like this — see CLAUDE.md.
+        exe.subsystem = .windows;
         // MSYS2 does NOT always live at "C:\msys64". The msys2/setup-msys2
         // GitHub Action's default config (release: true, no `location`
         // override — what this repo's CI workflows use) does a *fresh*
