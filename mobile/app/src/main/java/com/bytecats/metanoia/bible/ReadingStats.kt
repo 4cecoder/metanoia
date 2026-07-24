@@ -36,4 +36,109 @@ object ReadingStats {
         val b = (fb + (tb - fb) * p).toInt().coerceIn(0, 255)
         return (r shl 16) or (g shl 8) or b
     }
+
+    // -----------------------------------------------------------------
+    // Streaks
+    // -----------------------------------------------------------------
+
+    /**
+     * Length of the current unbroken run of local-calendar days (each day
+     * represented as a java.time epoch-day integer, per
+     * BibleDatabase.getReadEpochDaysDescending's KDoc) ending at "now".
+     *
+     * `readEpochDaysDescending` is expected to already be distinct and
+     * descending (that's what the DB layer returns), but this dedupes via a
+     * Set regardless of order or duplicates, rather than trusting the caller.
+     *
+     * Semantics: if `todayEpochDay` was read on, count consecutive days
+     * backward from today. If today was NOT read on but yesterday
+     * (`todayEpochDay - 1`) was, the streak is still "alive" -- today isn't
+     * over yet -- so count backward from yesterday instead. If neither today
+     * nor yesterday appears, the streak is broken: 0.
+     */
+    fun currentStreak(readEpochDaysDescending: List<Long>, todayEpochDay: Long): Int {
+        val days = readEpochDaysDescending.toHashSet()
+        if (days.isEmpty()) return 0
+        val anchor = when {
+            todayEpochDay in days -> todayEpochDay
+            (todayEpochDay - 1) in days -> todayEpochDay - 1
+            else -> return 0
+        }
+        var streak = 0
+        var day = anchor
+        while (day in days) {
+            streak++
+            day--
+        }
+        return streak
+    }
+
+    /**
+     * Longest run of consecutive integers anywhere in `readEpochDays`
+     * (possibly unsorted/duplicated -- dedupes via a Set first). Independent
+     * of "now", unlike currentStreak.
+     */
+    fun longestStreak(readEpochDays: List<Long>): Int {
+        val days = readEpochDays.toHashSet()
+        var longest = 0
+        for (day in days) {
+            // Only measure from the start of each run (no predecessor in the
+            // set) so every run is counted exactly once instead of once per
+            // member of the run.
+            if ((day - 1) !in days) {
+                var length = 1
+                var next = day + 1
+                while (next in days) {
+                    length++
+                    next++
+                }
+                if (length > longest) longest = length
+            }
+        }
+        return longest
+    }
+
+    // -----------------------------------------------------------------
+    // Day-of-week / time-of-day habits
+    // -----------------------------------------------------------------
+
+    /**
+     * Index of the day-of-week with the highest reading_events count, or
+     * null if every bucket is zero. Expects `counts` in SQLite's `%w`
+     * convention -- index 0=Sunday, 1=Monday, ..., 6=Saturday -- matching
+     * BibleDatabase.getDayOfWeekCounts()'s KDoc. Ties are broken by lowest
+     * index (first max wins).
+     */
+    fun mostActiveDayOfWeek(counts: IntArray): Int? {
+        var bestIdx = -1
+        var bestVal = 0
+        for (i in counts.indices) {
+            if (counts[i] > bestVal) {
+                bestVal = counts[i]
+                bestIdx = i
+            }
+        }
+        return if (bestIdx == -1) null else bestIdx
+    }
+
+    /** Sentinel returned by mostActiveTimeOfDay when there's no reading history to bucket at all. */
+    const val NOT_ENOUGH_DATA = "Not enough data"
+
+    /**
+     * Buckets a 24-entry (index = local hour 0-23, matching
+     * BibleDatabase.getHourOfDayCounts()'s KDoc) hour histogram into
+     * Morning(5-11) / Afternoon(12-16) / Evening(17-21) / Night(22-4, wraps
+     * past midnight), and returns the label of whichever bucket has the
+     * highest summed count. Ties are broken in Morning/Afternoon/Evening/Night
+     * order (first max wins). Returns [NOT_ENOUGH_DATA] if every hour is zero.
+     */
+    fun mostActiveTimeOfDay(hourCounts: IntArray): String {
+        val morning = (5..11).sumOf { hourCounts.getOrElse(it) { 0 } }
+        val afternoon = (12..16).sumOf { hourCounts.getOrElse(it) { 0 } }
+        val evening = (17..21).sumOf { hourCounts.getOrElse(it) { 0 } }
+        val night = (22..23).sumOf { hourCounts.getOrElse(it) { 0 } } + (0..4).sumOf { hourCounts.getOrElse(it) { 0 } }
+        val buckets = listOf("Morning" to morning, "Afternoon" to afternoon, "Evening" to evening, "Night" to night)
+        val best = buckets.maxByOrNull { it.second }
+        return if (best == null || best.second == 0) NOT_ENOUGH_DATA else best.first
+    }
 }

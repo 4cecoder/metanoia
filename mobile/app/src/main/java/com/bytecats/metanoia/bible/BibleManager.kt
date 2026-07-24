@@ -79,6 +79,12 @@ class BibleManager(private val context: Context) {
     fun getMostReadBooks(limit: Int = 5): List<Pair<String, Int>> = db.getMostReadBooks(limit)
     fun getReadingEventCounts(sinceMillis: Long): Int = db.getReadingEventCounts(sinceMillis)
     fun getFirstEverReadTimestamp(): Long? = db.getFirstEverReadTimestamp()
+    fun getReadEpochDaysDescending(): List<Long> = db.getReadEpochDaysDescending()
+    fun getDailyReadCounts(days: Int): List<Pair<Long, Int>> = db.getDailyReadCounts(days)
+    fun getDayOfWeekCounts(): IntArray = db.getDayOfWeekCounts()
+    fun getHourOfDayCounts(): IntArray = db.getHourOfDayCounts()
+    fun getTestamentReadCounts(): Map<String, Int> = db.getTestamentReadCounts()
+    fun clearReadingHistory() = db.clearReadingHistory()
 
     // --- Scraper passthroughs ---
 

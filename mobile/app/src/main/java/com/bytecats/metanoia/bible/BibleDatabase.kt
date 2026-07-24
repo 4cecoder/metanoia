@@ -401,6 +401,134 @@ class BibleDatabase(private val context: Context) {
         return result
     }
 
+    /**
+     * All reading_events timestamps, raw. Shared by every local-calendar-day
+     * bucketing method below so there's exactly one place that reads the
+     * column, with each caller doing its own java.time bucketing on top.
+     */
+    private fun getAllEventTimestamps(): List<Long> {
+        if (!exists()) return emptyList()
+        val db = open()
+        val cursor = db.rawQuery("SELECT timestamp FROM reading_events", null)
+        val list = mutableListOf<Long>()
+        while (cursor.moveToNext()) list.add(cursor.getLong(0))
+        cursor.close(); db.close()
+        return list
+    }
+
+    /**
+     * Distinct local-calendar days (java.time epoch-day integers -- whole
+     * days since 1970-01-01 in the device's local time zone, i.e.
+     * `Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()`)
+     * on which at least one reading_events row exists, descending (most
+     * recent first).
+     *
+     * Deliberately computed from raw millis via java.time in Kotlin rather
+     * than a `strftime('%J', ...)` SQL expression -- verified against a real
+     * scratch sqlite3 database during development (matching
+     * `strftime('%Y-%m-%d', ts/1000, 'unixepoch', 'localtime')` exactly for
+     * the same instants) but this avoids depending on SQLite's localtime
+     * handling at all. Feeds ReadingStats.currentStreak/longestStreak.
+     */
+    fun getReadEpochDaysDescending(): List<Long> {
+        val days = mutableSetOf<Long>()
+        for (ts in getAllEventTimestamps()) {
+            days.add(java.time.Instant.ofEpochMilli(ts).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay())
+        }
+        return days.sortedDescending()
+    }
+
+    /**
+     * (epochDay, count) pairs for each of the last `days` local-calendar days
+     * ending today (inclusive), ascending by day, zero-filled for days with
+     * no reading_events rows -- gives a bar chart a contiguous day axis
+     * instead of gaps for no-activity days.
+     */
+    fun getDailyReadCounts(days: Int): List<Pair<Long, Int>> {
+        if (days <= 0) return emptyList()
+        val byDay = mutableMapOf<Long, Int>()
+        for (ts in getAllEventTimestamps()) {
+            val epochDay = java.time.Instant.ofEpochMilli(ts).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
+            byDay[epochDay] = (byDay[epochDay] ?: 0) + 1
+        }
+        val today = java.time.LocalDate.now().toEpochDay()
+        val start = today - (days - 1)
+        return (start..today).map { it to (byDay[it] ?: 0) }
+    }
+
+    /**
+     * All-time reading_events counts bucketed by local day-of-week. Index
+     * convention: 0=Sunday, 1=Monday, ..., 6=Saturday -- matches SQLite's
+     * `%w` date-format specifier (verified against a real scratch sqlite3
+     * database), even though this is computed via java.time
+     * (`zonedDateTime.dayOfWeek.value % 7`, since java.time's DayOfWeek is
+     * MONDAY=1..SUNDAY=7) rather than a raw `strftime` call. See
+     * ReadingStats.mostActiveDayOfWeek(), which expects this same convention.
+     */
+    fun getDayOfWeekCounts(): IntArray {
+        val counts = IntArray(7)
+        for (ts in getAllEventTimestamps()) {
+            val zdt = java.time.Instant.ofEpochMilli(ts).atZone(java.time.ZoneId.systemDefault())
+            counts[zdt.dayOfWeek.value % 7]++
+        }
+        return counts
+    }
+
+    /**
+     * All-time reading_events counts bucketed by local hour-of-day, index
+     * 0-23 (matches SQLite's `%H` interpreted as an integer). See
+     * ReadingStats.mostActiveTimeOfDay(), which expects this same convention.
+     */
+    fun getHourOfDayCounts(): IntArray {
+        val counts = IntArray(24)
+        for (ts in getAllEventTimestamps()) {
+            val zdt = java.time.Instant.ofEpochMilli(ts).atZone(java.time.ZoneId.systemDefault())
+            counts[zdt.hour]++
+        }
+        return counts
+    }
+
+    /**
+     * Read-chapter counts (same "read" definition as getReadCompletion():
+     * COUNT(DISTINCT chapter) per book in reading_progress) grouped by
+     * testament key ("Old"/"New"/"Eth"). BOOKS is a static Kotlin list, not a
+     * DB table, so this join happens here rather than in SQL. Always
+     * includes all three keys (0 if nothing read yet in that testament) so
+     * UI code doesn't need to defend against missing map entries.
+     */
+    fun getTestamentReadCounts(): Map<String, Int> {
+        val counts = mutableMapOf("Old" to 0, "New" to 0, "Eth" to 0)
+        if (!exists()) return counts
+        val db = open()
+        val cursor = db.rawQuery(
+            "SELECT book, COUNT(DISTINCT chapter) FROM reading_progress WHERE read_count > 0 GROUP BY book", null
+        )
+        while (cursor.moveToNext()) {
+            val name = cursor.getString(0)
+            val readChapters = cursor.getInt(1)
+            val testament = BOOKS.find { it.name == name }?.testament
+            if (testament != null) counts[testament] = (counts[testament] ?: 0) + readChapters
+        }
+        cursor.close(); db.close()
+        return counts
+    }
+
+    /**
+     * Wipes all locally-tracked reading history (both the per-chapter
+     * dedup/progress table and the append-only event log) in one
+     * transaction. Privacy/control feature for the local-only analytics
+     * screen -- does NOT touch downloaded verse/interlinear/lexicon text.
+     */
+    fun clearReadingHistory() {
+        val db = open(false)
+        db.beginTransaction()
+        try {
+            db.execSQL("DELETE FROM reading_progress")
+            db.execSQL("DELETE FROM reading_events")
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction(); db.close() }
+    }
+
     // --- Interlinear ---
 
     fun getInterlinear(book: String, chapter: Int, verse: Int): List<InterlinearWord> {
