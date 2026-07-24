@@ -309,6 +309,7 @@ fun ReaderSettingsPage(navController: NavController, settings: SettingsManager) 
     var engSize by remember { mutableStateOf(settings.englishFontSize.toFloat()) }
     var ancSize by remember { mutableStateOf(settings.ancientFontSize.toFloat()) }
     var showEthiopian by remember { mutableStateOf(settings.showEthiopianCanon) }
+    var showApocrypha by remember { mutableStateOf(settings.showApocrypha) }
     Scaffold(topBar = {
         TopAppBar(
             title = { Text("READER STYLES") },
@@ -332,6 +333,14 @@ fun ReaderSettingsPage(navController: NavController, settings: SettingsManager) 
             ) {
                 showEthiopian = it
                 settings.showEthiopianCanon = it
+            }
+            SettingToggle(
+                "Show Apocrypha",
+                "Include Tobit, Judith, Wisdom, and Sirach in the book selection grid",
+                showApocrypha
+            ) {
+                showApocrypha = it
+                settings.showApocrypha = it
             }
         }
     }

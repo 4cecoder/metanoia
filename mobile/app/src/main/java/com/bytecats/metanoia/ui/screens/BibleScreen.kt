@@ -305,7 +305,7 @@ fun BibleScreen(navController: NavController, viewModel: MainViewModel) {
                             .filter { (key, _) -> key != "Eth" || settings.showEthiopianCanon }
                             .forEach { (key, label) ->
                             item(span = { GridItemSpan(maxLineSpan) }) { Text(label, modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
-                            items(bibleManager.books.filter { it.testament == key }) { book ->
+                            items(bibleManager.books.filter { it.testament == key && (settings.showApocrypha || !it.isApocrypha) }) { book ->
                                 // Two independent signals on the same card, deliberately not merged into one:
                                 // download completion (was the card's whole fill/border before) is now a
                                 // thin blue border badge only, while the fill itself became this book's
