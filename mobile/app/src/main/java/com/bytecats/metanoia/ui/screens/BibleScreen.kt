@@ -70,9 +70,41 @@ fun BibleScreen(navController: NavController, viewModel: MainViewModel) {
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    val completionMap = remember { bibleManager.getBookCompletion() }
+    var completionMap by remember { mutableStateOf(bibleManager.getBookCompletion()) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scrapeError by bibleManager.scrapeError.collectAsState()
+
+    // Best-effort background prefetch of every not-yet-cached chapter in a
+    // book, kicked off the moment its card is tapped (see the "book" step
+    // grid below) rather than waiting for the user to open each chapter one
+    // at a time. Sequential, not parallel: this app's scraping fallback
+    // (BibleScraper, biblehub.com) is a single external site with no known
+    // rate-limit headroom to spend — hammering it with dozens of concurrent
+    // requests for one bulk prefetch risks getting the whole app rate
+    // -limited/blocked for everyone, not just this download. fetchChapter
+    // already checks the local cache first and returns immediately for
+    // chapters that are already downloaded, so calling it unconditionally
+    // for every chapter (rather than pre-filtering) costs nothing extra for
+    // the ones already cached. Deliberately swallows per-chapter failures
+    // (network down partway through, a chapter with no source, etc.)
+    // instead of surfacing each one through the shared scrapeError Snackbar
+    // channel below -- that channel is meant for "the chapter you're
+    // actively looking at failed to load," and reusing it here would spam
+    // one Snackbar per failed chapter during a background prefetch the user
+    // didn't explicitly ask to watch.
+    fun prefetchBook(book: BibleBook) {
+        if ((completionMap[book.name] ?: 0f) >= 1f) return // already fully cached
+        scope.launch(Dispatchers.IO) {
+            for (ch in 1..book.chapters) {
+                try {
+                    bibleManager.fetchChapter(book.name, ch, settings.bibleGatewayVersion)
+                } catch (e: Exception) {
+                    // Best-effort: move on to the next chapter regardless.
+                }
+            }
+            completionMap = bibleManager.getBookCompletion()
+        }
+    }
 
     // Surface scrape/network failures instead of leaving the screen looking
     // like it's "still loading" forever with no error and no retry signal.
@@ -249,7 +281,7 @@ fun BibleScreen(navController: NavController, viewModel: MainViewModel) {
                             item(span = { GridItemSpan(maxLineSpan) }) { Text(label, modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
                             items(bibleManager.books.filter { it.testament == key }) { book ->
                                 val progress = completionMap[book.name] ?: 0f
-                                Card(modifier = Modifier.padding(4.dp).height(64.dp).clickable { selectedBook = book; step = "chapter"; isSearchVisible = false }, colors = CardDefaults.cardColors(containerColor = if (progress >= 1f) Color(0xFF9ece6a).copy(alpha = 0.2f) else if (progress > 0f) Color(0xFFe0af68).copy(0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)), border = if (progress >= 1f) BorderStroke(1.dp, Color(0xFF9ece6a)) else null) { Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(book.name, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium) } }
+                                Card(modifier = Modifier.padding(4.dp).height(64.dp).clickable { selectedBook = book; step = "chapter"; isSearchVisible = false; prefetchBook(book) }, colors = CardDefaults.cardColors(containerColor = if (progress >= 1f) Color(0xFF9ece6a).copy(alpha = 0.2f) else if (progress > 0f) Color(0xFFe0af68).copy(0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)), border = if (progress >= 1f) BorderStroke(1.dp, Color(0xFF9ece6a)) else null) { Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(book.name, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium) } }
                             }
                         }
                     }
