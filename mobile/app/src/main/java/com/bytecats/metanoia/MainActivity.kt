@@ -64,7 +64,7 @@ class MainActivity : ComponentActivity() {
                         LibraryStatsScreen(navController, viewModel.bibleManager)
                     }
                     composable("reading_stats") {
-                        ReadingAnalyticsScreen(navController, viewModel.bibleManager)
+                        ReadingAnalyticsScreen(navController, viewModel)
                     }
                     composable("experimental_hub") {
                         ExperimentalHub(navController)
