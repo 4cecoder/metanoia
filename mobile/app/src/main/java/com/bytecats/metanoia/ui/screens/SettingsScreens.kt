@@ -308,6 +308,7 @@ fun AudioSettingsPage(navController: NavController, settings: SettingsManager) {
 fun ReaderSettingsPage(navController: NavController, settings: SettingsManager) {
     var engSize by remember { mutableStateOf(settings.englishFontSize.toFloat()) }
     var ancSize by remember { mutableStateOf(settings.ancientFontSize.toFloat()) }
+    var showEthiopian by remember { mutableStateOf(settings.showEthiopianCanon) }
     Scaffold(topBar = {
         TopAppBar(
             title = { Text("READER STYLES") },
@@ -323,6 +324,15 @@ fun ReaderSettingsPage(navController: NavController, settings: SettingsManager) 
             Slider(engSize, { engSize = it; settings.englishFontSize = it.toInt() }, valueRange = 14f..40f)
             Text("Ancient Font Size: ${ancSize.toInt()}px")
             Slider(ancSize, { ancSize = it; settings.ancientFontSize = it.toInt() }, valueRange = 14f..40f)
+            HorizontalDivider()
+            SettingToggle(
+                "Show Ethiopian Canon",
+                "Include SirateTsion, Tizaz, Enoch, Jubilees, and other Ethiopian-canon books in the book selection grid",
+                showEthiopian
+            ) {
+                showEthiopian = it
+                settings.showEthiopianCanon = it
+            }
         }
     }
 }
@@ -341,6 +351,8 @@ fun UpdateSettingsPage(navController: NavController, viewModel: MainViewModel) {
     val updateInfo = viewModel.availableUpdate.value
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadFailed by remember { mutableStateOf(false) }
 
     var appVersionName by remember { mutableStateOf("-") }
     var appVersionCode by remember { mutableStateOf("-") }
@@ -451,23 +463,46 @@ fun UpdateSettingsPage(navController: NavController, viewModel: MainViewModel) {
                             Button(
                                 onClick = {
                                     val url = updateInfo.downloadUrl ?: return@Button
-                                    context.startActivity(
-                                        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
-                                    )
+                                    downloadFailed = false
+                                    isDownloading = true
+                                    scope.launch {
+                                        val apk = withContext(Dispatchers.IO) {
+                                            com.bytecats.metanoia.update.ApkInstaller.download(context, url)
+                                        }
+                                        isDownloading = false
+                                        if (apk != null) {
+                                            com.bytecats.metanoia.update.ApkInstaller.install(context, apk)
+                                        } else {
+                                            downloadFailed = true
+                                        }
+                                    }
                                 },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                enabled = !isDownloading
                             ) {
-                                Icon(Icons.Default.Download, null, modifier = Modifier.size(20.dp))
+                                if (isDownloading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.Download, null, modifier = Modifier.size(20.dp))
+                                }
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Download APK")
+                                Text(if (isDownloading) "Downloading..." else "Download & Install")
                             }
                         }
                         OutlinedButton(
                             onClick = { viewModel.dismissAvailableUpdate() },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            enabled = !isDownloading
                         ) {
                             Text("Dismiss")
                         }
+                    }
+                    if (downloadFailed) {
+                        Text(
+                            "Download failed — check your connection and try again.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }

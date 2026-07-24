@@ -301,7 +301,9 @@ fun BibleScreen(navController: NavController, viewModel: MainViewModel) {
             when (step) {
                 "book" -> {
                     LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.padding(12.dp)) {
-                        listOf("Old" to "Old Testament", "New" to "New Testament", "Eth" to "Ethiopian").forEach { (key, label) ->
+                        listOf("Old" to "Old Testament", "New" to "New Testament", "Eth" to "Ethiopian")
+                            .filter { (key, _) -> key != "Eth" || settings.showEthiopianCanon }
+                            .forEach { (key, label) ->
                             item(span = { GridItemSpan(maxLineSpan) }) { Text(label, modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
                             items(bibleManager.books.filter { it.testament == key }) { book ->
                                 // Two independent signals on the same card, deliberately not merged into one:
