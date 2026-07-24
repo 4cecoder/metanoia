@@ -234,7 +234,6 @@ cd "${APPDIR}/usr/share/metanoia" || true
 EOF
 
 # ── 4. Run linuxdeploy + gtk plugin + appimage plugin ────────────
-info "Running linuxdeploy (+ gtk, appimage plugins)..."
 export LINUXDEPLOY_PLUGIN_GTK_SCRIPT="$TOOLS_DIR/linuxdeploy-plugin-gtk.sh"
 export PATH="$TOOLS_DIR:$PATH"
 
@@ -262,12 +261,59 @@ export LDAI_UPDATE_INFORMATION="gh-releases-zsync|4cecoder|metanoia|latest|Metan
 # flag; it's invoked as `linuxdeploy --plugin gtk`).
 ln -sf "$TOOLS_DIR/linuxdeploy-plugin-gtk.sh" "$TOOLS_DIR/linuxdeploy-plugin-gtk"
 
+# Split into two stages (populate AppDir, THEN package it) rather than one
+# combined `--plugin gtk --output appimage` call, specifically so step 4.5
+# below can strip a known-broken bundled file out of the AppDir before it
+# gets sealed into the final AppImage — linuxdeploy has no hook to
+# intervene between "plugins ran" and "output packaged" within a single
+# invocation, but running it twice against the same --appdir (second call
+# needs no --executable/--desktop-file/--icon-file/--plugin: those already
+# took effect and are recorded in the AppDir from the first call) is a
+# standard, supported linuxdeploy workflow for exactly this "I need to
+# hand-tweak the AppDir before final packaging" need.
+info "Running linuxdeploy --plugin gtk (populate AppDir only)..."
 "$TOOLS_DIR/linuxdeploy-x86_64.AppImage" \
   --appdir "$APPDIR" \
   --executable "$APPDIR/usr/bin/${APP_NAME}" \
   --desktop-file "$APPDIR/metanoia.desktop" \
   --icon-file "$APPDIR/metanoia.png" \
-  --plugin gtk \
+  --plugin gtk
+
+# ── 4.5. Strip GTK4's bundled GStreamer media backend ────────────
+# Confirmed via a real user bug report (Fedora, running a CI-built
+# AppImage): GTK4's own gstreamer media-backend module
+# (usr/lib/gtk-4.0/<ver>/media/libmedia-gstreamer.so) gets bundled by
+# linuxdeploy-plugin-gtk, but the *rest* of GStreamer's own dependency
+# tree is not (that's a large, separate ecosystem linuxdeploy has no
+# reason to bundle just because this one GTK plugin links against it) —
+# so at runtime, dlopen()-ing that module pulls in the HOST system's own
+# /lib64/libgstreamer-1.0.so.0. That host library was built against the
+# host distro's own GLib (Fedora ships very new package versions), while
+# the AppImage's *bundled* GLib (built on this CI job's Ubuntu runner) can
+# be an older version lacking a symbol the host's GStreamer expects
+# (confirmed failure: "undefined symbol: g_sort_array", a real GLib
+# function only present in fairly recent GLib releases) — mixing a bundled
+# older GLib with a host-loaded newer-GLib-linked library in the same
+# process crashes with SIGILL.
+#
+# Metanoia never uses GTK4 video/media widgets (GtkVideo/GtkMediaFile) —
+# this module exists purely to support those. GTK4 handles a *missing*
+# optional media backend gracefully (video features silently unavailable,
+# no crash); it does NOT handle a *present-but-ABI-mismatched* one
+# gracefully, which is exactly what was shipping before this fix. Removing
+# it entirely is strictly safer than trying to force a specific backend
+# via an undocumented-for-this-purpose env var.
+GST_MEDIA_MODULE="$(find "$APPDIR/usr/lib/gtk-4.0" -path "*/media/libmedia-gstreamer.so" 2>/dev/null | head -1)"
+if [ -n "$GST_MEDIA_MODULE" ]; then
+  info "Removing bundled GTK4 GStreamer media backend ($GST_MEDIA_MODULE) — unused by this app, and known to crash on distros whose host GStreamer expects a newer GLib than this AppImage bundles."
+  rm -f "$GST_MEDIA_MODULE"
+else
+  warn "No bundled usr/lib/gtk-4.0/*/media/libmedia-gstreamer.so found to remove — either linuxdeploy-plugin-gtk changed its layout, or GTK wasn't built with gstreamer media support this time. Not fatal either way; just noting the expected file wasn't there."
+fi
+
+info "Running linuxdeploy --output appimage (package the now-adjusted AppDir)..."
+"$TOOLS_DIR/linuxdeploy-x86_64.AppImage" \
+  --appdir "$APPDIR" \
   --output appimage
 
 # linuxdeploy writes the AppImage to the current directory by default.

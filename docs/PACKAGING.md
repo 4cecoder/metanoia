@@ -214,6 +214,26 @@ that's a separate optimization for another day.
   end-to-end anywhere yet except in CI (this repo's dev machine for this
   work was macOS, which cannot run ELF AppImage tooling at all).
 
+  **Real user bug fixed (2026-07-23)**: a Fedora user's AppImage crashed on
+  launch — `/lib64/libgstreamer-1.0.so.0: undefined symbol: g_sort_array`,
+  `Failed to load module: .../usr/lib/gtk-4.0/4.0.0/media/libmedia-gstreamer.so`.
+  Root cause: `linuxdeploy-plugin-gtk` bundles GTK4's GStreamer media
+  backend module, but not the rest of GStreamer's own dependency tree
+  (that's a huge separate ecosystem, out of scope for a GTK plugin to
+  bundle) — so at runtime that module pulls in the *host* distro's own
+  system GStreamer instead. That host library was linked against the
+  host's own (often newer, especially on Fedora) GLib, while this
+  AppImage bundles an older GLib (built on the CI job's Ubuntu runner) —
+  mixing the two in one process is what crashed. Metanoia never uses
+  GTK4 video/media widgets, so the fix strips
+  `usr/lib/gtk-4.0/*/media/libmedia-gstreamer.so` from the AppDir between
+  the `--plugin gtk` and `--output appimage` linuxdeploy stages (now split
+  into two invocations specifically to allow this) — a *missing* optional
+  media backend is silently fine; a *present-but-ABI-mismatched* one hard
+  -crashes. Not independently re-verified against a real Fedora machine by
+  the author of this fix (same tooling limitation as the rest of this
+  section) — the next AppImage build is the real test.
+
 - **`packaging/com.bytecats.metanoia.yml`** (a Flatpak manifest, not a
   shell script) — builds a single-file `.flatpak` bundle via
   `flatpak-builder`/`flatpak build-bundle` (CI job `build-flatpak` in
