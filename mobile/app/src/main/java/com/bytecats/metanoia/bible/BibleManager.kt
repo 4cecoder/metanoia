@@ -72,6 +72,14 @@ class BibleManager(private val context: Context) {
 
     fun getBookCompletion(): Map<String, Float> = db.getBookCompletion()
 
+    // --- Reading progress / usage analytics passthroughs ---
+
+    fun recordChapterRead(book: String, chapter: Int) = db.recordChapterRead(book, chapter)
+    fun getReadCompletion(): Map<String, Float> = db.getReadCompletion()
+    fun getMostReadBooks(limit: Int = 5): List<Pair<String, Int>> = db.getMostReadBooks(limit)
+    fun getReadingEventCounts(sinceMillis: Long): Int = db.getReadingEventCounts(sinceMillis)
+    fun getFirstEverReadTimestamp(): Long? = db.getFirstEverReadTimestamp()
+
     // --- Scraper passthroughs ---
 
     suspend fun scrapeChapter(book: String, chapter: Int, version: String = "NKJV") {

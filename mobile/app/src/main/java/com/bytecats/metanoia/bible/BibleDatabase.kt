@@ -34,6 +34,8 @@ class BibleDatabase(private val context: Context) {
             db.execSQL("CREATE TABLE IF NOT EXISTS highlights (book TEXT, chapter INTEGER, verse INTEGER, color INTEGER, PRIMARY KEY(book, chapter, verse))")
             db.execSQL("CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY AUTOINCREMENT, book TEXT, chapter INTEGER, verse INTEGER, content TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
             db.execSQL("CREATE TABLE IF NOT EXISTS verses (book TEXT, chapter INTEGER, verse INTEGER, text TEXT, version TEXT, PRIMARY KEY(book, chapter, verse))")
+            db.execSQL("CREATE TABLE IF NOT EXISTS reading_progress (book TEXT, chapter INTEGER, first_read_at INTEGER, last_read_at INTEGER, read_count INTEGER, PRIMARY KEY(book, chapter))")
+            db.execSQL("CREATE TABLE IF NOT EXISTS reading_events (id INTEGER PRIMARY KEY AUTOINCREMENT, book TEXT, chapter INTEGER, timestamp INTEGER)")
             db.close()
         } catch (e: Exception) {
             Log.e("BibleDatabase", "Init failed: ${e.message}")
@@ -299,6 +301,104 @@ class BibleDatabase(private val context: Context) {
         }
         cursor.close(); db.close()
         return completion
+    }
+
+    // --- Reading progress / usage analytics ---
+    //
+    // Distinct from "book completion" above, which tracks DOWNLOADED verse
+    // text. This tracks whether the user has actually landed on a chapter in
+    // the reader (see BibleScreen's "read" step), separately from whether
+    // that chapter's text happens to be cached locally.
+
+    /**
+     * "Read" = the user landed on this chapter in the reader (see
+     * BibleScreen.kt's "read" step). Upserts the per-chapter dedup/progress
+     * row and appends one row to the append-only event log, in a single
+     * transaction (mirrors insertVerses'/insertInterlinearWords' pattern).
+     * reading_progress alone can't answer "what have I read the *most*"
+     * since it dedupes per chapter -- reading_events keeps every view,
+     * including repeats, for that.
+     */
+    fun recordChapterRead(book: String, chapter: Int) {
+        val db = open(false)
+        val now = System.currentTimeMillis()
+        db.beginTransaction()
+        try {
+            val cursor = db.rawQuery(
+                "SELECT read_count, first_read_at FROM reading_progress WHERE book = ? AND chapter = ?",
+                arrayOf(book, chapter.toString())
+            )
+            val existed = cursor.moveToFirst()
+            val prevCount = if (existed) cursor.getInt(0) else 0
+            val firstReadAt = if (existed) cursor.getLong(1) else now
+            cursor.close()
+            db.execSQL(
+                "INSERT OR REPLACE INTO reading_progress (book, chapter, first_read_at, last_read_at, read_count) VALUES (?, ?, ?, ?, ?)",
+                arrayOf(book, chapter, firstReadAt, now, prevCount + 1)
+            )
+            db.execSQL(
+                "INSERT INTO reading_events (book, chapter, timestamp) VALUES (?, ?, ?)",
+                arrayOf(book, chapter, now)
+            )
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction(); db.close() }
+    }
+
+    /** Same shape as getBookCompletion(), but from reading_progress instead of verses -- drives the book-card read gradient. */
+    fun getReadCompletion(): Map<String, Float> {
+        if (!exists()) return emptyMap()
+        val completion = mutableMapOf<String, Float>()
+        val db = open()
+        val cursor = db.rawQuery(
+            "SELECT book, COUNT(DISTINCT chapter) FROM reading_progress WHERE read_count > 0 GROUP BY book", null
+        )
+        while (cursor.moveToNext()) {
+            val name = cursor.getString(0)
+            val readChapters = cursor.getInt(1)
+            val totalChapters = BOOKS.find { it.name == name }?.chapters ?: 1
+            completion[name] = readChapters.toFloat() / totalChapters.toFloat()
+        }
+        cursor.close(); db.close()
+        return completion
+    }
+
+    /** Book name + total view count (including repeats), ordered most-read first. */
+    fun getMostReadBooks(limit: Int = 5): List<Pair<String, Int>> {
+        if (!exists()) return emptyList()
+        val list = mutableListOf<Pair<String, Int>>()
+        val db = open()
+        val cursor = db.rawQuery(
+            "SELECT book, COUNT(*) as cnt FROM reading_events GROUP BY book ORDER BY cnt DESC LIMIT ?",
+            arrayOf(limit.toString())
+        )
+        while (cursor.moveToNext()) list.add(cursor.getString(0) to cursor.getInt(1))
+        cursor.close(); db.close()
+        return list
+    }
+
+    /**
+     * Count of chapter-views at or after `sinceMillis`. Callers compute
+     * rolling-window cutoffs (e.g. now - 7d) rather than this method doing
+     * any calendar-boundary bucketing -- see ReadingStats.kt.
+     */
+    fun getReadingEventCounts(sinceMillis: Long): Int {
+        if (!exists()) return 0
+        val db = open()
+        val count = db.rawQuery(
+            "SELECT COUNT(*) FROM reading_events WHERE timestamp >= ?", arrayOf(sinceMillis.toString())
+        ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+        db.close()
+        return count
+    }
+
+    /** Earliest reading_events timestamp, or null if nothing's ever been read -- basis for a "using Metanoia for N days" figure. */
+    fun getFirstEverReadTimestamp(): Long? {
+        if (!exists()) return null
+        val db = open()
+        val cursor = db.rawQuery("SELECT MIN(timestamp) FROM reading_events", null)
+        val result = if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+        cursor.close(); db.close()
+        return result
     }
 
     // --- Interlinear ---
