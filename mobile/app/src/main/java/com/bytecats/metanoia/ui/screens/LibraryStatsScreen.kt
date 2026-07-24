@@ -49,6 +49,11 @@ fun LibraryStatsScreen(navController: NavController, bible: BibleManager) {
                     }
                 }
             }
+            // This screen is about downloaded-content size, not reading
+            // behavior -- that's a separate screen, linked here for discovery.
+            TextButton(onClick = { navController.navigate("reading_stats") }, modifier = Modifier.align(Alignment.End)) {
+                Text("View Reading Habits →")
+            }
         }
     }
 }

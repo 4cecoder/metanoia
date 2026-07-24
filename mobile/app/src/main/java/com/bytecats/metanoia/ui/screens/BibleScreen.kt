@@ -19,6 +19,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -71,6 +72,7 @@ fun BibleScreen(navController: NavController, viewModel: MainViewModel) {
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     var completionMap by remember { mutableStateOf(bibleManager.getBookCompletion()) }
+    var readCompletionMap by remember { mutableStateOf(bibleManager.getReadCompletion()) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scrapeError by bibleManager.scrapeError.collectAsState()
 
@@ -174,6 +176,28 @@ fun BibleScreen(navController: NavController, viewModel: MainViewModel) {
             val idx = content.indexOfFirst { it.number == v }
             if (idx != -1) listState.scrollToItem(idx)
         }
+    }
+
+    // Records "read" (see BibleManager.recordChapterRead / BibleDatabase's
+    // reading_progress+reading_events tables) the moment the "read" step's
+    // target genuinely changes, rather than adding the call at each of the
+    // 3+ separate call sites that set step = "read" (chapter grid, search
+    // result, deep link). Keyed on `step` in addition to selectedBook/
+    // selectedChapter -- not just the latter two -- because the deep-link
+    // effect above sets selectedBook/selectedChapter *before* suspending on
+    // a network/db fetch and only flips step to "read" afterwards; without
+    // `step` as a key, this would evaluate (and no-op, since step != "read"
+    // yet) during that in-between recomposition and then never re-fire once
+    // step actually becomes "read", because selectedBook/selectedChapter
+    // wouldn't change again. LaunchedEffect only re-runs when a key's value
+    // actually changes, not on every recomposition, so a config-change/
+    // unrelated recomposition while already sitting on "read" (step/book/
+    // chapter all unchanged) does not spuriously re-record.
+    LaunchedEffect(selectedBook, selectedChapter, step) {
+        if (step != "read") return@LaunchedEffect
+        val b = selectedBook ?: return@LaunchedEffect
+        withContext(Dispatchers.IO) { bibleManager.recordChapterRead(b.name, selectedChapter) }
+        readCompletionMap = bibleManager.getReadCompletion()
     }
 
     Scaffold(
@@ -280,8 +304,29 @@ fun BibleScreen(navController: NavController, viewModel: MainViewModel) {
                         listOf("Old" to "Old Testament", "New" to "New Testament", "Eth" to "Ethiopian").forEach { (key, label) ->
                             item(span = { GridItemSpan(maxLineSpan) }) { Text(label, modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
                             items(bibleManager.books.filter { it.testament == key }) { book ->
+                                // Two independent signals on the same card, deliberately not merged into one:
+                                // download completion (was the card's whole fill/border before) is now a
+                                // thin blue border badge only, while the fill itself became this book's
+                                // READ progress -- a proportional green gradient bar, not a 3-tier flat-color
+                                // swap, so a half-read book visibly looks half-filled at a glance across a
+                                // grid of ~80 cards.
                                 val progress = completionMap[book.name] ?: 0f
-                                Card(modifier = Modifier.padding(4.dp).height(64.dp).clickable { selectedBook = book; step = "chapter"; isSearchVisible = false; prefetchBook(book) }, colors = CardDefaults.cardColors(containerColor = if (progress >= 1f) Color(0xFF9ece6a).copy(alpha = 0.2f) else if (progress > 0f) Color(0xFFe0af68).copy(0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)), border = if (progress >= 1f) BorderStroke(1.dp, Color(0xFF9ece6a)) else null) { Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(book.name, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium) } }
+                                val readProgress = readCompletionMap[book.name] ?: 0f
+                                val unreadTone = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                val readTone = Color(0xFF9ece6a).copy(alpha = 0.5f)
+                                val edge = readProgress.coerceIn(0f, 1f)
+                                val fillBrush = Brush.horizontalGradient(
+                                    colorStops = arrayOf(
+                                        0f to readTone,
+                                        (edge - 0.02f).coerceIn(0f, 1f) to readTone,
+                                        (edge + 0.02f).coerceIn(0f, 1f) to unreadTone,
+                                        1f to unreadTone
+                                    )
+                                )
+                                val downloadBorder = if (progress >= 1f) BorderStroke(1.5.dp, Color(0xFF7aa2f7))
+                                    else if (progress > 0f) BorderStroke(1.dp, Color(0xFF7aa2f7).copy(alpha = 0.5f))
+                                    else null
+                                Card(modifier = Modifier.padding(4.dp).height(64.dp).clickable { selectedBook = book; step = "chapter"; isSearchVisible = false; prefetchBook(book) }, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.Transparent), border = downloadBorder) { Box(modifier = Modifier.fillMaxSize().background(fillBrush), contentAlignment = Alignment.Center) { Text(book.name, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium) } }
                             }
                         }
                     }

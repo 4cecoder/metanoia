@@ -63,6 +63,9 @@ class MainActivity : ComponentActivity() {
                     composable("stats") {
                         LibraryStatsScreen(navController, viewModel.bibleManager)
                     }
+                    composable("reading_stats") {
+                        ReadingAnalyticsScreen(navController, viewModel.bibleManager)
+                    }
                     composable("experimental_hub") {
                         ExperimentalHub(navController)
                     }
@@ -94,5 +97,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        pendingDeepLinkUri = intent.data
     }
 }

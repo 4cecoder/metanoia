@@ -91,6 +91,16 @@ fun MainMenu(navController: NavController, viewModel: MainViewModel) {
                         navController.navigate("experimental_hub")
                     }
                 }
+                // Odd tile out -- half-width row (paired with an empty
+                // Spacer rather than stretching full-width) keeps the same
+                // card size/rhythm as the 2x2 grid above instead of looking
+                // like a broken layout.
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    ModuleCard("MY READING", "Habits", Icons.Default.Insights, Color(0xFF9ece6a), Modifier.weight(1f)) {
+                        navController.navigate("reading_stats")
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
         }
     }
