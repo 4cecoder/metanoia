@@ -2,6 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Lets the in-app updater (com.bytecats.metanoia.update.ApkInstaller)
+         hand a downloaded APK straight to the system package installer
+         instead of routing through a browser — see docs/ANDROID_DEEP_LINKS.md's
+         sibling doc note in UpdateSettingsPage / that file for the full
+         flow. This is the standard, required permission for any
+         non-Play-Store app that wants to trigger its own APK install;
+         Android still shows its own "install this app?" confirmation
+         regardless — this does not and cannot bypass that. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:allowBackup="true"
@@ -11,6 +20,22 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Metanoia.Splash">
+
+        <!-- Exposes the cache dir where ApkInstaller downloads the update
+             APK to as a content:// URI (required since API 24 — a
+             file:// URI can't be granted to the system installer package).
+             android:exported="false" + android:grantUriPermissions="true"
+             is the standard, minimal FileProvider setup for exactly this
+             single-app-internal use case. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <activity
             android:name=".MainActivity"
             android:exported="true"

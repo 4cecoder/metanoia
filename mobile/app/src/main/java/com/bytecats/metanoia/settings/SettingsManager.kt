@@ -67,6 +67,13 @@ class SettingsManager(context: Context) {
         get() = prefs.getBoolean("haptic_enabled", true)
         set(value) = prefs.edit().putBoolean("haptic_enabled", value).apply()
 
+    /** Whether the Ethiopian-canon books (testament == "Eth") show up in the
+     * book-picker grid. Default true (shown) — this only hides them from
+     * that grid selection UI, it does not delete any cached data. */
+    var showEthiopianCanon: Boolean
+        get() = prefs.getBoolean("show_ethiopian_canon", true)
+        set(value) = prefs.edit().putBoolean("show_ethiopian_canon", value).apply()
+
     // --- Sync & Data ---
     var bibleGatewayVersion: String
         get() = prefs.getString("gateway_version", "NKJV") ?: "NKJV"
