@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bytecats.metanoia.bible.BibleManager
+import com.bytecats.metanoia.bible.VerseReference
 import com.bytecats.metanoia.gateway.GatewayClient
 import com.bytecats.metanoia.models.*
 import com.bytecats.metanoia.settings.SettingsManager
@@ -57,6 +58,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
 
     // Nightly/experimental update notice (opt-in, throttled — see checkForNightlyUpdateIfDue)
     val availableUpdate = mutableStateOf<NightlyUpdateInfo?>(null)
+
+    // Set by MainActivity when a deep link (metanoia://bible/... or an
+    // https App Link) resolves to a specific passage — see
+    // com.bytecats.metanoia.bible.DeepLink and docs/ANDROID_DEEP_LINKS.md.
+    // BibleScreen consumes-and-clears this once it's acted on it, so
+    // navigating back to Bible normally afterward doesn't re-trigger the
+    // same jump.
+    var pendingDeepLink by mutableStateOf<VerseReference?>(null)
 
     init {
         gateway = bibleManager.gateway

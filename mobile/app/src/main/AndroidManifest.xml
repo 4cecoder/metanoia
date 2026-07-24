@@ -13,10 +13,43 @@
         android:theme="@style/Theme.Metanoia.Splash">
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Custom-scheme deep link: metanoia://bible/<book>/<chapter>[/<verse>]
+                 Works immediately for any other app/browser that constructs
+                 this URI — no verification or hosting needed. See
+                 com.bytecats.metanoia.bible.DeepLink and
+                 docs/ANDROID_DEEP_LINKS.md. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="metanoia" android:host="bible" />
+            </intent-filter>
+
+            <!-- Android App Link: https://metanoia.bytecats.codes/bible/<book>/<chapter>[/<verse>]
+                 android:autoVerify="true" is NOT yet backed by a real,
+                 hosted Digital Asset Links file at that domain — until
+                 https://metanoia.bytecats.codes/.well-known/assetlinks.json
+                 exists and is reachable, Android will fail verification and
+                 fall back to an app-picker disambiguation dialog instead of
+                 opening Metanoia directly. See docs/ANDROID_DEEP_LINKS.md
+                 for exactly what hosting that file requires — a deliberate,
+                 flagged follow-up decision, not an oversight. The
+                 metanoia:// scheme above works today regardless. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="metanoia.bytecats.codes"
+                    android:pathPrefix="/bible" />
             </intent-filter>
         </activity>
     </application>

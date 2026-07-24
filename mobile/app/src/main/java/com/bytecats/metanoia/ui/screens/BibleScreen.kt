@@ -106,11 +106,42 @@ fun BibleScreen(navController: NavController, viewModel: MainViewModel) {
         }
     }
 
-    LaunchedEffect(narration.currentVerse) { 
-        if (narration.isPlaying && narration.currentVerse != -1) { 
+    LaunchedEffect(narration.currentVerse) {
+        if (narration.isPlaying && narration.currentVerse != -1) {
             val idx = currentChapterContent.indexOfFirst { it.number == narration.currentVerse }
-            if (idx != -1) listState.animateScrollToItem(idx) 
-        } 
+            if (idx != -1) listState.animateScrollToItem(idx)
+        }
+    }
+
+    // Deep link (metanoia://bible/... or an https App Link — see
+    // com.bytecats.metanoia.bible.DeepLink / docs/ANDROID_DEEP_LINKS.md)
+    // landed on a specific book/chapter/verse. Jumps straight to "read",
+    // bypassing the book/chapter pickers, the same way a search-result tap
+    // already does — except using fetchChapter (local cache, then
+    // gateway/scrape) instead of getChapter (local-only), since a shared
+    // link is likely to point at a chapter the recipient hasn't opened
+    // before and so doesn't have cached yet.
+    LaunchedEffect(viewModel.pendingDeepLink) {
+        val target = viewModel.pendingDeepLink ?: return@LaunchedEffect
+        val book = bibleManager.books.find { it.name == target.book }
+        if (book == null) {
+            viewModel.pendingDeepLink = null
+            return@LaunchedEffect
+        }
+        viewModel.stopNarration()
+        selectedBook = book
+        selectedChapter = target.chapter
+        isSearchVisible = false
+        val content = withContext(Dispatchers.IO) { bibleManager.fetchChapter(book.name, target.chapter, settings.bibleGatewayVersion) }
+        val hl = withContext(Dispatchers.IO) { bibleManager.getHighlights(book.name, target.chapter) }
+        currentChapterContent = content
+        highlights = hl
+        step = "read"
+        viewModel.pendingDeepLink = null // consume once — back-navigating here shouldn't replay the jump
+        target.verse?.let { v ->
+            val idx = content.indexOfFirst { it.number == v }
+            if (idx != -1) listState.scrollToItem(idx)
+        }
     }
 
     Scaffold(
