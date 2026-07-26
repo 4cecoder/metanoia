@@ -114,31 +114,22 @@ fun VerseItem(
         }
 
         // Main verse text — RTL + larger font for Hebrew, LTR + normal for English
-        if (hebrew) {
-            Text(
-                text = text,
-                style = TextStyle(
-                    textDirection = TextDirection.Rtl,
-                    fontSize = ancientFontSize.sp,
-                    fontWeight = if (isCurrent) FontWeight.Medium else FontWeight.Light,
-                ),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.background(
-                    verseBackground(isCurrent, highlight, MaterialTheme.colorScheme.primary),
-                    RoundedCornerShape(4.dp)
-                )
+        // Uses Unicode bidi override (\u202E..\u202C) to force RTL at the
+        // text-engine level regardless of parent layout context. Relying on
+        // textDirection/LayoutDirection alone doesn't work reliably when the
+        // text composable sits inside an LTR column in a LazyColumn — the
+        // bidi override is the only thing that guarantees correct word order
+        // everywhere.
+        val displayText = if (hebrew) "\u202E$text\u202C" else text
+        Text(
+            text = displayText,
+            fontSize = if (hebrew) ancientFontSize.sp else englishFontSize.sp,
+            fontWeight = if (isCurrent) FontWeight.Medium else FontWeight.Light,
+            modifier = Modifier.background(
+                verseBackground(isCurrent, highlight, MaterialTheme.colorScheme.primary),
+                RoundedCornerShape(4.dp)
             )
-        } else {
-            Text(
-                text = text,
-                fontSize = englishFontSize.sp,
-                fontWeight = if (isCurrent) FontWeight.Medium else FontWeight.Light,
-                modifier = Modifier.background(
-                    verseBackground(isCurrent, highlight, MaterialTheme.colorScheme.primary),
-                    RoundedCornerShape(4.dp)
-                )
-            )
-        }
+        )
 
         // Interlinear expansion
         if (isExpanded) {
