@@ -349,7 +349,8 @@ fun BibleScreen(navController: NavController, viewModel: MainViewModel) {
                             val hl = highlights[vs] ?: 0
                             val isCurrent = narration.isPlaying && narration.currentVerse == vs
                             val hasNotes = bibleManager.getNotes(selectedBook!!.name, selectedChapter, vs).isNotEmpty()
-                            val isHebrew = selectedBook?.testament == "Old"
+                            val hasHebrewChars = text.any { it in '\u0590'..'\u05FF' || it in '\uFB1D'..'\uFB4F' }
+                            val isHebrew = hasHebrewChars
                             
                             Column(modifier = Modifier.padding(vertical = 12.dp).combinedClickable(onClick = { }, onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); studyVerse = vs; showStudySheet = true })) {
                                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
