@@ -17,3 +17,11 @@ data class LibraryStats(
     val interlinearCount: Int,
     val dbSizeMb: Double
 )
+
+data class InterlinearWordWithVerse(
+    val verse: Int, val wordIndex: Int,
+    val original: String, val translation: String, val strongs: String
+)
+
+/** One row of ReadingAnalyticsDao.getHotChapters() -- a single chapter's view count. */
+data class HotChapter(val book: String, val chapter: Int, val views: Int)

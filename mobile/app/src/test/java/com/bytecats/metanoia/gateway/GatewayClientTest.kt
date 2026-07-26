@@ -1,4 +1,4 @@
-package com.bytecats.metanoia
+package com.bytecats.metanoia.gateway
 
 import com.bytecats.metanoia.gateway.GatewayClient
 import okhttp3.Call

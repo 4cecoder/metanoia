@@ -102,13 +102,7 @@ class BibleManager(private val context: Context) {
             return
         }
         fun persistVerse(vNum: Int, text: String) {
-            db.open(false).apply {
-                execSQL(
-                    "INSERT OR REPLACE INTO verses (book, chapter, verse, text, version) VALUES (?, ?, ?, ?, ?)",
-                    arrayOf(book, chapter, vNum, text, version)
-                )
-                close()
-            }
+            db.verse.insertVerses(book, chapter, listOf(Verse(vNum, text)), version)
         }
         try {
             when {
@@ -129,13 +123,9 @@ class BibleManager(private val context: Context) {
     suspend fun scrapeInterlinear(book: String, chapter: Int) {
         try {
             scraper.scrapeInterlinear(book, chapter) { verse, wordIdx, orig, trans, strongs ->
-                db.open(false).apply {
-                    execSQL(
-                        "INSERT OR REPLACE INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        arrayOf(book, chapter, verse, wordIdx, orig, trans, strongs)
-                    )
-                    close()
-                }
+                db.interlinear.insertInterlinearWords(book, chapter, listOf(
+                    InterlinearWordWithVerse(verse, wordIdx, orig, trans, strongs)
+                ))
             }
             _scrapeError.value = null
         } catch (e: Exception) {

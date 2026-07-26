@@ -16,6 +16,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.bytecats.metanoia.bible.DeepLink
 import com.bytecats.metanoia.ui.screens.*
+import com.bytecats.metanoia.ui.screens.settings.*
 import com.bytecats.metanoia.ui.theme.MetanoiaTheme
 import com.bytecats.metanoia.viewmodel.MainViewModel
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen

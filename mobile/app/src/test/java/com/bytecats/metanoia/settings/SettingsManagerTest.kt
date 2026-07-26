@@ -1,4 +1,4 @@
-package com.bytecats.metanoia
+package com.bytecats.metanoia.settings
 
 import android.content.Context
 import android.content.SharedPreferences

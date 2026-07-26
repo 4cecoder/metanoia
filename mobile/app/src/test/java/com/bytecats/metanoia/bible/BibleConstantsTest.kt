@@ -1,4 +1,4 @@
-package com.bytecats.metanoia
+package com.bytecats.metanoia.bible
 
 import com.bytecats.metanoia.models.BIBLE_ABBREVIATIONS
 import com.bytecats.metanoia.models.BOOKS

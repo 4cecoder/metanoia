@@ -1,4 +1,4 @@
-package com.bytecats.metanoia
+package com.bytecats.metanoia.update
 
 import com.bytecats.metanoia.update.NightlyUpdateInfo
 import com.bytecats.metanoia.update.UpdateChecker

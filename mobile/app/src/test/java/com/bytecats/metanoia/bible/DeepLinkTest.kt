@@ -1,4 +1,4 @@
-package com.bytecats.metanoia
+package com.bytecats.metanoia.bible
 
 import com.bytecats.metanoia.bible.DeepLink
 import org.junit.Assert.assertEquals

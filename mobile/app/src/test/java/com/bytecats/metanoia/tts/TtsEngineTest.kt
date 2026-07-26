@@ -1,4 +1,4 @@
-package com.bytecats.metanoia
+package com.bytecats.metanoia.tts
 
 import com.bytecats.metanoia.models.RemoteVoice
 import com.bytecats.metanoia.models.TtsRequest

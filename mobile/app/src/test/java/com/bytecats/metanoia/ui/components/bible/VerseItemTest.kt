@@ -1,4 +1,4 @@
-package com.bytecats.metanoia
+package com.bytecats.metanoia.ui.components.bible
 
 import com.bytecats.metanoia.ui.components.bible.hasHebrewChars
 import org.junit.Assert.assertFalse

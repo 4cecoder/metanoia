@@ -1,4 +1,4 @@
-package com.bytecats.metanoia
+package com.bytecats.metanoia.models
 
 import com.bytecats.metanoia.models.*
 import com.bytecats.metanoia.viewmodel.NarrationState

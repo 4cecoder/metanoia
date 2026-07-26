@@ -1,4 +1,4 @@
-package com.bytecats.metanoia
+package com.bytecats.metanoia.bible
 
 import android.database.sqlite.SQLiteDatabase
 import com.bytecats.metanoia.bible.BibleDatabase
