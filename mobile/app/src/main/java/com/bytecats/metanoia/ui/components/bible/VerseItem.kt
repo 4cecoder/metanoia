@@ -19,7 +19,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -112,20 +115,22 @@ fun VerseItem(
 
         // Main verse text — RTL + larger font for Hebrew, LTR + normal for English
         if (hebrew) {
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                Text(
-                    text,
+            Text(
+                text = text,
+                style = TextStyle(
+                    textDirection = TextDirection.Rtl,
                     fontSize = ancientFontSize.sp,
                     fontWeight = if (isCurrent) FontWeight.Medium else FontWeight.Light,
-                    modifier = Modifier.background(
-                        verseBackground(isCurrent, highlight, MaterialTheme.colorScheme.primary),
-                        RoundedCornerShape(4.dp)
-                    )
+                ),
+                textAlign = TextAlign.Start,
+                modifier = Modifier.background(
+                    verseBackground(isCurrent, highlight, MaterialTheme.colorScheme.primary),
+                    RoundedCornerShape(4.dp)
                 )
-            }
+            )
         } else {
             Text(
-                text,
+                text = text,
                 fontSize = englishFontSize.sp,
                 fontWeight = if (isCurrent) FontWeight.Medium else FontWeight.Light,
                 modifier = Modifier.background(
