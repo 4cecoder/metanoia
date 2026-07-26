@@ -360,7 +360,13 @@ fun BibleScreen(navController: NavController, viewModel: MainViewModel) {
                                     Spacer(modifier = Modifier.weight(1f))
                                     IconButton(onClick = { expandedVerses = if (isExpanded) expandedVerses - vs else expandedVerses + vs; if (!isExpanded && !interlinearData.containsKey(vs)) interlinearData = interlinearData + (vs to bibleManager.getInterlinear(selectedBook!!.name, selectedChapter, vs)) }, modifier = Modifier.size(24.dp)) { Icon(if (isExpanded) Icons.Default.VisibilityOff else Icons.Default.Translate, "Interlinear", modifier = Modifier.size(16.dp)) }
                                 }
-                                Text(text, fontSize = settings.englishFontSize.sp, fontWeight = if (isCurrent) FontWeight.Medium else FontWeight.Light, modifier = Modifier.background(if (isCurrent) MaterialTheme.colorScheme.primary.copy(0.15f) else if (hl != 0) Color(hl.toLong()).copy(alpha = 0.3f) else Color.Transparent, RoundedCornerShape(4.dp)))
+                                if (isHebrew) {
+                                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                                        Text(text, fontSize = settings.ancientFontSize.sp, fontWeight = if (isCurrent) FontWeight.Medium else FontWeight.Light, modifier = Modifier.background(if (isCurrent) MaterialTheme.colorScheme.primary.copy(0.15f) else if (hl != 0) Color(hl.toLong()).copy(alpha = 0.3f) else Color.Transparent, RoundedCornerShape(4.dp)))
+                                    }
+                                } else {
+                                    Text(text, fontSize = settings.englishFontSize.sp, fontWeight = if (isCurrent) FontWeight.Medium else FontWeight.Light, modifier = Modifier.background(if (isCurrent) MaterialTheme.colorScheme.primary.copy(0.15f) else if (hl != 0) Color(hl.toLong()).copy(alpha = 0.3f) else Color.Transparent, RoundedCornerShape(4.dp)))
+                                }
                                 if (isExpanded) {
                                     CompositionLocalProvider(LocalLayoutDirection provides (if (isHebrew) LayoutDirection.Rtl else LayoutDirection.Ltr)) {
                                         FlowRow(modifier = Modifier.fillMaxWidth().padding(top = 8.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(0.3f), RoundedCornerShape(12.dp)).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
