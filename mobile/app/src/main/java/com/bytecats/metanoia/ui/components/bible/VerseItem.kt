@@ -16,16 +16,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.bytecats.metanoia.models.InterlinearWord
 import com.bytecats.metanoia.models.Verse
 
@@ -114,22 +113,42 @@ fun VerseItem(
         }
 
         // Main verse text — RTL + larger font for Hebrew, LTR + normal for English
-        // Uses Unicode bidi override (\u202E..\u202C) to force RTL at the
-        // text-engine level regardless of parent layout context. Relying on
-        // textDirection/LayoutDirection alone doesn't work reliably when the
-        // text composable sits inside an LTR column in a LazyColumn — the
-        // bidi override is the only thing that guarantees correct word order
-        // everywhere.
-        val displayText = if (hebrew) "\u202E$text\u202C" else text
-        Text(
-            text = displayText,
-            fontSize = if (hebrew) ancientFontSize.sp else englishFontSize.sp,
-            fontWeight = if (isCurrent) FontWeight.Medium else FontWeight.Light,
-            modifier = Modifier.background(
-                verseBackground(isCurrent, highlight, MaterialTheme.colorScheme.primary),
-                RoundedCornerShape(4.dp)
+        // Hebrew uses a native Android TextView with TEXT_DIRECTION_RTL because
+        // Compose's Text composable doesn't reliably honor bidi overrides or
+        // textDirection when nested inside LTR columns in LazyColumn. The
+        // native TextView handles sentence-level RTL correctly (first word on
+        // the right, sentence flows right-to-left).
+        if (hebrew) {
+            val bgColor = verseBackground(isCurrent, highlight, MaterialTheme.colorScheme.primary)
+            val textColorArgb = MaterialTheme.colorScheme.onSurface.toArgb()
+            AndroidView(
+                factory = { ctx ->
+                    android.widget.TextView(ctx).apply {
+                        textSize = ancientFontSize.toFloat()
+                        textDirection = android.view.View.TEXT_DIRECTION_RTL
+                        setTextColor(textColorArgb)
+                        typeface = android.graphics.Typeface.SANS_SERIF
+                    }
+                },
+                update = { tv ->
+                    tv.text = text
+                    tv.setTextColor(textColorArgb)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(bgColor, RoundedCornerShape(4.dp))
             )
-        )
+        } else {
+            Text(
+                text = text,
+                fontSize = englishFontSize.sp,
+                fontWeight = if (isCurrent) FontWeight.Medium else FontWeight.Light,
+                modifier = Modifier.background(
+                    verseBackground(isCurrent, highlight, MaterialTheme.colorScheme.primary),
+                    RoundedCornerShape(4.dp)
+                )
+            )
+        }
 
         // Interlinear expansion
         if (isExpanded) {
