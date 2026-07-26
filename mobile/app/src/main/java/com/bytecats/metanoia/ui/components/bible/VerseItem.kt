@@ -121,17 +121,22 @@ fun VerseItem(
         if (hebrew) {
             val bgColor = verseBackground(isCurrent, highlight, MaterialTheme.colorScheme.primary)
             val textColorArgb = MaterialTheme.colorScheme.onSurface.toArgb()
+            // Strip any LTR override markers that upstream text may have picked up.
+            val cleanText = text.replace("\u202A", "").replace("\u202D", "").replace("\u202C", "")
             AndroidView(
                 factory = { ctx ->
                     android.widget.TextView(ctx).apply {
                         textSize = ancientFontSize.toFloat()
+                        layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
                         textDirection = android.view.View.TEXT_DIRECTION_RTL
+                        textAlignment = android.view.View.TEXT_ALIGNMENT_VIEW_END
+                        gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
                         setTextColor(textColorArgb)
                         typeface = android.graphics.Typeface.SANS_SERIF
                     }
                 },
                 update = { tv ->
-                    tv.text = text
+                    tv.text = cleanText
                     tv.setTextColor(textColorArgb)
                 },
                 modifier = Modifier

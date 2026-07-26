@@ -48,13 +48,16 @@ class BibleScraper(
         book: String, chapter: Int,
         onWord: (verse: Int, wordIndex: Int, original: String, translation: String, strongs: String) -> Unit
     ) = withContext(Dispatchers.IO) {
-        val bookUrl = book.lowercase().replace(" ", "")
+        val bookUrl = interlinearSlug(book)
         val url = "https://biblehub.com/interlinear/$bookUrl/$chapter.htm"
         // Derived from the shared BOOKS testament data (models/BibleConstants.kt)
         // rather than a locally-hardcoded OT/NT list, so it cannot drift.
         val prefix = strongsLanguagePrefix(book)
         val request = Request.Builder().url(url).header("User-Agent", userAgent).build()
         val response = client.newCall(request).execute()
+        if (!response.isSuccessful) {
+            throw IOException("scrapeInterlinear: HTTP ${response.code} for $book $chapter ($url)")
+        }
         val body = response.body?.string()
             ?: throw IOException("scrapeInterlinear: empty response body for $book $chapter")
         val doc = Jsoup.parse(body)
@@ -80,6 +83,22 @@ class BibleScraper(
                     onWord(currentVerse, wordIdx, orig, trans, strongs)
                     wordIdx++
                 }
+            }
+        }
+    }
+
+    /**
+     * BibleHub interlinear URLs use a specific slug format:
+     * - lowercase, no spaces
+     * - numbered books get an underscore after the digit: 1_corinthians, 2_samuel
+     * - "Song of Solomon" is mapped to "songs"
+     */
+    private fun interlinearSlug(book: String): String {
+        val normalized = book.lowercase().replace(" ", "")
+        return when (normalized) {
+            "songofsolomon", "songofsongs", "songofsong" -> "songs"
+            else -> normalized.replace(Regex("^(\\d+)([a-z]+)$")) { m ->
+                "${m.groupValues[1]}_${m.groupValues[2]}"
             }
         }
     }
