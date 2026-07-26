@@ -19,8 +19,10 @@ import com.bytecats.metanoia.tts.TTSManager
 import com.bytecats.metanoia.update.NightlyUpdateInfo
 import com.bytecats.metanoia.update.UpdateChecker
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.bytecats.metanoia.update.ApkInstaller
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -94,8 +96,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
                 // Initial load
                 refreshServerVoices()
 
-                // Opportunistic, throttled nightly-update check (opt-in).
-                checkForNightlyUpdateIfDue()
+                // Aggressive auto-update when experimental updates enabled:
+                // checks immediately on startup, then re-checks hourly
+                // while the app is running, and auto-downloads + installs
+                // any new build it finds.
+                if (settingsManager.nightlyUpdatesEnabled) {
+                    startAutoUpdateLoop()
+                }
             } catch (e: Exception) {
                 Log.e("VM", "Hardware fail: ${e.message}")
             }
@@ -136,25 +143,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     }
 
     // -----------------------------------------------------------------------
-    // Updates (opt-in nightly/experimental build checker)
+    // Auto-update (aggressive — immediate on startup + hourly loop)
     // -----------------------------------------------------------------------
 
-    fun checkForNightlyUpdateIfDue() {
-        if (!settingsManager.nightlyUpdatesEnabled) return
-        val elapsed = System.currentTimeMillis() - settingsManager.lastUpdateCheckMillis
-        if (elapsed < 24 * 60 * 60 * 1000L) return
-
+    /**
+     * Launches a background coroutine that checks for updates immediately,
+     * then re-checks every hour while the app is alive. When `nightlyUpdatesEnabled`
+     * is on, this runs continuously — no 24h throttle, no manual button needed.
+     */
+    private fun startAutoUpdateLoop() {
         viewModelScope.launch {
+            while (true) {
+                performAutoUpdate()
+                delay(60 * 60 * 1000L) // every hour
+            }
+        }
+    }
+
+    /**
+     * Single auto-update tick: fetches the latest release, auto-downloads
+     * and installs if a newer build is found. Silently retries on failure.
+     */
+    private suspend fun performAutoUpdate() {
+        try {
             val result = withContext(Dispatchers.IO) {
                 UpdateChecker.fetchLatest()
             }
             settingsManager.lastUpdateCheckMillis = System.currentTimeMillis()
 
-            availableUpdate.value = if (
-                result != null &&
+            val isAvail = result != null &&
                 result.commitSha != settingsManager.dismissedUpdateSha &&
+                result.downloadUrl != null &&
                 UpdateChecker.isUpdateAvailable(BuildConfig.GIT_COMMIT_SHA, result)
-            ) result else null
+
+            if (isAvail) {
+                availableUpdate.value = result
+                Log.i("VM", "Auto-update: ${result!!.commitSha?.take(7)} available, downloading...")
+
+                val apk = withContext(Dispatchers.IO) {
+                    ApkInstaller.download(getApplication(), result.downloadUrl!!)
+                }
+                if (apk != null) {
+                    Log.i("VM", "Auto-update: downloaded, launching installer...")
+                    ApkInstaller.install(getApplication(), apk)
+                    settingsManager.dismissedUpdateSha = result.commitSha ?: ""
+                    availableUpdate.value = null
+                } else {
+                    Log.w("VM", "Auto-update: download failed, will retry next cycle.")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("VM", "Auto-update tick failed: ${e.message}")
         }
     }
 
