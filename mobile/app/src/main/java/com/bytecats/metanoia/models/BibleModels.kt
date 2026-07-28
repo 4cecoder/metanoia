@@ -1,6 +1,5 @@
 package com.bytecats.metanoia.models
 
-data class BibleBook(val name: String, val chapters: Int, val testament: String, val isApocrypha: Boolean = false)
 data class InterlinearWord(val original: String, val strongs: String, val translation: String)
 data class Favorite(val strongs: String, val lemma: String, val definition: String)
 data class Highlight(val book: String, val chapter: Int, val verse: Int, val color: Int)
