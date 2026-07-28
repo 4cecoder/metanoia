@@ -135,12 +135,6 @@ class BibleManager(private val context: Context) {
                     db.execSQL("INSERT OR REPLACE INTO verses (book, chapter, verse, text, version) VALUES (?, ?, ?, ?, ?)",
                         arrayOf(book, chapter, verseNum, text, "KJV-Apocrypha"))
                 }
-            } else if (book == WikisourceEnochScraper.BOOK_NAME) {
-                val scraper = WikisourceEnochScraper(client = client)
-                scraper.scrapeChapter(chapter) { verseNum, text ->
-                    db.execSQL("INSERT OR REPLACE INTO verses (book, chapter, verse, text, version) VALUES (?, ?, ?, ?, ?)",
-                        arrayOf(book, chapter, verseNum, text, "R.H.Charles"))
-                }
             } else {
                 val scraper = BibleScraper(client = client)
                 scraper.scrapeChapter(book, chapter, version) { verseNum, text ->
@@ -153,7 +147,7 @@ class BibleManager(private val context: Context) {
     }
 
     suspend fun fetchInterlinear(book: String, chapter: Int) = withContext(Dispatchers.IO) {
-        if (book in DeuterocanonRouting.NO_SOURCE_BOOKS || book in WikisourceApocryphaScraper.SUPPORTED_BOOKS || book == WikisourceEnochScraper.BOOK_NAME) {
+        if (book in DeuterocanonRouting.NO_SOURCE_BOOKS || book in WikisourceApocryphaScraper.SUPPORTED_BOOKS) {
             return@withContext
         }
         val db = getDb(false); db.beginTransaction()

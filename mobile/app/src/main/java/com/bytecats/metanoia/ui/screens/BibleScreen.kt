@@ -103,9 +103,14 @@ fun BibleScreen(viewModel: MainViewModel) {
                             IconButton({ scope.launch {
                                 try {
                                     bibleManager.scrapeChapter(selectedBook!!.name, selectedChapter, settings.bibleGatewayVersion)
-                                    bibleManager.scrapeInterlinear(selectedBook!!.name, selectedChapter)
                                     currentChapterContent = bibleManager.getChapter(selectedBook!!.name, selectedChapter)
                                     highlights = bibleManager.getHighlights(selectedBook!!.name, selectedChapter)
+                                    // Interlinear is optional - skip if unavailable (e.g., apocrypha)
+                                    try {
+                                        bibleManager.scrapeInterlinear(selectedBook!!.name, selectedChapter)
+                                    } catch (e: Exception) {
+                                        android.util.Log.w("BibleScreen", "Interlinear not available for ${selectedBook!!.name} $selectedChapter: ${e.message}")
+                                    }
                                 } catch (e: Exception) {
                                     android.util.Log.e("BibleScreen", "Failed to fetch chapter: ${e.message}", e)
                                 }
