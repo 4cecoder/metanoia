@@ -10,14 +10,17 @@ import org.jsoup.Jsoup
 import java.io.File
 import com.bytecats.metanoia.models.*
 import com.bytecats.metanoia.models.BOOKS
+import com.bytecats.metanoia.gateway.GatewayClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class BibleManager(private val context: Context) {
     private val dbFile = File(context.filesDir, "bible.db")
     private val client = OkHttpClient()
+    private val database = BibleDatabase(context)
 
     val books = BOOKS
+    val gateway = GatewayClient(baseUrlProvider = { "http://192.168.122.2:8000" })
 
     private fun getDb(readOnly: Boolean = true): SQLiteDatabase {
         return SQLiteDatabase.openDatabase(dbFile.absolutePath, null, if (readOnly) SQLiteDatabase.OPEN_READONLY else SQLiteDatabase.OPEN_READWRITE)
@@ -217,5 +220,17 @@ class BibleManager(private val context: Context) {
         } catch (e: Exception) { e.printStackTrace() }
     }
 
+    // --- DELEGATED METHODS TO BibleDatabase (for ReadingAnalyticsScreen) ---
+    fun getMostReadBooks(limit: Int = 5): List<Pair<String, Int>> = database.getMostReadBooks(limit)
+    fun getHotChapters(limit: Int = 10): List<HotChapter> = database.getHotChapters(limit)
+    fun getReadingEventCounts(sinceMillis: Long): Int = database.getReadingEventCounts(sinceMillis)
+    fun getFirstEverReadTimestamp(): Long? = database.getFirstEverReadTimestamp()
+    fun getReadCompletion(): Map<String, Float> = database.getReadCompletion()
+    fun clearReadingHistory() = database.clearReadingHistory()
+    fun getReadEpochDaysDescending(): List<Long> = database.getReadEpochDaysDescending()
+    fun getDailyReadCounts(days: Int): List<Pair<Long, Int>> = database.getDailyReadCounts(days)
+    fun getDayOfWeekCounts(): IntArray = database.getDayOfWeekCounts()
+    fun getHourOfDayCounts(): IntArray = database.getHourOfDayCounts()
+    fun getTestamentReadCounts(): Map<String, Int> = database.getTestamentReadCounts()
 
 }

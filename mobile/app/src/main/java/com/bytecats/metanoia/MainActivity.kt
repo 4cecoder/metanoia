@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
             MetanoiaTheme {
                 NavHost(navController = navController, startDestination = "menu") {
                     composable("menu") { MainMenu(navController, viewModel) }
-                    composable("bible") { BibleScreen(navController, viewModel) }
+                    composable("bible") { BibleScreen(viewModel) }
                     composable("collection") { CollectionScreen(navController, viewModel) }
                     composable("insights") {
                         InsightsRepositoryScreen(navController, viewModel) { viewModel.speak(it) }
