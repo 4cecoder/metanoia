@@ -17,6 +17,8 @@ class BibleManager(private val context: Context) {
     private val dbFile = File(context.filesDir, "bible.db")
     private val client = OkHttpClient()
 
+    val books = BOOKS
+
     private fun getDb(readOnly: Boolean = true): SQLiteDatabase {
         return SQLiteDatabase.openDatabase(dbFile.absolutePath, null, if (readOnly) SQLiteDatabase.OPEN_READONLY else SQLiteDatabase.OPEN_READWRITE)
     }

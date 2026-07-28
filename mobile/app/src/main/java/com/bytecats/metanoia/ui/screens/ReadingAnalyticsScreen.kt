@@ -233,7 +233,9 @@ fun ReadingAnalyticsScreen(navController: NavController, viewModel: MainViewMode
                     )
                 } else {
                     Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                        mostRead.forEachIndexed { idx, (book, count) ->
+                        mostRead.forEachIndexed { idx, entry ->
+                            val book = entry.first
+                            val count = entry.second
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 10.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -250,7 +252,7 @@ fun ReadingAnalyticsScreen(navController: NavController, viewModel: MainViewMode
                                 }
                                 Text("$count view${if (count == 1) "" else "s"}", color = MaterialTheme.colorScheme.primary)
                             }
-                            if (idx < mostRead.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                            if (idx < mostRead.size - 1) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         }
                     }
                 }
@@ -266,11 +268,12 @@ fun ReadingAnalyticsScreen(navController: NavController, viewModel: MainViewMode
                 } else {
                     Column(modifier = Modifier.padding(vertical = 8.dp)) {
                         hotChapters.forEachIndexed { idx, hot ->
+                            val verseRef = VerseReference(hot.book, hot.chapter, null)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        viewModel.pendingDeepLink = VerseReference(hot.book, hot.chapter, null)
+                                        viewModel.pendingDeepLink = verseRef
                                         navController.navigate("bible")
                                     }
                                     .padding(horizontal = 24.dp, vertical = 10.dp),

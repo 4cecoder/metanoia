@@ -38,9 +38,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
 
     val settingsManager = SettingsManager(context)
     val bibleManager = BibleManager(context)
+    val gateway: GatewayClient = bibleManager.gateway
     var ttsManager: TTSManager? = null
     var sttManager: STTManager? = null
-    var gateway: GatewayClient? = null
     private var systemTts: TextToSpeech? = null
 
     val voiceLogs = mutableStateListOf<String>()
@@ -70,8 +70,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     var pendingDeepLink by mutableStateOf<VerseReference?>(null)
 
     init {
-        gateway = bibleManager.gateway
-
         systemTts = TextToSpeech(context, this)
         systemTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(id: String?) {}
