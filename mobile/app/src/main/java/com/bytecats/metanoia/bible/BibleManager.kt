@@ -145,8 +145,8 @@ class BibleManager(private val context: Context) {
                         arrayOf(book, chapter, verseNum, text, "KJV-Apocrypha"))
                 }
             } else {
-                val scraper = BibleScraper(client = client)
-                scraper.scrapeChapter(book, chapter, version) { verseNum, text ->
+                // Use ScraperManager for rate limiting and fallback
+                scraperManager.fetchChapter(book, chapter, version) { verseNum, text ->
                     db.execSQL("INSERT OR REPLACE INTO verses (book, chapter, verse, text, version) VALUES (?, ?, ?, ?, ?)",
                         arrayOf(book, chapter, verseNum, text, version))
                 }
