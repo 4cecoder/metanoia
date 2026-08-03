@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.bytecats.metanoia.models.BibleBook
 import com.bytecats.metanoia.models.InterlinearWord
 import com.bytecats.metanoia.models.SearchResult
+import com.bytecats.metanoia.models.Verse
 import com.bytecats.metanoia.ui.components.HighlightedText
 import com.bytecats.metanoia.viewmodel.MainViewModel
 import kotlinx.coroutines.Dispatchers
@@ -99,7 +100,7 @@ fun BibleScreen(viewModel: MainViewModel) {
                         IconButton({ isSearchVisible = !isSearchVisible }) { Icon(Icons.Default.Search, null) }
                         if (step == "read") {
                             if (narration.isPlaying) IconButton({ viewModel.stopNarration() }) { Icon(Icons.Default.StopCircle, null, tint = Color.Red) }
-                            else IconButton({ viewModel.startChapterNarration(currentChapterContent) }) { Icon(Icons.Default.PlayCircle, null) }
+                            else IconButton({ viewModel.startChapterNarration(currentChapterContent.map { (num, txt) -> Verse(num, txt) }) }) { Icon(Icons.Default.PlayCircle, null) }
                             IconButton({ scope.launch {
                                 try {
                                     bibleManager.scrapeChapter(selectedBook!!.name, selectedChapter, settings.bibleGatewayVersion)
