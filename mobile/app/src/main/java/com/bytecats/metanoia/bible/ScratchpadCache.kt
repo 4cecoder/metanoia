@@ -23,7 +23,7 @@ class ScratchpadCache(private val context: Context) {
      * Get cached HTML for a scraper request.
      */
     fun getCacheKey(scraper: String, book: String, chapter: Int, version: String): String {
-        return "$scraper_${book}_${chapter}_$version"
+        return "${scraper}_${book}_${chapter}_${version}"
     }
 
     /**

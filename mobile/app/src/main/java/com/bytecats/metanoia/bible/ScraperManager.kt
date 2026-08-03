@@ -5,8 +5,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
+import java.io.IOException
 
 /**
  * Rate-limited scraper manager with intelligent source selection.
@@ -121,8 +121,11 @@ class ScraperManager(
             }
 
             var lastError: Exception? = null
+            var success = false
 
             for (scraper in sortedScrapers) {
+                if (success) break
+
                 try {
                     // Rate limit this domain
                     rateLimiter.waitForSlot(scraper.getBaseUrl())
@@ -130,7 +133,7 @@ class ScraperManager(
                     // Try to fetch with exponential backoff
                     tryWithBackoff(scraper.getBaseUrl()) {
                         scraper.scrapeChapter(book, chapter, version, onVerse)
-                        return@deduplicate // Success!
+                        success = true
                     }
                 } catch (e: Exception) {
                     lastError = e
@@ -139,12 +142,14 @@ class ScraperManager(
                 }
             }
 
-            // All scrapers failed
-            throw IOException(
-                "All scrapers failed for $book $chapter ($version). " +
-                "Scrapers tried: ${sortedScrapers.joinToString { it.getBaseUrl() }}",
-                lastError
-            )
+            if (!success) {
+                // All scrapers failed
+                throw IOException(
+                    "All scrapers failed for $book $chapter ($version). " +
+                    "Scrapers tried: ${sortedScrapers.joinToString { it.getBaseUrl() }}",
+                    lastError
+                )
+            }
         }()
     }
 

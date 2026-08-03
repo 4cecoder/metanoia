@@ -44,7 +44,10 @@ class BibleGatewayScraper(
 
             if (verseNum != null) {
                 span.select("sup, span.chapternum, span.versenum").remove()
-                onVerse(verseNum, span.text().trim())
+                val text = span.text().trim()
+                if (text.isNotEmpty()) {
+                    onVerse(verseNum, text)
+                }
             }
         }
     }

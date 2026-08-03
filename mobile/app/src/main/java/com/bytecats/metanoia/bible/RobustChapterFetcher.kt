@@ -2,10 +2,11 @@ package com.bytecats.metanoia.bible
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import java.io.IOException
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * Robust chapter fetching with multiple source fallback and rate limiting.
