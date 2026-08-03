@@ -36,7 +36,10 @@ class BibleScraper(
         val doc = Jsoup.parse(body)
         doc.select("h1, h2, h3, h4, h5, h6").remove()
         doc.select("div.passage-text span.text").forEach { span ->
-            val verseNum = Regex("-(\\d+)$").find(span.className())?.groupValues?.get(1)?.toInt()
+            // Get classes as a single string (Jsoup returns space-separated)
+            val className = span.className()
+            // Match any class that ends with dash-digit pattern
+            val verseNum = Regex("\\b(\\d+)\\b").find(className)?.groupValues?.get(1)?.toInt()
             if (verseNum != null) {
                 span.select("sup, span.chapternum, span.versenum").remove()
                 onVerse(verseNum, span.text().trim())
