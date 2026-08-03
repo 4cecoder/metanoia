@@ -122,12 +122,62 @@ data class BibleBook(
      * Protestant order differs from Catholic/Orthodox order for
      * deuterocanonical books (which are interleaved in Catholic/Orthodox
      * but grouped separately in Protestant Bible apps).
+     *
+     * Uses explicit ordering maps for deterministic sorting instead of hash codes.
      */
     fun canonicalOrder(): Int {
-        // Base order by section, then by name within section
+        // Base order by section
         val sectionOrder = section.ordinal * 1000
-        val nameOrder = name.hashCode().mod(1000)
-        return sectionOrder + nameOrder
+
+        // Order within each section (explicit canonical order)
+        val orderWithinSection = BOOK_ORDER_WITHIN_SECTION[section]?.indexOf(name) ?: name.hashCode().mod(1000)
+
+        return sectionOrder + orderWithinSection
+    }
+
+    companion object {
+        /**
+         * Explicit canonical ordering within each section.
+         * This ensures deterministic sorting regardless of hash codes.
+         */
+        private val BOOK_ORDER_WITHIN_SECTION = mapOf(
+            BookSection.Pentateuch to listOf(
+                "Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy"
+            ),
+            BookSection.Historical to listOf(
+                "Joshua", "Judges", "Ruth", "1Samuel", "2Samuel", "1Kings", "2Kings",
+                "1Chronicles", "2Chronicles", "Ezra", "Nehemiah", "Esther"
+            ),
+            BookSection.Deuterocanonical to listOf(
+                "Tobit", "Judith"
+            ),
+            BookSection.Wisdom to listOf(
+                "Job", "Psalms", "Proverbs", "Ecclesiastes", "SongofSolomon", "Wisdom", "Sirach"
+            ),
+            BookSection.MajorProphets to listOf(
+                "Isaiah", "Jeremiah", "Lamentations", "Ezekiel", "Daniel"
+            ),
+            BookSection.MinorProphets to listOf(
+                "Hosea", "Joel", "Amos", "Obadiah", "Jonah", "Micah", "Nahum", "Habakkuk",
+                "Zephaniah", "Haggai", "Zechariah", "Malachi"
+            ),
+            BookSection.EthiopianCanon to listOf(
+                "Enoch", "Jubilees", "1Meqabyan", "2Meqabyan", "3Meqabyan", "Tegsas",
+                "SirateTsion", "Tizaz", "Gitsiw", "Abtilis", "1Dominos", "2Dominos", "Qalementos", "Didasqalia"
+            ),
+            BookSection.Gospels to listOf(
+                "Matthew", "Mark", "Luke", "John"
+            ),
+            BookSection.Acts to listOf("Acts"),
+            BookSection.PaulineEpistles to listOf(
+                "Romans", "1Corinthians", "2Corinthians", "Galatians", "Ephesians", "Philippians",
+                "Colossians", "1Thessalonians", "2Thessalonians", "1Timothy", "2Timothy", "Titus", "Philemon"
+            ),
+            BookSection.GeneralEpistles to listOf(
+                "Hebrews", "James", "1Peter", "2Peter", "1John", "2John", "3John", "Jude"
+            ),
+            BookSection.Apocalyptic to listOf("Revelation")
+        )
     }
 }
 

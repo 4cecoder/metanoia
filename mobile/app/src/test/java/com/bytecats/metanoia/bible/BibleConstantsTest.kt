@@ -23,23 +23,43 @@ class BibleConstantsTest {
     // deuterocanonical/Ethiopian-canon OT books silently falling through to
     // the wrong "G" prefix). strongsLanguagePrefix reads BOOKS directly, so
     // there is only one source of truth and it cannot drift like that again.
+    //
+    // NEW: Uses textTradition instead of testament. Masoretic (Hebrew) books use "H".
+    // Septuagint (Greek) deuterocanonical books, New Testament (Greek), and
+    // Ethiopian-canon-only books (Ge'ez) all use "G".
 
     @Test
-    fun strongsLanguagePrefixIsHebrewForEveryOldTestamentBook() {
-        val oldTestamentBooks = BOOKS.filter { it.testament == "Old" }
-        // Sanity check the fixture itself actually includes the tricky cases
-        // this test exists to guard, so a future BOOKS edit can't silently
-        // drop them without failing this test.
-        val namesCovered = oldTestamentBooks.map { it.name }.toSet()
+    fun strongsLanguagePrefixIsHebrewForMasoreticBooks() {
+        val masoreticBooks = BOOKS.filter { it.textTradition == com.bytecats.metanoia.models.TextTradition.Masoretic }
+        // Sanity check the fixture actually includes the tricky cases
+        val namesCovered = masoreticBooks.map { it.name }.toSet()
         listOf(
-            "Genesis", "SongofSolomon", "Tobit", "Judith", "Sirach",
-            "Enoch", "Jubilees", "1Meqabyan", "2Meqabyan", "3Meqabyan", "Wisdom"
+            "Genesis", "Exodus", "Psalms", "Proverbs", "Isaiah", "Job", "SongofSolomon"
         ).forEach { assertTrue("Expected BOOKS to still contain '$it'", namesCovered.contains(it)) }
 
-        oldTestamentBooks.forEach { book ->
+        masoreticBooks.forEach { book ->
             assertEquals(
-                "Expected Hebrew (\"H\") prefix for Old Testament book '${book.name}'",
+                "Expected Hebrew (\"H\") prefix for Masoretic book '${book.name}'",
                 "H", strongsLanguagePrefix(book.name)
+            )
+        }
+    }
+
+    @Test
+    fun strongsLanguagePrefixIsGreekForSeptuagintDeuterocanonical() {
+        // Deuterocanonical books are in the Old Testament (testament == "Old") but
+        // are part of the Greek Septuagint tradition, so they should use "G"
+        val septuagintBooks = BOOKS.filter { it.textTradition == com.bytecats.metanoia.models.TextTradition.Septuagint }
+        // Sanity check we have deuterocanonical books
+        val namesCovered = septuagintBooks.map { it.name }.toSet()
+        listOf("Wisdom", "Sirach", "Tobit", "Judith").forEach {
+            assertTrue("Expected BOOKS to still contain deuterocanonical '$it'", namesCovered.contains(it))
+        }
+
+        septuagintBooks.forEach { book ->
+            assertEquals(
+                "Expected Greek (\"G\") prefix for Septuagint book '${book.name}'",
+                "G", strongsLanguagePrefix(book.name)
             )
         }
     }

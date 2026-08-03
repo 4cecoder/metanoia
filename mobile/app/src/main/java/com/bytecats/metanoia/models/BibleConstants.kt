@@ -1,9 +1,452 @@
 package com.bytecats.metanoia.models
 
 val BOOKS = listOf(
-    BibleBook("Genesis", 50, "Old"), BibleBook("Exodus", 40, "Old"), BibleBook("Leviticus", 27, "Old"), BibleBook("Numbers", 36, "Old"), BibleBook("Deuteronomy", 34, "Old"), BibleBook("Joshua", 24, "Old"), BibleBook("Judges", 21, "Old"), BibleBook("Ruth", 4, "Old"), BibleBook("1Samuel", 31, "Old"), BibleBook("2Samuel", 24, "Old"), BibleBook("1Kings", 22, "Old"), BibleBook("2Kings", 25, "Old"), BibleBook("1Chronicles", 29, "Old"), BibleBook("2Chronicles", 36, "Old"), BibleBook("Ezra", 10, "Old"), BibleBook("Nehemiah", 13, "Old"), BibleBook("Tobit", 14, "Old", isApocrypha = true), BibleBook("Judith", 16, "Old", isApocrypha = true), BibleBook("Esther", 10, "Old"), BibleBook("1Meqabyan", 36, "Old"), BibleBook("2Meqabyan", 21, "Old"), BibleBook("3Meqabyan", 15, "Old"), BibleBook("Job", 42, "Old"), BibleBook("Psalms", 150, "Old"), BibleBook("Proverbs", 31, "Old"), BibleBook("Tegsas", 31, "Old"), BibleBook("Wisdom", 19, "Old", isApocrypha = true), BibleBook("Ecclesiastes", 12, "Old"), BibleBook("SongofSolomon", 8, "Old"), BibleBook("Sirach", 51, "Old", isApocrypha = true), BibleBook("Isaiah", 66, "Old"), BibleBook("Jeremiah", 52, "Old"), BibleBook("Lamentations", 5, "Old"), BibleBook("Ezekiel", 48, "Old"), BibleBook("Daniel", 12, "Old"), BibleBook("Hosea", 14, "Old"), BibleBook("Amos", 9, "Old"), BibleBook("Micah", 7, "Old"), BibleBook("Joel", 3, "Old"), BibleBook("Obadiah", 1, "Old"), BibleBook("Jonah", 4, "Old"), BibleBook("Nahum", 3, "Old"), BibleBook("Habakkuk", 3, "Old"), BibleBook("Zephaniah", 3, "Old"), BibleBook("Haggai", 2, "Old"), BibleBook("Zechariah", 14, "Old"), BibleBook("Malachi", 4, "Old"), BibleBook("Enoch", 108, "Old"), BibleBook("Jubilees", 50, "Old"),
-    BibleBook("Matthew", 28, "New"), BibleBook("Mark", 16, "New"), BibleBook("Luke", 24, "New"), BibleBook("John", 21, "New"), BibleBook("Acts", 28, "New"), BibleBook("Romans", 16, "New"), BibleBook("1Corinthians", 16, "New"), BibleBook("2Corinthians", 13, "New"), BibleBook("Galatians", 6, "New"), BibleBook("Ephesians", 6, "New"), BibleBook("Philippians", 4, "New"), BibleBook("Colossians", 4, "New"), BibleBook("1Thessalonians", 5, "New"), BibleBook("2Thessalonians", 3, "New"), BibleBook("1Timothy", 6, "New"), BibleBook("2Timothy", 4, "New"), BibleBook("Titus", 3, "New"), BibleBook("Philemon", 1, "New"), BibleBook("Hebrews", 13, "New"), BibleBook("1Peter", 5, "New"), BibleBook("2Peter", 3, "New"), BibleBook("1John", 5, "New"), BibleBook("2John", 1, "New"), BibleBook("3John", 1, "New"), BibleBook("James", 5, "New"), BibleBook("Jude", 1, "New"), BibleBook("Revelation", 22, "New"),
-    BibleBook("SirateTsion", 1, "Eth"), BibleBook("Tizaz", 1, "Eth"), BibleBook("Gitsiw", 1, "Eth"), BibleBook("Abtilis", 1, "Eth"), BibleBook("1Dominos", 1, "Eth"), BibleBook("2Dominos", 1, "Eth"), BibleBook("Qalementos", 1, "Eth"), BibleBook("Didasqalia", 1, "Eth")
+    // ===== PENTATEUCH (Law) - Masoretic, Universal =====
+    BibleBook("Genesis", 50, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Pentateuch
+    ),
+    BibleBook("Exodus", 40, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Pentateuch
+    ),
+    BibleBook("Leviticus", 27, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Pentateuch
+    ),
+    BibleBook("Numbers", 36, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Pentateuch
+    ),
+    BibleBook("Deuteronomy", 34, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Pentateuch
+    ),
+
+    // ===== HISTORICAL BOOKS - Masoretic/Septuagint, Universal =====
+    BibleBook("Joshua", 24, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Historical
+    ),
+    BibleBook("Judges", 21, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Historical
+    ),
+    BibleBook("Ruth", 4, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Historical
+    ),
+    BibleBook("1Samuel", 31, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Historical
+    ),
+    BibleBook("2Samuel", 24, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Historical
+    ),
+    BibleBook("1Kings", 22, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Historical
+    ),
+    BibleBook("2Kings", 25, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Historical
+    ),
+    BibleBook("1Chronicles", 29, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Historical
+    ),
+    BibleBook("2Chronicles", 36, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Historical
+    ),
+    BibleBook("Ezra", 10, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Historical
+    ),
+    BibleBook("Nehemiah", 13, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Historical
+    ),
+    BibleBook("Esther", 10, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Historical
+    ),
+
+    // ===== DEUTEROCANONAL BOOKS - Septuagint, Catholic & Orthodox only =====
+    BibleBook("Tobit", 14, "Old",
+        canons = setOf(Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Septuagint,
+        section = BookSection.Deuterocanonical,
+        isApocrypha = true
+    ),
+    BibleBook("Judith", 16, "Old",
+        canons = setOf(Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Septuagint,
+        section = BookSection.Deuterocanonical,
+        isApocrypha = true
+    ),
+
+    // ===== WISDOM LITERATURE - Masoretic, Universal =====
+    BibleBook("Job", 42, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Wisdom
+    ),
+    BibleBook("Psalms", 150, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Wisdom
+    ),
+    BibleBook("Proverbs", 31, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Wisdom
+    ),
+    BibleBook("Ecclesiastes", 12, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Wisdom
+    ),
+    BibleBook("SongofSolomon", 8, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.Wisdom
+    ),
+    // Deuterocanonical wisdom books - classified as Wisdom content-wise
+    BibleBook("Wisdom", 19, "Old",
+        canons = setOf(Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Septuagint,
+        section = BookSection.Wisdom,
+        isApocrypha = true
+    ),
+    BibleBook("Sirach", 51, "Old",
+        canons = setOf(Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Septuagint,
+        section = BookSection.Wisdom,
+        isApocrypha = true
+    ),
+
+    // ===== MAJOR PROPHETS - Masoretic, Universal =====
+    BibleBook("Isaiah", 66, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MajorProphets
+    ),
+    BibleBook("Jeremiah", 52, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MajorProphets
+    ),
+    BibleBook("Lamentations", 5, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MajorProphets
+    ),
+    BibleBook("Ezekiel", 48, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MajorProphets
+    ),
+    BibleBook("Daniel", 12, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MajorProphets
+    ),
+
+    // ===== MINOR PROPHETS - Masoretic, Universal =====
+    BibleBook("Hosea", 14, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MinorProphets
+    ),
+    BibleBook("Joel", 3, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MinorProphets
+    ),
+    BibleBook("Amos", 9, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MinorProphets
+    ),
+    BibleBook("Obadiah", 1, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MinorProphets
+    ),
+    BibleBook("Jonah", 4, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MinorProphets
+    ),
+    BibleBook("Micah", 7, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MinorProphets
+    ),
+    BibleBook("Nahum", 3, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MinorProphets
+    ),
+    BibleBook("Habakkuk", 3, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MinorProphets
+    ),
+    BibleBook("Zephaniah", 3, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MinorProphets
+    ),
+    BibleBook("Haggai", 2, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MinorProphets
+    ),
+    BibleBook("Zechariah", 14, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MinorProphets
+    ),
+    BibleBook("Malachi", 4, "Old",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.Masoretic,
+        section = BookSection.MinorProphets
+    ),
+
+    // ===== ETHIOPIAN-CANON ONLY BOOKS - Ethiopic tradition =====
+    BibleBook("Enoch", 108, "Old",
+        canons = setOf(Canon.Ethiopian),
+        textTradition = TextTradition.Ethiopic,
+        section = BookSection.EthiopianCanon
+    ),
+    BibleBook("Jubilees", 50, "Old",
+        canons = setOf(Canon.Ethiopian),
+        textTradition = TextTradition.Ethiopic,
+        section = BookSection.EthiopianCanon
+    ),
+    BibleBook("1Meqabyan", 36, "Old",
+        canons = setOf(Canon.Ethiopian),
+        textTradition = TextTradition.Ethiopic,
+        section = BookSection.EthiopianCanon
+    ),
+    BibleBook("2Meqabyan", 21, "Old",
+        canons = setOf(Canon.Ethiopian),
+        textTradition = TextTradition.Ethiopic,
+        section = BookSection.EthiopianCanon
+    ),
+    BibleBook("3Meqabyan", 15, "Old",
+        canons = setOf(Canon.Ethiopian),
+        textTradition = TextTradition.Ethiopic,
+        section = BookSection.EthiopianCanon
+    ),
+    BibleBook("Tegsas", 31, "Old",
+        canons = setOf(Canon.Ethiopian),
+        textTradition = TextTradition.Ethiopic,
+        section = BookSection.EthiopianCanon
+    ),
+    BibleBook("SirateTsion", 1, "Eth",
+        canons = setOf(Canon.Ethiopian),
+        textTradition = TextTradition.Ethiopic,
+        section = BookSection.EthiopianCanon
+    ),
+    BibleBook("Tizaz", 1, "Eth",
+        canons = setOf(Canon.Ethiopian),
+        textTradition = TextTradition.Ethiopic,
+        section = BookSection.EthiopianCanon
+    ),
+    BibleBook("Gitsiw", 1, "Eth",
+        canons = setOf(Canon.Ethiopian),
+        textTradition = TextTradition.Ethiopic,
+        section = BookSection.EthiopianCanon
+    ),
+    BibleBook("Abtilis", 1, "Eth",
+        canons = setOf(Canon.Ethiopian),
+        textTradition = TextTradition.Ethiopic,
+        section = BookSection.EthiopianCanon
+    ),
+    BibleBook("1Dominos", 1, "Eth",
+        canons = setOf(Canon.Ethiopian),
+        textTradition = TextTradition.Ethiopic,
+        section = BookSection.EthiopianCanon
+    ),
+    BibleBook("2Dominos", 1, "Eth",
+        canons = setOf(Canon.Ethiopian),
+        textTradition = TextTradition.Ethiopic,
+        section = BookSection.EthiopianCanon
+    ),
+    BibleBook("Qalementos", 1, "Eth",
+        canons = setOf(Canon.Ethiopian),
+        textTradition = TextTradition.Ethiopic,
+        section = BookSection.EthiopianCanon
+    ),
+    BibleBook("Didasqalia", 1, "Eth",
+        canons = setOf(Canon.Ethiopian),
+        textTradition = TextTradition.Ethiopic,
+        section = BookSection.EthiopianCanon
+    ),
+
+    // ===== NEW TESTAMENT - Gospels - Universal =====
+    BibleBook("Matthew", 28, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.Gospels
+    ),
+    BibleBook("Mark", 16, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.Gospels
+    ),
+    BibleBook("Luke", 24, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.Gospels
+    ),
+    BibleBook("John", 21, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.Gospels
+    ),
+
+    // ===== NEW TESTAMENT - Acts - Universal =====
+    BibleBook("Acts", 28, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.Acts
+    ),
+
+    // ===== NEW TESTAMENT - Pauline Epistles - Universal =====
+    BibleBook("Romans", 16, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.PaulineEpistles
+    ),
+    BibleBook("1Corinthians", 16, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.PaulineEpistles
+    ),
+    BibleBook("2Corinthians", 13, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.PaulineEpistles
+    ),
+    BibleBook("Galatians", 6, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.PaulineEpistles
+    ),
+    BibleBook("Ephesians", 6, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.PaulineEpistles
+    ),
+    BibleBook("Philippians", 4, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.PaulineEpistles
+    ),
+    BibleBook("Colossians", 4, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.PaulineEpistles
+    ),
+    BibleBook("1Thessalonians", 5, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.PaulineEpistles
+    ),
+    BibleBook("2Thessalonians", 3, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.PaulineEpistles
+    ),
+    BibleBook("1Timothy", 6, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.PaulineEpistles
+    ),
+    BibleBook("2Timothy", 4, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.PaulineEpistles
+    ),
+    BibleBook("Titus", 3, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.PaulineEpistles
+    ),
+    BibleBook("Philemon", 1, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.PaulineEpistles
+    ),
+    BibleBook("Hebrews", 13, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.GeneralEpistles
+    ),
+    BibleBook("James", 5, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.GeneralEpistles
+    ),
+    BibleBook("1Peter", 5, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.GeneralEpistles
+    ),
+    BibleBook("2Peter", 3, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.GeneralEpistles
+    ),
+    BibleBook("1John", 5, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.GeneralEpistles
+    ),
+    BibleBook("2John", 1, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.GeneralEpistles
+    ),
+    BibleBook("3John", 1, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.GeneralEpistles
+    ),
+    BibleBook("Jude", 1, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.GeneralEpistles
+    ),
+
+    // ===== NEW TESTAMENT - Apocalyptic - Universal =====
+    BibleBook("Revelation", 22, "New",
+        canons = setOf(Canon.Protestant, Canon.Catholic, Canon.Orthodox, Canon.Ethiopian),
+        textTradition = TextTradition.NewTestament,
+        section = BookSection.Apocalyptic
+    )
 )
 
 /**
@@ -12,16 +455,16 @@ val BOOKS = listOf(
  * (the way tools/interlinear_scraper.py's old hardcoded `ot_books` list once
  * drifted from src/bible_db.zig's `BIBLE_BOOKS`).
  *
- * Old Testament books use Hebrew ("H"). Everything else — New Testament
- * *and* Ethiopian-canon-only books ("Eth", e.g. SirateTsion, Qalementos) —
- * uses Greek ("G"), mirroring tools/interlinear_scraper.py's
- * `language_prefix()` (`"H" if testament == "Old" else "G"`).
+ * Masoretic (Hebrew) books use "H". Everything else — Septuagint (Greek),
+ * New Testament (Greek), and Ethiopian-canon-only books (Ge'ez) — uses "G".
+ * This correctly handles deuterocanonical books like Wisdom which are in the
+ * Old Testament but are part of the Greek Septuagint tradition.
  *
  * Unrecognized book names also fall back to "G" (never silently mis-tag as
  * Hebrew), matching the Python scraper's fallback behavior.
  */
 fun strongsLanguagePrefix(bookName: String): String =
-    if (BOOKS.find { it.name == bookName }?.testament == "Old") "H" else "G"
+    if (BOOKS.find { it.name == bookName }?.textTradition == TextTradition.Masoretic) "H" else "G"
 
 val BIBLE_ABBREVIATIONS = mapOf(
     "gen" to "Genesis", "ex" to "Exodus", "lev" to "Leviticus", "num" to "Numbers", "deut" to "Deuteronomy",

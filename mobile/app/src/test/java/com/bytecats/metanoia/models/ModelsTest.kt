@@ -57,7 +57,6 @@ class ModelsTest {
     fun booksListContainsExpectedEntries() {
         assertEquals("Genesis", BOOKS.first().name)
         assertTrue(BOOKS.any { it.name == "Revelation" })
-        assertEquals("Eth", BOOKS.last().testament)
         assertTrue(BOOKS.size >= 80)
     }
 

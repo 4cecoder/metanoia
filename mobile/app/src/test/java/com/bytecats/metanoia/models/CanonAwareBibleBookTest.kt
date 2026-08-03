@@ -202,6 +202,12 @@ class CanonAwareBibleBookTest {
         val genesisIndex = protestantBooks.indexOfFirst { it.name == "Genesis" }
         val exodusIndex = protestantBooks.indexOfFirst { it.name == "Exodus" }
         assertTrue("Genesis should come before Exodus", genesisIndex < exodusIndex)
+
+        // First book should be Pentateuch (Genesis)
+        assertTrue("First book should be in Pentateuch section", firstBook.section == BookSection.Pentateuch)
+
+        // Last book should be Apocalyptic (Revelation)
+        assertTrue("Last book should be in Apocalyptic section", lastBook.section == BookSection.Apocalyptic)
     }
 
     @Test
@@ -236,7 +242,7 @@ class CanonAwareBibleBookTest {
         assertEquals("Ethiopian-exclusive book should say 'Ethiopian Only'", "Ethiopian Only", enoch.canonicalStatus())
 
         val genesis = BOOKS.find { it.name == "Genesis" }!!
-        assertEquals("Protestant book should say 'Protestant'", "Protestant", genesis.canonicalStatus())
+        assertEquals("Universal book (in all canons) should say 'Universal'", "Universal", genesis.canonicalStatus())
     }
 
     @Test
