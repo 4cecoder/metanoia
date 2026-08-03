@@ -19,6 +19,15 @@ class BibleManager(private val context: Context) {
     private val client = OkHttpClient()
     private val database = BibleDatabase(context)
 
+    // NEW: Organized scraper manager with rate limiting and fallback
+    private val scraperManager = ScraperManager(
+        scrapers = listOf(
+            BibleGatewayScraper(client = client),
+            BibleHubTextScraper(client = client)
+        ),
+        cache = ScratchpadCache(context)
+    )
+
     val books = BOOKS
     val gateway = GatewayClient(baseUrlProvider = { "http://192.168.122.2:8000" })
 
