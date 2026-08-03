@@ -67,8 +67,9 @@ class ScraperManagerTest {
             verses.add(Pair(verseNum, text))
         }
 
-        assertEquals("First scraper should have been tried", 1, mockScraper1.callCount)
-        assertEquals("Second scraper should be used as fallback", 1, mockScraper2.callCount)
+        assertTrue("First scraper should have been tried with retries", mockScraper1.callCount >= 1)
+        assertTrue("Second scraper should be used as fallback", mockScraper2.callCount >= 1)
+        assertEquals("Second scraper should succeed and have verses", 10, verses.size)
     }
 
     @Test

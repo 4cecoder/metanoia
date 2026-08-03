@@ -37,6 +37,10 @@ class BibleGatewayScraper(
         val doc = Jsoup.parse(body)
         doc.select("h1, h2, h3, h4, h5, h6").remove()
 
+        // BibleGateway sometimes splits verses across multiple spans
+        // Group text by verse number and concatenate
+        val verseTexts = mutableMapOf<Int, StringBuilder>()
+
         doc.select("div.passage-text span.text").forEach { span ->
             // BibleGateway uses classes like "Gen-1-1", "Gen-1-2" (Book-Chapter-Verse)
             val className = span.className()
@@ -46,9 +50,19 @@ class BibleGatewayScraper(
                 span.select("sup, span.chapternum, span.versenum").remove()
                 val text = span.text().trim()
                 if (text.isNotEmpty()) {
-                    onVerse(verseNum, text)
+                    // Append to existing verse text or start new
+                    val builder = verseTexts.getOrPut(verseNum) { StringBuilder() }
+                    if (builder.isNotEmpty()) {
+                        builder.append(" ")
+                    }
+                    builder.append(text)
                 }
             }
+        }
+
+        // Call onVerse for each verse with concatenated text
+        verseTexts.toSortedMap().forEach { (verseNum, builder) ->
+            onVerse(verseNum, builder.toString().trim())
         }
     }
 

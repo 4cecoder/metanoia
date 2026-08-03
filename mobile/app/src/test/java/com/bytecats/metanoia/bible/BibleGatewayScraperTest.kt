@@ -86,16 +86,16 @@ class BibleGatewayScraperTest {
     }
 
     @Test
-    fun `Psalms 23 extracts at least 18 verses`() = runBlocking {
+    fun `Psalms 23 extracts verses correctly`() = runBlocking {
         val verses = mutableListOf<Pair<Int, String>>()
 
         scraper.scrapeChapter("Psalms", 23, "NKJV") { verseNum, text ->
             verses.add(Pair(verseNum, text))
         }
 
-        assertTrue("Psalms 23 should have at least 18 verses", verses.size >= 18)
+        assertTrue("Psalms 23 should have verses", verses.size >= 6)
         assertEquals("First verse should be 1", 1, verses[0].first)
-        assertEquals("Last verse should be 18 or higher", 18, verses.last().first)
+        assertEquals("Last verse should be 6 or higher", 6, verses.last().first)
 
         // Check first verse content
         assertTrue(
@@ -111,29 +111,29 @@ class BibleGatewayScraperTest {
     }
 
     @Test
-    fun `Isaiah 53 extracts at least 49 verses`() = runBlocking {
+    fun `Isaiah 53 extracts verses correctly`() = runBlocking {
         val verses = mutableListOf<Pair<Int, String>>()
 
         scraper.scrapeChapter("Isaiah", 53, "NKJV") { verseNum, text ->
             verses.add(Pair(verseNum, text))
         }
 
-        assertTrue("Isaiah 53 should have at least 49 verses", verses.size >= 49)
+        assertTrue("Isaiah 53 should have verses", verses.size >= 12)
         assertEquals("First verse should be 1", 1, verses[0].first)
-        assertEquals("Last verse should be 49 or higher", 49, verses.last().first)
+        assertEquals("Last verse should be 12 or higher", 12, verses.last().first)
     }
 
     @Test
-    fun `Matthew 1 extracts at least 26 verses`() = runBlocking {
+    fun `Matthew 1 extracts verses correctly`() = runBlocking {
         val verses = mutableListOf<Pair<Int, String>>()
 
         scraper.scrapeChapter("Matthew", 1, "NKJV") { verseNum, text ->
             verses.add(Pair(verseNum, text))
         }
 
-        assertTrue("Matthew 1 should have at least 26 verses", verses.size >= 26)
+        assertTrue("Matthew 1 should have verses", verses.size >= 25)
         assertEquals("First verse should be 1", 1, verses[0].first)
-        assertEquals("Last verse should be 26 or higher", 26, verses.last().first)
+        assertEquals("Last verse should be 25 or higher", 25, verses.last().first)
     }
 
     @Test
@@ -150,16 +150,16 @@ class BibleGatewayScraperTest {
     }
 
     @Test
-    fun `Romans 8 extracts at least 41 verses`() = runBlocking {
+    fun `Romans 8 extracts verses correctly`() = runBlocking {
         val verses = mutableListOf<Pair<Int, String>>()
 
         scraper.scrapeChapter("Romans", 8, "NKJV") { verseNum, text ->
             verses.add(Pair(verseNum, text))
         }
 
-        assertTrue("Romans 8 should have at least 41 verses", verses.size >= 41)
+        assertTrue("Romans 8 should have verses", verses.size >= 39)
         assertEquals("First verse should be 1", 1, verses[0].first)
-        assertEquals("Last verse should be 41 or higher", 41, verses.last().first)
+        assertEquals("Last verse should be 39 or higher", 39, verses.last().first)
     }
 
     @Test
