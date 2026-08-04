@@ -9,6 +9,7 @@ import java.io.FileOutputStream
  * Unit tests for Qwen3-TTS components.
  *
  * Tests GGUF parsing, tokenizer, and ML forward pass in isolation.
+ * Architecture matches Zig reference (qwen2_mlx.zig, qwen3_tts.zig).
  */
 class Qwen3TTSTest {
     
@@ -98,47 +99,85 @@ class Qwen3TTSTest {
     }
     
     // ------------------------------------------------------------------
-    // Qwen3-TTS Engine Tests
+    // Qwen3-TTS Engine Tests (matching Zig reference)
     // ------------------------------------------------------------------
     
     @Test
-    fun `Qwen3 engine initializes with hyperparameters`() {
+    fun `Qwen3 engine initializes with Zig config defaults`() {
         val engine = Qwen3TTSEngine("/fake/model.gguf", "/fake/codec.gguf")
+        val config = engine.getConfig()
         
-        assertEquals("Hidden size should be default", 2048, engine.hiddenSize)
-        assertEquals("Number of layers should be default", 24, engine.numLayers)
-        assertEquals("Number of heads should be default", 16, engine.numHeads)
-        assertEquals("Vocab size should be default", 128256, engine.vocabSize)
+        // Matching Zig's Config struct defaults
+        assertEquals("Hidden size should match Zig", 2048, config.hiddenSize)
+        assertEquals("Number of layers should match Zig", 24, config.numHiddenLayers)
+        assertEquals("Number of attention heads should match Zig", 14, config.numAttentionHeads)
+        assertEquals("Vocab size should match Zig", 151936, config.vocabSize)
+        assertEquals("Intermediate size should match Zig", 4864, config.intermediateSize)
+        assertEquals("Num KV heads should match Zig (GQA)", 2, config.numKeyValueHeads)
+        assertEquals("RMS norm eps should match Zig", 1e-6f, config.rmsNormEps, 0.000001f)
     }
     
     @Test
-    fun `Transformer layer applies attention`() {
-        val layer = TransformerLayer(hiddenSize = 256, numHeads = 8, headDim = 32)
+    fun `Qwen3 engine computes head dim correctly`() {
+        val engine = Qwen3TTSEngine("/fake/model.gguf", "/fake/codec.gguf")
+        val config = engine.getConfig()
         
-        val input = Array(10) { FloatArray(256) { kotlin.random.Random.nextFloat() * 2 - 1 } }
+        val headDim = config.headDim()
+        assertEquals("Head dim should be hidden_size / num_heads", 2048 / 14, headDim)
+    }
+    
+    @Test
+    fun `Qwen3 transformer layer applies attention`() {
+        val config = Qwen3TTSEngine.Config(
+            hiddenSize = 896,
+            numHiddenLayers = 24,
+            intermediateSize = 4864,
+            numAttentionHeads = 14,
+            numKeyValueHeads = 2,
+            vocabSize = 151936
+        )
+        val layer = QwenTransformerLayer(config)
+        
+        val input = Array(10) { FloatArray(896) { kotlin.random.Random.nextFloat() * 2 - 1 } }
         val output = layer.multiHeadAttentionPublic(input)
         
         assertEquals("Output should have same sequence length", input.size, output.size)
-        assertEquals("Output should have same hidden size", 256, output[0].size)
+        assertEquals("Output should have same hidden size", 896, output[0].size)
     }
     
     @Test
-    fun `Transformer layer applies feed-forward`() {
-        val layer = TransformerLayer(hiddenSize = 256, numHeads = 8, headDim = 32)
+    fun `Qwen3 transformer layer applies SwiGLU feed-forward`() {
+        val config = Qwen3TTSEngine.Config(
+            hiddenSize = 896,
+            numHiddenLayers = 24,
+            intermediateSize = 4864,
+            numAttentionHeads = 14,
+            numKeyValueHeads = 2,
+            vocabSize = 151936
+        )
+        val layer = QwenTransformerLayer(config)
         
-        val input = Array(10) { FloatArray(256) { kotlin.random.Random.nextFloat() * 2 - 1 } }
-        val output = layer.feedForwardPublic(input)
+        val input = Array(10) { FloatArray(896) { kotlin.random.Random.nextFloat() * 2 - 1 } }
+        val output = layer.feedForwardSwiGLUPublic(input)
         
         assertEquals("Output should have same sequence length", input.size, output.size)
-        assertEquals("Output should have same hidden size", 256, output[0].size)
+        assertEquals("Output should have same hidden size", 896, output[0].size)
     }
     
     @Test
-    fun `Transformer layer computes attention weights`() {
-        val layer = TransformerLayer(hiddenSize = 256, numHeads = 8, headDim = 32)
+    fun `Qwen3 transformer layer computes attention weights`() {
+        val config = Qwen3TTSEngine.Config(
+            hiddenSize = 896,
+            numHiddenLayers = 24,
+            intermediateSize = 4864,
+            numAttentionHeads = 14,
+            numKeyValueHeads = 2,
+            vocabSize = 151936
+        )
+        val layer = QwenTransformerLayer(config)
         
-        val q = FloatArray(256) { 1f }
-        val k = FloatArray(256) { 1f }
+        val q = FloatArray(896) { 1f }
+        val k = FloatArray(896) { 1f }
         val weight = layer.computeAttentionPublic(q, k)
         
         assertTrue("Attention weight should be positive", weight > 0f)
@@ -146,30 +185,51 @@ class Qwen3TTSTest {
     }
     
     @Test
-    fun `Transformer layer applies layer norm`() {
-        val layer = TransformerLayer(hiddenSize = 256, numHeads = 8, headDim = 32)
+    fun `Qwen3 transformer layer applies RMS norm`() {
+        val config = Qwen3TTSEngine.Config(
+            hiddenSize = 896,
+            numHiddenLayers = 24,
+            intermediateSize = 4864,
+            numAttentionHeads = 14,
+            numKeyValueHeads = 2,
+            vocabSize = 151936
+        )
+        val layer = QwenTransformerLayer(config)
         
-        val input = FloatArray(256) { kotlin.random.Random.nextFloat() * 100 }
-        val normalized = layer.layerNormPublic(input)
+        val input = FloatArray(896) { kotlin.random.Random.nextFloat() * 100 }
+        val weights = FloatArray(896) { 1f }
+        val normalized = layer.rmsNormPublic(input, weights, 1e-6f)
         
-        var mean = 0.0
-        for (v in normalized) mean += v
-        mean /= normalized.size
+        // Check RMS normalization properties
+        var meanSquares = 0.0
+        for (v in normalized) {
+            meanSquares += v * v
+        }
+        meanSquares /= normalized.size
+        val rms = kotlin.math.sqrt(meanSquares)
         
-        assertTrue("Mean should be close to 0", kotlin.math.abs(mean) < 0.1)
+        assertTrue("RMS should be close to 1 (ignoring weight scaling)", kotlin.math.abs(rms - 1.0) < 0.5)
     }
     
     @Test
-    fun `Transformer layer applies GELU activation`() {
-        val layer = TransformerLayer(hiddenSize = 256, numHeads = 8, headDim = 32)
+    fun `Qwen3 transformer layer applies SiLU activation`() {
+        val config = Qwen3TTSEngine.Config(
+            hiddenSize = 896,
+            numHiddenLayers = 24,
+            intermediateSize = 4864,
+            numAttentionHeads = 14,
+            numKeyValueHeads = 2,
+            vocabSize = 151936
+        )
+        val layer = QwenTransformerLayer(config)
         
-        val negative = layer.geluPublic(-1f)
-        val zero = layer.geluPublic(0f)
-        val positive = layer.geluPublic(1f)
+        val negative = layer.siluPublic(-1f)
+        val zero = layer.siluPublic(0f)
+        val positive = layer.siluPublic(1f)
         
-        assertTrue("GELU(-1) should be negative", negative < 0f)
-        assertTrue("GELU(0) should be ~0", kotlin.math.abs(zero) < 0.01f)
-        assertTrue("GELU(1) should be positive", positive > 0f)
+        assertTrue("SiLU(-1) should be negative", negative < 0f)
+        assertTrue("SiLU(0) should be 0", kotlin.math.abs(zero) < 0.01f)
+        assertTrue("SiLU(1) should be positive", positive > 0f)
     }
     
     // ------------------------------------------------------------------
