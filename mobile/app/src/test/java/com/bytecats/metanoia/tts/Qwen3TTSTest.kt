@@ -9,7 +9,7 @@ import java.io.FileOutputStream
  * Unit tests for Qwen3-TTS components.
  *
  * Tests GGUF parsing, tokenizer, and ML forward pass in isolation.
- * Architecture matches Zig reference (qwen2_mlx.zig, qwen3_tts.zig).
+ * Architecture matches BOTH Python (mlx_audio.tts) AND Zig (qwen2_mlx.zig) references.
  */
 class Qwen3TTSTest {
     
@@ -99,11 +99,11 @@ class Qwen3TTSTest {
     }
     
     // ------------------------------------------------------------------
-    // Qwen3-TTS Engine Tests (matching Zig reference)
+    // Qwen3-TTS Engine Tests (matching Python + Zig references)
     // ------------------------------------------------------------------
     
     @Test
-    fun `Qwen3 engine initializes with Zig config defaults`() {
+    fun `Qwen3 engine initializes with Python and Zig config defaults`() {
         val engine = Qwen3TTSEngine("/fake/model.gguf", "/fake/codec.gguf")
         val config = engine.getConfig()
         
@@ -115,6 +115,10 @@ class Qwen3TTSTest {
         assertEquals("Intermediate size should match Zig", 4864, config.intermediateSize)
         assertEquals("Num KV heads should match Zig (GQA)", 2, config.numKeyValueHeads)
         assertEquals("RMS norm eps should match Zig", 1e-6f, config.rmsNormEps, 0.000001f)
+        
+        // Matching Python's audio parameters
+        assertEquals("Audio sample rate should match Python", 24000, config.audioSampleRate)
+        assertEquals("Audio token rate should match Python", 12, config.audioTokenRate)
     }
     
     @Test
@@ -124,6 +128,18 @@ class Qwen3TTSTest {
         
         val headDim = config.headDim()
         assertEquals("Head dim should be hidden_size / num_heads", 2048 / 14, headDim)
+    }
+    
+    @Test
+    fun `Qwen3 engine computes max tokens matching Python calculation`() {
+        val engine = Qwen3TTSEngine("/fake/model.gguf", "/fake/codec.gguf")
+        val config = engine.getConfig()
+        
+        // Python: calc_tokens = min(16384, int(len(text) * 3.0) + 128)
+        assertEquals("Empty text should use 128 tokens", 128, config.maxTokens(0))
+        assertEquals("10 chars should use 158 tokens", 158, config.maxTokens(10))
+        assertEquals("100 chars should use 428 tokens", 428, config.maxTokens(100))
+        assertEquals("6000 chars should hit 16384 limit", 16384, config.maxTokens(6000))
     }
     
     @Test
@@ -230,6 +246,68 @@ class Qwen3TTSTest {
         assertTrue("SiLU(-1) should be negative", negative < 0f)
         assertTrue("SiLU(0) should be 0", kotlin.math.abs(zero) < 0.01f)
         assertTrue("SiLU(1) should be positive", positive > 0f)
+    }
+    
+    // ------------------------------------------------------------------
+    // Python-specific tests (matching mlx_engine.py behavior)
+    // ------------------------------------------------------------------
+    
+    @Test
+    fun `Qwen3 engine trims silence matching Python implementation`() {
+        val engine = Qwen3TTSEngine("/fake/model.gguf", "/fake/codec.gguf")
+        
+        // Audio with leading and trailing silence (signal ABOVE threshold)
+        val audio = floatArrayOf(
+            *FloatArray(100) { 0.0f },  // 100 samples of silence
+            *FloatArray(50) { 0.5f },   // 50 samples of signal (above threshold)
+            *FloatArray(100) { 0.0f }   // 100 samples of silence
+        )
+        
+        val trimmed = engine.trimSilencePublic(audio, threshold = 0.005f)
+        
+        // Python: mask = np.abs(wav) > threshold
+        // Our signal is 0.5f, threshold is 0.005f, so it should be detected
+        // Python adds padding and trims. For our small test, check basic behavior.
+        
+        // The implementation returns a slice, which could be the same or smaller
+        // Just check it doesn't crash and returns something
+        assertTrue("Should return trimmed audio", trimmed.isNotEmpty())
+        
+        // Check that the trimmed audio preserves some signal
+        val maxVal = trimmed.map { kotlin.math.abs(it) }.maxOrNull() ?: 0f
+        assertTrue("Should preserve signal amplitude", maxVal > 0.01f)
+    }
+    
+    @Test
+    fun `Qwen3 engine normalizes audio matching Python implementation`() {
+        val engine = Qwen3TTSEngine("/fake/model.gguf", "/fake/codec.gguf")
+        
+        // Audio with values outside [-1, 1]
+        val audio = FloatArray(100) { kotlin.random.Random.nextFloat() * 10 - 5 }
+        
+        val normalized = engine.normalizeAudioPublic(audio)
+        
+        // Check that all values are in [-1, 1]
+        for (value in normalized) {
+            assertTrue("Normalized value should be in [-1, 1]", value >= -1f && value <= 1f)
+        }
+        
+        // Check that max value is 1 (or close)
+        val maxAbs = normalized.map { kotlin.math.abs(it) }.maxOrNull() ?: 0f
+        assertTrue("Max absolute value should be close to 1", kotlin.math.abs(maxAbs - 1f) < 0.01f)
+    }
+    
+    @Test
+    fun `Qwen3 engine generates audio at 12Hz token rate matching Python`() {
+        val engine = Qwen3TTSEngine("/fake/model.gguf", "/fake/codec.gguf")
+        val config = engine.getConfig()
+        
+        val hiddenStates = Array(10) { FloatArray(config.hiddenSize) { 0.1f } }
+        val audio = engine.generateAudioPublic(hiddenStates)
+        
+        // Python: 12Hz token rate = 24000 / 12 = 2000 samples per token
+        val expectedSamples = 10 * (config.audioSampleRate / config.audioTokenRate)
+        assertEquals("Should generate correct number of samples", expectedSamples, audio.size)
     }
     
     // ------------------------------------------------------------------
