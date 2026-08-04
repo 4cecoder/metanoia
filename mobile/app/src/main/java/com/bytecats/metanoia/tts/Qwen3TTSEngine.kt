@@ -126,7 +126,7 @@ class Qwen3TTSEngine(
         val embeddings = createEmbeddings(tokenIds)
         
         // Pass through transformer layers (matching Zig's forward pass)
-        val hiddenStates = runTransformer(embeddings)
+        val hiddenStates = runTransformerInternal(embeddings)
         
         // Generate audio at 12Hz token rate (matching Python's behavior)
         val audio = generateAudio(hiddenStates, maxTokens)
@@ -135,7 +135,7 @@ class Qwen3TTSEngine(
         return trimSilence(audio, threshold = 0.005f)
     }
     
-    private fun createEmbeddings(tokenIds: List<Int>): Array<FloatArray> {
+    fun createEmbeddings(tokenIds: List<Int>): Array<FloatArray> {
         val seqLen = tokenIds.size
         val embeddings = Array(seqLen) { FloatArray(config.hiddenSize) }
         
@@ -154,11 +154,7 @@ class Qwen3TTSEngine(
         return embeddings
     }
     
-    fun createEmbeddingsPublic(tokenIds: List<Int>): Array<FloatArray> {
-        return createEmbeddings(tokenIds)
-    }
-    
-    private fun runTransformer(embeddings: Array<FloatArray>): Array<FloatArray> {
+    private fun runTransformerInternal(embeddings: Array<FloatArray>): Array<FloatArray> {
         var hiddenStates = embeddings
         for (layer in transformerLayers) {
             hiddenStates = layer.forward(hiddenStates)
@@ -166,7 +162,7 @@ class Qwen3TTSEngine(
         return hiddenStates
     }
     
-    private fun generateAudio(hiddenStates: Array<FloatArray>, maxTokens: Int): FloatArray {
+    fun generateAudio(hiddenStates: Array<FloatArray>, maxTokens: Int): FloatArray {
         // 12Hz token rate = 24000 / 12 = 2000 samples per token
         val samplesPerToken = config.audioSampleRate / config.audioTokenRate
         val outputLength = hiddenStates.size * samplesPerToken
@@ -181,10 +177,6 @@ class Qwen3TTSEngine(
         }
         
         return normalizeAudio(audio)
-    }
-    
-    fun generateAudioPublic(hiddenStates: Array<FloatArray>): FloatArray {
-        return generateAudio(hiddenStates, 16384)
     }
     
     private fun generateSample(state: FloatArray, phase: Int): Float {
@@ -211,7 +203,7 @@ class Qwen3TTSEngine(
      * padding = 6000  # 250ms at 24kHz
      * return wav[start_idx - padding : end_idx + padding]
      */
-    private fun trimSilence(audio: FloatArray, threshold: Float = 0.005f): FloatArray {
+    fun trimSilence(audio: FloatArray, threshold: Float = 0.005f): FloatArray {
         // Find all indices above threshold
         val mask = audio.map { kotlin.math.abs(it) > threshold }
         
@@ -228,11 +220,7 @@ class Qwen3TTSEngine(
         return audio.sliceArray(trimmedStart until trimmedEnd)
     }
     
-    fun trimSilencePublic(audio: FloatArray, threshold: Float = 0.005f): FloatArray {
-        return trimSilence(audio, threshold)
-    }
-    
-    private fun normalizeAudio(audio: FloatArray): FloatArray {
+    fun normalizeAudio(audio: FloatArray): FloatArray {
         var maxAbs = 0.0f
         for (sample in audio) {
             val absValue = if (sample < 0) -sample else sample
@@ -248,11 +236,7 @@ class Qwen3TTSEngine(
         return audio
     }
     
-    fun normalizeAudioPublic(audio: FloatArray): FloatArray {
-        return normalizeAudio(audio)
-    }
-    
-    fun addResidualPublic(input: FloatArray, output: FloatArray): FloatArray {
+    fun addResidual(input: FloatArray, output: FloatArray): FloatArray {
         val result = FloatArray(input.size)
         for (i in input.indices) {
             result[i] = input[i] + output[i]

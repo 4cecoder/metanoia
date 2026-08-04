@@ -263,7 +263,7 @@ class Qwen3TTSTest {
             *FloatArray(100) { 0.0f }   // 100 samples of silence
         )
         
-        val trimmed = engine.trimSilencePublic(audio, threshold = 0.005f)
+        val trimmed = engine.trimSilence(audio, threshold = 0.005f)
         
         // Python: mask = np.abs(wav) > threshold
         // Our signal is 0.5f, threshold is 0.005f, so it should be detected
@@ -274,7 +274,11 @@ class Qwen3TTSTest {
         assertTrue("Should return trimmed audio", trimmed.isNotEmpty())
         
         // Check that the trimmed audio preserves some signal
-        val maxVal = trimmed.map { kotlin.math.abs(it) }.maxOrNull() ?: 0f
+        var maxVal = 0.0f
+        for (sample in trimmed) {
+            val absValue = if (sample < 0) -sample else sample
+            if (absValue > maxVal) maxVal = absValue
+        }
         assertTrue("Should preserve signal amplitude", maxVal > 0.01f)
     }
     
@@ -285,15 +289,24 @@ class Qwen3TTSTest {
         // Audio with values outside [-1, 1]
         val audio = FloatArray(100) { kotlin.random.Random.nextFloat() * 10 - 5 }
         
-        val normalized = engine.normalizeAudioPublic(audio)
+        val normalized = engine.normalizeAudio(audio)
         
         // Check that all values are in [-1, 1]
+        var allValid = true
         for (value in normalized) {
-            assertTrue("Normalized value should be in [-1, 1]", value >= -1f && value <= 1f)
+            if (value < -1f || value > 1f) {
+                allValid = false
+                break
+            }
         }
+        assertTrue("Normalized value should be in [-1, 1]", allValid)
         
         // Check that max value is 1 (or close)
-        val maxAbs = normalized.map { kotlin.math.abs(it) }.maxOrNull() ?: 0f
+        var maxAbs = 0.0f
+        for (value in normalized) {
+            val absValue = if (value < 0) -value else value
+            if (absValue > maxAbs) maxAbs = absValue
+        }
         assertTrue("Max absolute value should be close to 1", kotlin.math.abs(maxAbs - 1f) < 0.01f)
     }
     
@@ -302,8 +315,9 @@ class Qwen3TTSTest {
         val engine = Qwen3TTSEngine("/fake/model.gguf", "/fake/codec.gguf")
         val config = engine.getConfig()
         
-        val hiddenStates = Array(10) { FloatArray(config.hiddenSize) { 0.1f } }
-        val audio = engine.generateAudioPublic(hiddenStates)
+        val tokenIds = (1..10).toList()
+        val embeddings = engine.createEmbeddings(tokenIds)
+        val audio = engine.generateAudio(embeddings, 16384)
         
         // Python: 12Hz token rate = 24000 / 12 = 2000 samples per token
         val expectedSamples = 10 * (config.audioSampleRate / config.audioTokenRate)
