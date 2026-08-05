@@ -11,7 +11,8 @@
     <link rel="icon" type="image/svg+xml" href="logo.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
             --bg-primary: #090b10;
@@ -46,7 +47,7 @@
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
             min-height: 100vh;
@@ -77,6 +78,86 @@
 
         .glass-panel:hover {
             border-color: var(--border-highlight);
+        }
+
+        
+        /* Glowing Accent Animations & Micro-interactions */
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 15px var(--accent-glow); }
+            50% { box-shadow: 0 0 25px rgba(122, 162, 247, 0.6); }
+            100% { box-shadow: 0 0 15px var(--accent-glow); }
+        }
+
+        .glass-panel {
+            background: linear-gradient(135deg, rgba(20, 25, 36, 0.8) 0%, rgba(15, 18, 26, 0.6) 100%);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255,255,255,0.1);
+            border-left: 1px solid rgba(255,255,255,0.05);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .feature-card {
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease, border-color 0.4s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 15px 40px rgba(122, 162, 247, 0.2);
+            border-color: rgba(122, 162, 247, 0.5);
+            z-index: 10;
+        }
+
+        .feature-icon {
+            font-size: 2.2rem;
+            margin-bottom: 1.25rem;
+            display: inline-block;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--purple-accent) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 2px 8px rgba(122,162,247,0.4));
+            transition: transform 0.3s ease;
+        }
+        
+        .feature-card:hover .feature-icon {
+            transform: scale(1.15) rotate(5deg);
+        }
+
+        .btn {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: rgba(255,255,255,0.1);
+            transform: rotate(45deg);
+            transition: all 0.3s ease;
+            opacity: 0;
+        }
+        
+        .btn:hover::after {
+            opacity: 1;
+            transform: rotate(45deg) translate(50%, 50%);
+        }
+
+        .btn-primary {
+            animation: pulseGlow 3s infinite;
+        }
+        
+        .btn-primary:hover {
+            animation: none;
+            box-shadow: 0 0 30px rgba(122, 162, 247, 0.8);
+        }
+
+        .section-title {
+            font-family: 'Space Grotesk', sans-serif;
+            text-transform: tracking-tight;
         }
 
         /* Top Navbar */
@@ -486,7 +567,7 @@
                     <a href="#voice">Voice & AI</a>
                     <a href="#deep-linking">Deep Links</a>
                     <a href="#setup">Setup & Builds</a>
-                    <a href="https://github.com/4cecoder/metanoia" target="_blank" class="nav-btn">GitHub Repo</a>
+                    <a href="https://github.com/4cecoder/metanoia" target="_blank" class="nav-btn"><i class="fa-brands fa-github"></i> GitHub Repo</a>
                 </nav>
             </div>
         </header>
@@ -500,9 +581,9 @@
                 Featuring complete multi-canonical indexing across Masoretic, Septuagint, and Ethiopic traditions, native local AI voice generation, and deep-linking integration.
             </p>
             <div class="hero-actions">
-                <a href="#deep-linking" class="btn btn-primary">Developer Portal & Links</a>
-                <a href="#setup" class="btn btn-secondary">Platform Setup</a>
-                <a href="https://github.com/4cecoder/metanoia" target="_blank" class="btn btn-secondary">Source Code</a>
+                <a href="#deep-linking" class="btn btn-primary"><i class="fa-solid fa-code"></i> Developer Portal & Links</a>
+                <a href="#setup" class="btn btn-secondary"><i class="fa-solid fa-wrench"></i> Platform Setup</a>
+                <a href="https://github.com/4cecoder/metanoia" target="_blank" class="btn btn-secondary"><i class="fa-brands fa-github"></i> Source Code</a>
             </div>
         </section>
 
@@ -535,7 +616,7 @@
 
             <div class="grid-3">
                 <div class="glass-panel feature-card">
-                    <span class="feature-icon">⚡</span>
+                    <span class="feature-icon"><i class="fa-solid fa-bolt"></i></span>
                     <h3>Native Zig Engine</h3>
                     <p>Built with Zig 0.17+ for zero-overhead performance, instant startup, and memory safety. Interoperates directly with GTK4, SQLite3, and native C runtimes.</p>
                     <div class="tag-list">
@@ -546,7 +627,7 @@
                 </div>
 
                 <div class="glass-panel feature-card">
-                    <span class="feature-icon">📱</span>
+                    <span class="feature-icon"><i class="fa-solid fa-mobile-screen"></i></span>
                     <h3>Android App & Deep Links</h3>
                     <p>Full Kotlin Android app featuring native intent handling, custom URI scheme registration, and seamless verse navigation matching the desktop engine.</p>
                     <div class="tag-list">
@@ -557,7 +638,7 @@
                 </div>
 
                 <div class="glass-panel feature-card">
-                    <span class="feature-icon">🎙️</span>
+                    <span class="feature-icon"><i class="fa-solid fa-microphone-lines"></i></span>
                     <h3>Native AI Voice & STT</h3>
                     <p>Integrated PyTorch & native aikit support running Qwen3-TTS (12Hz models) with real-time Faster-Whisper audio transcription and verification.</p>
                     <div class="tag-list">
