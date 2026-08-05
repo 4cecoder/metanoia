@@ -95,6 +95,9 @@ class MainActivity : ComponentActivity() {
                     composable("settings_updates") {
                         UpdateSettingsPage(navController, viewModel)
                     }
+                    composable("settings_changelog") {
+                        com.bytecats.metanoia.ui.screens.settings.ChangelogScreen { navController.popBackStack() }
+                    }
                 }
             }
         }

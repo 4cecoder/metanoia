@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bytecats.metanoia.bible.ReadingStats
 import com.bytecats.metanoia.models.BibleBook
 import com.bytecats.metanoia.models.InterlinearWord
 import com.bytecats.metanoia.models.SearchResult
@@ -173,10 +174,14 @@ fun BibleScreen(viewModel: MainViewModel) {
                             item(span = { GridItemSpan(maxLineSpan) }) { Text(label, modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
                             items(bibleManager.books.filter { it.testament == key }) { book ->
                                 val progress = completionMap[book.name] ?: 0f
+                                val baseColor = 0x1A1B26
+                                val readGreen = 0x9ECE6A
+                                val lerpedColorInt = ReadingStats.lerpColor(baseColor, readGreen, progress)
+                                val containerColor = if (progress > 0f) Color(lerpedColorInt).copy(alpha = if (progress >= 1f) 0.35f else 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                                 Card(
                                     modifier = Modifier.padding(4.dp).height(68.dp).clickable { selectedBook = book; step = "chapter"; isSearchVisible = false },
-                                    colors = CardDefaults.cardColors(containerColor = if (progress >= 1f) Color(0xFF9ece6a).copy(alpha = 0.2f) else if (progress > 0f) Color(0xFFe0af68).copy(0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                                    border = if (progress >= 1f) BorderStroke(1.dp, Color(0xFF9ece6a)) else if (progress > 0f) BorderStroke(1.dp, Color(0xFFe0af68).copy(0.6f)) else null
+                                    colors = CardDefaults.cardColors(containerColor = containerColor),
+                                    border = if (progress >= 1f) BorderStroke(1.5.dp, Color(0xFF9ece6a)) else if (progress > 0f) BorderStroke(1.dp, Color(0xFFe0af68).copy(0.6f)) else null
                                 ) {
                                     Column(
                                         modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 6.dp),

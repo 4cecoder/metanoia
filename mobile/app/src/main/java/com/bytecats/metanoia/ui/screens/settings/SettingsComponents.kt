@@ -35,6 +35,9 @@ fun SettingsDashboard(navController: NavController) {
             SettingsLink("Updates", "Nightly / experimental builds", Icons.Default.SystemUpdate) {
                 navController.navigate("settings_updates")
             }
+            SettingsLink("Changelog", "Recent commits and version history", Icons.Default.History) {
+                navController.navigate("settings_changelog")
+            }
         }
     }
 }
