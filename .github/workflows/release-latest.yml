@@ -437,6 +437,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    if: |
+      contains(github.event.commits[0].modified, 'mobile/') ||
+      contains(github.event.commits[0].added, 'mobile/') ||
+      github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
