@@ -854,49 +854,53 @@ startActivity(intent)</code>
             </div>
         </section>
 
-        <!-- Setup & Build Section -->
-        <section id="setup" style="padding-top: 1rem;">
+        <!-- Issue Submission Section -->
+        <section id="issues" style="padding-top: 2rem;">
             <div class="section-header">
-                <h2 class="section-title">Setup & Build Tools</h2>
-                <p class="section-subtitle">Simplified platform setup for Linux, macOS, and Windows development.</p>
+                <h2 class="section-title"><i class="fa-solid fa-bug" style="margin-right: 10px; color: var(--error);"></i>Report an Issue or Feature Request</h2>
+                <p class="section-subtitle">Intuitively submit bug reports, feature requests, or translations directly to GitHub without token risks.</p>
             </div>
 
-            <div class="grid-3">
-                <div class="glass-panel feature-card">
-                    <h3>Linux / macOS</h3>
-                    <p>Build natively using standard Makefile targets powered by Zig 0.17+ and standard GTK4 libraries.</p>
-                    <div class="code-block">
-                        <code># Build executable
-make build
-
-# Run test suite
-make test</code>
-                        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+            <div class="glass-panel" style="padding: 2.5rem;">
+                <form id="issueForm" onsubmit="handleIssueSubmit(event)">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+                        <div>
+                            <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">Issue Type</label>
+                            <select id="issueType" style="width: 100%; padding: 0.8rem 1rem; background: #080a0e; border: 1px solid var(--border); border-radius: 8px; color: #a9b1d6; font-family: inherit; font-size: 0.95rem;">
+                                <option value="bug">🐛 Bug Report</option>
+                                <option value="enhancement">✨ Feature Request</option>
+                                <option value="documentation">📚 Documentation Update</option>
+                                <option value="apocrypha">📜 Text / Translation Correction</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">Component / Module</label>
+                            <select id="issueModule" style="width: 100%; padding: 0.8rem 1rem; background: #080a0e; border: 1px solid var(--border); border-radius: 8px; color: #a9b1d6; font-family: inherit; font-size: 0.95rem;">
+                                <option value="mobile">Android App (Kotlin/Compose)</option>
+                                <option value="desktop">Desktop App (Zig/GTK4)</option>
+                                <option value="tts">Qwen3-TTS / Voice Engine</option>
+                                <option value="web">GitHub Pages & Web Portal</option>
+                            </select>
+                        </div>
                     </div>
-                </div>
 
-                <div class="glass-panel feature-card">
-                    <h3>Windows GUI Wizard</h3>
-                    <p>Includes a dedicated C# WinForms setup wizard that verifies Zig, MSYS2, GTK4, curl, and Git automatically.</p>
-                    <div class="code-block">
-                        <code># Compile preflight wizard
-windows_helper\compile.bat
-
-# Run wizard GUI
-windows_helper\MetanoiaSetup.exe</code>
-                        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <div style="margin-bottom: 1.5rem;">
+                        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">Issue Title</label>
+                        <input type="text" id="issueTitle" required placeholder="Brief summary of the issue (e.g., Hebrew interlinear font alignment on Android)..." style="width: 100%; padding: 0.8rem 1rem; background: #080a0e; border: 1px solid var(--border); border-radius: 8px; color: #a9b1d6; font-family: inherit; font-size: 0.95rem;" />
                     </div>
-                </div>
 
-                <div class="glass-panel feature-card">
-                    <h3>Fedora AppImage</h3>
-                    <p>Validated Fedora 38 AppImage environment with bundled <code>libfribidi</code> and zero-crash execution.</p>
-                    <div class="code-block">
-                        <code># Build Docker test container
-docker build -t metanoia-debug -f .opencode/docker/MetanoiaAppImage-debug.Dockerfile .</code>
-                        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <div style="margin-bottom: 1.5rem;">
+                        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">Detailed Description & Steps to Reproduce</label>
+                        <textarea id="issueBody" rows="5" required placeholder="1. Go to...' 2. Click on... ' 3. Observed behavior..." style="width: 100%; padding: 0.8rem 1rem; background: #080a0e; border: 1px solid var(--border); border-radius: 8px; color: #a9b1d6; font-family: inherit; font-size: 0.95rem; resize: vertical;"></textarea>
                     </div>
-                </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <p style="font-size: 0.85rem; color: var(--text-secondary);"><i class="fa-solid fa-shield-halved" style="color: var(--success); margin-right: 6px;"></i>Secure Submission: Direct pre-filled link to <code>4cecoder/metanoia</code> GitHub Issues.</p>
+                        <button type="submit" class="btn btn-primary pulse-btn" style="padding: 0.8rem 1.8rem; cursor: pointer;">
+                            <i class="fa-brands fa-github" style="margin-right: 8px;"></i>Submit Issue on GitHub
+                        </button>
+                    </div>
+                </form>
             </div>
         </section>
 
@@ -927,6 +931,20 @@ docker build -t metanoia-debug -f .opencode/docker/MetanoiaAppImage-debug.Docker
     </div>
 
     <script>
+        function handleIssueSubmit(e) {
+            e.preventDefault();
+            const type = document.getElementById('issueType').value;
+            const module = document.getElementById('issueModule').value;
+            const title = document.getElementById('issueTitle').value;
+            const bodyText = document.getElementById('issueBody').value;
+
+            const fullTitle = `[${module.toUpperCase()}] ${title}`;
+            const fullBody = `### Component / Module\n${module}\n\n### Description\n${bodyText}\n\n---\n*Submitted securely via Metanoia Web Portal*`;
+
+            const issueUrl = `https://github.com/4cecoder/metanoia/issues/new?title=${encodeURIComponent(fullTitle)}&body=${encodeURIComponent(fullBody)}&labels=${encodeURIComponent(type)}`;
+            window.open(issueUrl, '_blank');
+        }
+
         function copyCode(button) {
             const codeBlock = button.parentElement;
             const code = codeBlock.querySelector('code');
