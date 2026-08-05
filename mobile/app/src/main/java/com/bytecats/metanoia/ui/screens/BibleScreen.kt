@@ -68,6 +68,7 @@ fun BibleScreen(viewModel: MainViewModel) {
     var studyVerse by remember { mutableStateOf<Int?>(null) }
     var lexiconWord by remember { mutableStateOf<InterlinearWord?>(null) }
     var lexiconDetail by remember { mutableStateOf(Pair("", "Loading...")) }
+    var modalBook by remember { mutableStateOf<BibleBook?>(null) }
     var showStudySheet by remember { mutableStateOf(false) }
     var showLexiconSheet by remember { mutableStateOf(false) }
     var isSearchVisible by remember { mutableStateOf(true) }
@@ -188,7 +189,10 @@ fun BibleScreen(viewModel: MainViewModel) {
                                 val lerpedColorInt = ReadingStats.lerpColor(baseColor, readGreen, progress)
                                 val containerColor = if (progress > 0f) Color(lerpedColorInt).copy(alpha = if (progress >= 1f) 0.35f else 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                                 Card(
-                                    modifier = Modifier.padding(4.dp).height(68.dp).clickable { selectedBook = book; step = "chapter"; isSearchVisible = false },
+                                    modifier = Modifier.padding(4.dp).height(68.dp).combinedClickable(
+                                        onClick = { selectedBook = book; step = "chapter"; isSearchVisible = false },
+                                        onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); modalBook = book }
+                                    ),
                                     colors = CardDefaults.cardColors(containerColor = containerColor),
                                     border = if (progress >= 1f) BorderStroke(1.5.dp, Color(0xFF9ece6a)) else if (progress > 0f) BorderStroke(1.dp, Color(0xFFe0af68).copy(0.6f)) else null
                                 ) {
@@ -350,5 +354,71 @@ fun BibleScreen(viewModel: MainViewModel) {
                 Text(lexiconDetail.second, style = MaterialTheme.typography.bodyLarge, lineHeight = 24.sp); Spacer(modifier = Modifier.height(40.dp))
             }
         }
+    }
+
+    if (modalBook != null) {
+        val targetBook = modalBook!!
+        var isDownloadingBook by remember { mutableStateOf(false) }
+        var downloadStatusText by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { if (!isDownloadingBook) modalBook = null },
+            title = { Text(targetBook.name, fontWeight = FontWeight.Black, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("${targetBook.chapters} Chapters • ${targetBook.testament} Testament • ${targetBook.textTradition.name}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+                    if (isDownloadingBook) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            Text(downloadStatusText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                selectedBook = targetBook
+                                step = "chapter"
+                                modalBook = null
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Open Chapter Selection")
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    isDownloadingBook = true
+                                    try {
+                                        for (ch in 1..targetBook.chapters) {
+                                            downloadStatusText = "Downloading Chapter $ch / ${targetBook.chapters}..."
+                                            withContext(Dispatchers.IO) {
+                                                bibleManager.scrapeChapter(targetBook.name, ch, settings.bibleGatewayVersion)
+                                                try { bibleManager.scrapeInterlinear(targetBook.name, ch) } catch (_: Exception) {}
+                                            }
+                                        }
+                                        downloadStatusText = "Complete!"
+                                    } catch (e: Exception) {
+                                        downloadStatusText = "Error: ${e.message}"
+                                    } finally {
+                                        isDownloadingBook = false
+                                        modalBook = null
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Download Entire Book")
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                if (!isDownloadingBook) {
+                    TextButton(onClick = { modalBook = null }) { Text("Close") }
+                }
+            }
+        )
     }
 }

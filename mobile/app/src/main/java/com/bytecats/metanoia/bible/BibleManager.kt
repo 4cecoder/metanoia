@@ -211,15 +211,31 @@ class BibleManager(private val context: Context) {
 
     private fun scrapeHebrewStrong(strongs: String) {
         val num = strongs.filter { it.isDigit() }
-        val request = Request.Builder().url("https://biblehub.com/hebrew/$num.htm").header("User-Agent", "Mozilla/5.0").build()
+        val formattedStrongs = if (strongs.startsWith("H") || strongs.all { it.isDigit() }) "H$num" else strongs
+        val request = Request.Builder().url("https://biblehub.com/hebrew/$num.htm").header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)").build()
         try {
             val response = client.newCall(request).execute()
-            val doc = Jsoup.parse(response.body?.string() ?: return)
-            val lemma = doc.select("span.hebrew").first()?.text()?.trim() ?: ""
+            val html = response.body?.string() ?: return
+            val doc = Jsoup.parse(html)
+            val lemma = doc.select("span.hebrew, span.greek").first()?.text()?.trim() ?: ""
             val tr = doc.select("span.translit").first()?.text()?.trim() ?: ""
-            var def = doc.select("div.strongsnt").text().trim()
-            if (def.isEmpty()) { val lb = doc.select("div#leftbox").first(); lb?.select("iframe, script, ins, .vheading")?.remove(); def = lb?.text()?.trim()?.take(3000) ?: "" }
-            if (def.isNotEmpty()) { val db = getDb(false); db.execSQL("INSERT OR REPLACE INTO lexicon (strongs, language, lemma, transliteration, definition) VALUES (?, 'hebrew', ?, ?, ?)", arrayOf(strongs, lemma, tr, def)); db.close() }
+            var def = doc.select("div.strongsnt, div.heading, div.vheading").text().trim()
+            if (def.isEmpty()) { 
+                val lb = doc.select("div#leftbox, div.maincontent").first()
+                lb?.select("iframe, script, ins")?.remove()
+                def = lb?.text()?.trim()?.take(3000) ?: "" 
+            }
+            if (def.isEmpty()) {
+                def = doc.body().text().take(1500)
+            }
+            if (def.isNotEmpty()) { 
+                val db = getDb(false)
+                db.execSQL("INSERT OR REPLACE INTO lexicon (strongs, language, lemma, transliteration, definition) VALUES (?, 'hebrew', ?, ?, ?)", arrayOf(formattedStrongs, lemma, tr, def))
+                if (formattedStrongs != strongs) {
+                    db.execSQL("INSERT OR REPLACE INTO lexicon (strongs, language, lemma, transliteration, definition) VALUES (?, 'hebrew', ?, ?, ?)", arrayOf(strongs, lemma, tr, def))
+                }
+                db.close() 
+            }
         } catch (e: Exception) { e.printStackTrace() }
     }
 
