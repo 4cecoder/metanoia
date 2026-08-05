@@ -43,7 +43,7 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
-fun BibleScreen(viewModel: MainViewModel) {
+fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {}) {
     val bibleManager = viewModel.bibleManager
     val settings = viewModel.settingsManager
     val narration by viewModel.narrationState
@@ -111,6 +111,7 @@ fun BibleScreen(viewModel: MainViewModel) {
                     navigationIcon = { if (step != "book") IconButton({ step = if (step == "read") "chapter" else "book"; isSearchVisible = (step == "book"); viewModel.stopNarration() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
                     actions = { 
                         IconButton({ isSearchVisible = !isSearchVisible }) { Icon(Icons.Default.Search, null) }
+                        IconButton({ onNavigateToSettings() }) { Icon(Icons.Default.Settings, null) }
                         if (step == "read") {
                             if (narration.isPlaying) IconButton({ viewModel.stopNarration() }) { Icon(Icons.Default.StopCircle, null, tint = Color.Red) }
                             else IconButton({ viewModel.startChapterNarration(currentChapterContent.map { (num, txt) -> Verse(num, txt) }) }) { Icon(Icons.Default.PlayCircle, null) }
