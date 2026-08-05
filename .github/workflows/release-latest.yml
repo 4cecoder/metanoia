@@ -431,3 +431,34 @@ jobs:
           files: |
             dist/Metanoia-windows-x86_64.zip
             dist/Metanoia-Setup.exe
+
+  build-android:
+    needs: [move-tag, test-kotlin]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build Android APK
+        working-directory: mobile
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Publish Android APK release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest (master @ ${{ github.sha }})"
+          body: |
+            Android: Install Metanoia.apk on your Android device.
+            Rebuilt from `${{ github.sha }}`, replaced on every push to master.
+          prerelease: true
+          files: |
+            mobile/app/build/outputs/apk/debug/app-debug.apk
+
