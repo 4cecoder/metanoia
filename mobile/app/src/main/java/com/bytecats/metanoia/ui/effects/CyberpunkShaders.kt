@@ -48,19 +48,21 @@ object CyberpunkShaders {
 
     @Language("AGSL")
     const val GLOW_AURA_SHADER = """
+        uniform shader composable;
         uniform float2 resolution;
         uniform float time;
         uniform half4 auraColor;
         
         half4 main(float2 fragCoord) {
             float2 uv = fragCoord / resolution.xy;
+            half4 orig = composable.eval(fragCoord);
             float2 center = float2(0.5, 0.5);
             float dist = distance(uv, center);
             
             float pulse = 0.5 + 0.5 * sin(time * 3.0);
             float intensity = 1.0 - smoothstep(0.0, 0.8 + 0.2 * pulse, dist);
-            
-            return half4(auraColor.rgb * half(intensity), auraColor.a * half(intensity * 0.5));
+            half4 aura = half4(auraColor.rgb * half(intensity), auraColor.a * half(intensity * 0.5));
+            return orig + aura;
         }
     """
 }
@@ -88,7 +90,7 @@ fun Modifier.cyberpunkGlowAura(time: Float, auraColor: Color = Color(0xFF7AA2F7)
             shader.setFloatUniform("resolution", size.width, size.height)
             shader.setFloatUniform("time", time)
             shader.setColorUniform("auraColor", android.graphics.Color.valueOf(auraColor.red, auraColor.green, auraColor.blue, auraColor.alpha))
-            renderEffect = RenderEffect.createRuntimeShaderEffect(shader, "content").asComposeRenderEffect()
+            renderEffect = RenderEffect.createRuntimeShaderEffect(shader, "composable").asComposeRenderEffect()
         }
     }
     return this
