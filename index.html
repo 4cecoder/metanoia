@@ -676,11 +676,11 @@
 
             <div class="grid-3">
                 <div class="glass-panel feature-card">
-                    <span class="method-badge http">HTTPS App Link</span>
-                    <h3>Web-Friendly Links</h3>
-                    <p>Standard HTTPS URLs that open verified App Links in Android or gracefully fall back to web browsers.</p>
+                    <span class="method-badge http">GitHub Pages App Link</span>
+                    <h3>Official GitHub Pages URLs</h3>
+                    <p>Standard GitHub Pages deep links verified for Android App Link auto-opening and browser navigation.</p>
                     <div class="code-block">
-                        <code>https://metanoia.bytecats.codes/bible/John/3/16</code>
+                        <code>https://4cecoder.github.io/metanoia/bible/John/3/16</code>
                         <button class="copy-btn" onclick="copyCode(this)">Copy</button>
                     </div>
                 </div>
@@ -700,7 +700,7 @@
                     <h3>Smart Abbreviation Resolution</h3>
                     <p>Supports common abbreviations ("jn", "rom", "1sam") and automatic canonical chapter/verse resolution.</p>
                     <div class="code-block">
-                        <code>https://metanoia.bytecats.codes/bible/jn/3/16</code>
+                        <code>https://4cecoder.github.io/metanoia/bible/jn/3/16</code>
                         <button class="copy-btn" onclick="copyCode(this)">Copy</button>
                     </div>
                 </div>
@@ -712,8 +712,14 @@
                 
                 <h4 style="color: var(--text-bright); margin-bottom: 0.5rem;">Kotlin / Android Intent</h4>
                 <div class="code-block">
-                    <code>val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://metanoia.bytecats.codes/bible/John/3/16"))
+                    <code>val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://4cecoder.github.io/metanoia/bible/John/3/16"))
 startActivity(intent)</code>
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+
+                <h4 style="color: var(--text-bright); margin-top: 1.5rem; margin-bottom: 0.5rem;">HTML / Web Link</h4>
+                <div class="code-block">
+                    <code>&lt;a href="https://4cecoder.github.io/metanoia/bible/Romans/8/28"&gt;Read Romans 8:28 in Metanoia&lt;/a&gt;</code>
                     <button class="copy-btn" onclick="copyCode(this)">Copy</button>
                 </div>
 
@@ -742,14 +748,14 @@ startActivity(intent)</code>
                             <td><span class="method-badge custom">Custom</span></td>
                         </tr>
                         <tr>
-                            <td><code>https://metanoia.bytecats.codes/bible/Genesis/1</code></td>
+                            <td><code>https://4cecoder.github.io/metanoia/bible/Genesis/1</code></td>
                             <td>Genesis 1 (Full Chapter)</td>
-                            <td><span class="method-badge http">HTTPS</span></td>
+                            <td><span class="method-badge http">GitHub Pages</span></td>
                         </tr>
                         <tr>
-                            <td><code>https://metanoia.bytecats.codes/bible/1Samuel/17/45</code></td>
+                            <td><code>https://4cecoder.github.io/metanoia/bible/1Samuel/17/45</code></td>
                             <td>1 Samuel 17:45</td>
-                            <td><span class="method-badge http">HTTPS</span></td>
+                            <td><span class="method-badge http">GitHub Pages</span></td>
                         </tr>
                         <tr>
                             <td><code>metanoia://bible/Enoch/1/1</code></td>
@@ -757,9 +763,9 @@ startActivity(intent)</code>
                             <td><span class="method-badge custom">Custom</span></td>
                         </tr>
                         <tr>
-                            <td><code>https://metanoia.bytecats.codes/bible/Wisdom/2/1</code></td>
+                            <td><code>https://4cecoder.github.io/metanoia/bible/Wisdom/2/1</code></td>
                             <td>Wisdom of Solomon 2:1 (Septuagint)</td>
-                            <td><span class="method-badge http">HTTPS</span></td>
+                            <td><span class="method-badge http">GitHub Pages</span></td>
                         </tr>
                     </tbody>
                 </table>
@@ -811,6 +817,25 @@ docker build -t metanoia-debug -f .opencode/docker/MetanoiaAppImage-debug.Docker
                 </div>
             </div>
         </section>
+
+        <!-- Dynamic Client-Side Path Routing for Verse Links -->
+        <script>
+            (function handleScriptureDeepLink() {
+                const path = window.location.pathname;
+                // Check if URL pattern matches /metanoia/bible/{book}/{chapter}/{verse}
+                const match = path.match(/\/bible\/([^\/]+)(?:\/(\d+))?(?:\/(\d+))?/i);
+                if (match) {
+                    const book = match[1];
+                    const chapter = match[2] || '1';
+                    const verse = match[3] || '1';
+                    const intentUri = `metanoia://bible/${book}/${chapter}/${verse}`;
+                    
+                    // Show a toast / notice or attempt auto-redirect
+                    console.log(`Detected scripture deep link: ${book} ${chapter}:${verse}`);
+                    window.location.href = intentUri;
+                }
+            })();
+        </script>
 
         <!-- Footer -->
         <footer>
