@@ -56,11 +56,13 @@ fun BibleScreen(viewModel: MainViewModel) {
     var highlights by remember(selectedBook, selectedChapter) { mutableStateOf<Map<Int, Int>>(emptyMap()) }
     var expandedVerses by remember(selectedBook, selectedChapter) { mutableStateOf<Set<Int>>(emptySet()) }
     var chapterWordCounts by remember(selectedBook) { mutableStateOf<Map<Int, Int>>(emptyMap()) }
+    var downloadedChapters by remember(selectedBook) { mutableStateOf<Set<Int>>(emptySet()) }
     
     LaunchedEffect(selectedBook) {
         if (selectedBook != null) {
             withContext(Dispatchers.IO) {
                 chapterWordCounts = bibleManager.getChapterWordCounts(selectedBook!!.name)
+                downloadedChapters = bibleManager.getDownloadedChapters(selectedBook!!.name)
             }
         }
     }
@@ -255,6 +257,7 @@ fun BibleScreen(viewModel: MainViewModel) {
                         LazyVerticalGrid(columns = GridCells.Fixed(5), modifier = Modifier.padding(16.dp)) {
                             items((1..(selectedBook?.chapters ?: 1)).toList()) { ch ->
                                 val wordCount = chapterWordCounts[ch] ?: 0
+                                val isDownloaded = downloadedChapters.contains(ch)
                                 Card(
                                     modifier = Modifier.padding(4.dp).aspectRatio(1f).clickable { 
                                         selectedChapter = ch; 
@@ -262,7 +265,8 @@ fun BibleScreen(viewModel: MainViewModel) {
                                         highlights = bibleManager.getHighlights(selectedBook!!.name, ch); 
                                         step = "read" 
                                     },
-                                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                                    colors = CardDefaults.cardColors(containerColor = if (isDownloaded) Color(0xFF9ece6a).copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant),
+                                    border = if (isDownloaded) BorderStroke(1.dp, Color(0xFF9ece6a)) else BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                                 ) { 
                                     Box(modifier = Modifier.fillMaxSize()) { 
                                         Text("$ch", modifier = Modifier.align(Alignment.Center)) 

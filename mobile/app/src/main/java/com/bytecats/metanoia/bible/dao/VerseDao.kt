@@ -181,4 +181,15 @@ class VerseDao(private val openDb: () -> SQLiteDatabase) {
         cursor.close(); db.close()
         return wordCounts
     }
+
+    fun getDownloadedChapters(book: String): Set<Int> {
+        val downloaded = mutableSetOf<Int>()
+        val db = openDb()
+        val cursor = db.rawQuery("SELECT DISTINCT chapter FROM verses WHERE book = ?", arrayOf(book))
+        while (cursor.moveToNext()) {
+            downloaded.add(cursor.getInt(0))
+        }
+        cursor.close(); db.close()
+        return downloaded
+    }
 }
