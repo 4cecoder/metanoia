@@ -17,11 +17,25 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.bytecats.metanoia.ui.components.ModuleCard
 import com.bytecats.metanoia.viewmodel.MainViewModel
+import com.bytecats.metanoia.ui.effects.cyberpunkHudBackground
+import com.bytecats.metanoia.ui.effects.cyberpunkGlowAura
+import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.getValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainMenu(navController: NavController, viewModel: MainViewModel) {
+    val time by produceState(initialValue = 0f) {
+        while (true) {
+            withInfiniteAnimationFrameMillis {
+                value = it / 1000f
+            }
+        }
+    }
+
     Scaffold(
+        modifier = Modifier.cyberpunkHudBackground(time),
         topBar = {
             CenterAlignedTopAppBar(
                 title = { 
@@ -76,18 +90,18 @@ fun MainMenu(navController: NavController, viewModel: MainViewModel) {
             // HIGH-FIDELITY CORE MODULE GRID
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    ModuleCard("BIBLE", "Reader", Icons.AutoMirrored.Filled.MenuBook, Color(0xFF9ece6a), Modifier.weight(1f)) {
+                    ModuleCard("BIBLE", "Reader", Icons.AutoMirrored.Filled.MenuBook, Color(0xFF9ece6a), Modifier.weight(1f).cyberpunkGlowAura(time, Color(0xFF9ece6a).copy(alpha = 0.3f))) {
                         navController.navigate("bible")
                     }
-                    ModuleCard("COLLECTION", "Scholarship", Icons.Default.CollectionsBookmark, Color(0xFFbb9af7), Modifier.weight(1f)) {
+                    ModuleCard("COLLECTION", "Scholarship", Icons.Default.CollectionsBookmark, Color(0xFFbb9af7), Modifier.weight(1f).cyberpunkGlowAura(time, Color(0xFFbb9af7).copy(alpha = 0.3f))) {
                         navController.navigate("collection")
                     }
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    ModuleCard("DATA", "Management", Icons.Default.Storage, Color(0xFFf7768e), Modifier.weight(1f)) {
+                    ModuleCard("DATA", "Management", Icons.Default.Storage, Color(0xFFf7768e), Modifier.weight(1f).cyberpunkGlowAura(time, Color(0xFFf7768e).copy(alpha = 0.3f))) {
                         navController.navigate("data_management")
                     }
-                    ModuleCard("LABS", "Research", Icons.Default.Science, Color(0xFFff9e6a), Modifier.weight(1f)) {
+                    ModuleCard("LABS", "Research", Icons.Default.Science, Color(0xFFff9e6a), Modifier.weight(1f).cyberpunkGlowAura(time, Color(0xFFff9e6a).copy(alpha = 0.3f))) {
                         navController.navigate("experimental_hub")
                     }
                 }
@@ -96,7 +110,7 @@ fun MainMenu(navController: NavController, viewModel: MainViewModel) {
                 // card size/rhythm as the 2x2 grid above instead of looking
                 // like a broken layout.
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    ModuleCard("MY READING", "Habits", Icons.Default.Insights, Color(0xFF9ece6a), Modifier.weight(1f)) {
+                    ModuleCard("MY READING", "Habits", Icons.Default.Insights, Color(0xFF9ece6a), Modifier.weight(1f).cyberpunkGlowAura(time, Color(0xFF9ece6a).copy(alpha = 0.3f))) {
                         navController.navigate("reading_stats")
                     }
                     Spacer(modifier = Modifier.weight(1f))
