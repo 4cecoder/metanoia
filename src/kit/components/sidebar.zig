@@ -39,6 +39,7 @@ pub const SidebarCallbacks = struct {
 
 pub const Sidebar = struct {
     box: ?*ffi.GtkWidget,
+    content: ?*ffi.GtkWidget,
     voice_dropdown: ?*ffi.GtkWidget,
     log_buffer: ?*anyopaque,
 
@@ -58,9 +59,16 @@ pub const Sidebar = struct {
         const sidebar = ffi.gtk_box_new(ffi.GTK_ORIENTATION_VERTICAL, 15);
         ffi.gtk_widget_add_css_class(sidebar, "sidebar");
         ffi.gtk_widget_set_size_request(sidebar, 250, -1);
+        ffi.gtk_widget_set_vexpand(sidebar, true);
+
+        const scroll = ffi.gtk_scrolled_window_new();
+        ffi.gtk_widget_set_vexpand(scroll, true);
+        ffi.gtk_scrolled_window_set_policy(@ptrCast(scroll), ffi.GTK_POLICY_NEVER, ffi.GTK_POLICY_AUTOMATIC);
+        ffi.gtk_scrolled_window_set_child(@ptrCast(scroll), sidebar);
 
         self.* = .{
-            .box = sidebar,
+            .box = scroll,
+            .content = sidebar,
             .voice_dropdown = null,
             .log_buffer = null,
             .allocator = allocator,
@@ -83,7 +91,7 @@ pub const Sidebar = struct {
         const expander = ffi.gtk_expander_new("Chapter Summary");
         ffi.gtk_widget_add_css_class(expander, "sidebar-expander");
         ffi.gtk_expander_set_expanded(@ptrCast(expander), true);
-        ffi.gtk_box_append(@ptrCast(self.box), expander);
+        ffi.gtk_box_append(@ptrCast(self.content), expander);
 
         self.summary_label = @ptrCast(ffi.gtk_label_new("No summary loaded"));
         ffi.gtk_label_set_wrap(self.summary_label, true);
@@ -100,7 +108,7 @@ pub const Sidebar = struct {
         const expander = ffi.gtk_expander_new("Word Study");
         ffi.gtk_widget_add_css_class(expander, "sidebar-expander");
         ffi.gtk_expander_set_expanded(@ptrCast(expander), true);
-        ffi.gtk_box_append(@ptrCast(self.box), expander);
+        ffi.gtk_box_append(@ptrCast(self.content), expander);
 
         const word_study_box = ffi.gtk_box_new(ffi.GTK_ORIENTATION_VERTICAL, 10);
         ffi.gtk_expander_set_child(@ptrCast(expander), word_study_box);
@@ -125,7 +133,7 @@ pub const Sidebar = struct {
         const expander = ffi.gtk_expander_new("Verse Notes");
         ffi.gtk_widget_add_css_class(expander, "sidebar-expander");
         ffi.gtk_expander_set_expanded(@ptrCast(expander), true);
-        ffi.gtk_box_append(@ptrCast(self.box), expander);
+        ffi.gtk_box_append(@ptrCast(self.content), expander);
 
         const notes_box = ffi.gtk_box_new(ffi.GTK_ORIENTATION_VERTICAL, 8);
         ffi.gtk_expander_set_child(@ptrCast(expander), notes_box);
@@ -141,7 +149,7 @@ pub const Sidebar = struct {
         const expander = ffi.gtk_expander_new("Permanent Highlight");
         ffi.gtk_widget_add_css_class(expander, "sidebar-expander");
         ffi.gtk_expander_set_expanded(@ptrCast(expander), true);
-        ffi.gtk_box_append(@ptrCast(self.box), expander);
+        ffi.gtk_box_append(@ptrCast(self.content), expander);
 
         const colors_grid = ffi.gtk_flow_box_new();
         ffi.gtk_flow_box_set_min_children_per_line(@ptrCast(colors_grid), 4);
@@ -178,7 +186,7 @@ pub const Sidebar = struct {
         const expander = ffi.gtk_expander_new("TTS Control Center");
         ffi.gtk_widget_add_css_class(expander, "sidebar-expander");
         ffi.gtk_expander_set_expanded(@ptrCast(expander), true);
-        ffi.gtk_box_append(@ptrCast(self.box), expander);
+        ffi.gtk_box_append(@ptrCast(self.content), expander);
 
         const v_box = ffi.gtk_box_new(ffi.GTK_ORIENTATION_VERTICAL, 8);
         ffi.gtk_expander_set_child(@ptrCast(expander), v_box);
@@ -196,7 +204,7 @@ pub const Sidebar = struct {
         const expander = ffi.gtk_expander_new("System Logs");
         ffi.gtk_widget_add_css_class(expander, "sidebar-expander");
         ffi.gtk_expander_set_expanded(@ptrCast(expander), false);
-        ffi.gtk_box_append(@ptrCast(self.box), expander);
+        ffi.gtk_box_append(@ptrCast(self.content), expander);
 
         const scroll = ffi.gtk_scrolled_window_new();
         ffi.gtk_widget_set_size_request(scroll, -1, 150);

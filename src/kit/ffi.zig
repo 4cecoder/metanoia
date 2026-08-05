@@ -42,6 +42,10 @@ pub const GTK_ALIGN_END = 2;
 pub const GTK_ALIGN_CENTER = 3;
 pub const GTK_ALIGN_BASELINE = 4;
 
+pub const GTK_POLICY_ALWAYS = 0;
+pub const GTK_POLICY_AUTOMATIC = 1;
+pub const GTK_POLICY_NEVER = 2;
+
 // ──────────────── Application ────────────────
 
 pub extern fn gtk_application_new(application_id: ?[*:0]const u8, flags: i32) ?*GtkApplication;
@@ -111,6 +115,7 @@ pub extern fn gtk_image_set_from_icon_name(image: ?*anyopaque, icon_name: [*:0]c
 
 pub extern fn gtk_scrolled_window_new() ?*GtkWidget;
 pub extern fn gtk_scrolled_window_set_child(sw: ?*GtkScrolledWindow, child: ?*GtkWidget) void;
+pub extern fn gtk_scrolled_window_set_policy(sw: ?*GtkScrolledWindow, hscrollbar_policy: i32, vscrollbar_policy: i32) void;
 pub extern fn gtk_scrolled_window_get_vadjustment(sw: ?*GtkScrolledWindow) ?*GtkAdjustment;
 pub extern fn gtk_adjustment_set_value(adj: ?*GtkAdjustment, value: f64) void;
 pub extern fn gtk_adjustment_get_value(adj: ?*GtkAdjustment) f64;
