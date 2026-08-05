@@ -1,0 +1,35 @@
+name: Create Anonymous Issue Dispatch
+
+on:
+  repository_dispatch:
+    types: [public_issue_submission]
+  workflow_dispatch:
+    inputs:
+      title:
+        description: 'Issue Title'
+        required: true
+      body:
+        description: 'Issue Body'
+        required: true
+      labels:
+        description: 'Labels'
+        required: false
+        default: 'user-feedback'
+
+jobs:
+  create_issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub Issue from User Dispatch
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: ${{ github.event.client_payload.title || github.event.inputs.title }}
+          content-filepath: ''
+          issue-number: ''
+          labels: ${{ github.event.client_payload.labels || 'user-feedback' }}
+          body: |
+            ${{ github.event.client_payload.body || github.event.inputs.body }}
+
+            ---
+            *Submitted anonymously via Metanoia Public Feedback Portal*
