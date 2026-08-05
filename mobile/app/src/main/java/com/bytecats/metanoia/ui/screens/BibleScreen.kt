@@ -38,6 +38,7 @@ import com.bytecats.metanoia.models.Verse
 import com.bytecats.metanoia.ui.components.HighlightedText
 import com.bytecats.metanoia.viewmodel.MainViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -58,11 +59,32 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
     var chapterWordCounts by remember(selectedBook) { mutableStateOf<Map<Int, Int>>(emptyMap()) }
     var downloadedChapters by remember(selectedBook) { mutableStateOf<Set<Int>>(emptySet()) }
     
+    var chapterReadingTimes by remember(selectedBook) { mutableStateOf<Map<Int, Long>>(emptyMap()) }
+    
     LaunchedEffect(selectedBook) {
         if (selectedBook != null) {
             withContext(Dispatchers.IO) {
                 chapterWordCounts = bibleManager.getChapterWordCounts(selectedBook!!.name)
                 downloadedChapters = bibleManager.getDownloadedChapters(selectedBook!!.name)
+                chapterReadingTimes = bibleManager.getChapterReadingTimes(selectedBook!!.name)
+            }
+        }
+    }
+
+    LaunchedEffect(step, selectedBook, selectedChapter) {
+        if (step == "read" && selectedBook != null) {
+            var activeSeconds = 0L
+            while (true) {
+                kotlinx.coroutines.delay(1000L)
+                activeSeconds += 1L
+                if (activeSeconds % 5L == 0L) {
+                    val bookName = selectedBook!!.name
+                    val ch = selectedChapter
+                    withContext(Dispatchers.IO) {
+                        bibleManager.recordReadingTime(bookName, ch, 5L)
+                        chapterReadingTimes = bibleManager.getChapterReadingTimes(bookName)
+                    }
+                }
             }
         }
     }
@@ -271,14 +293,28 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
                                 ) { 
                                     Box(modifier = Modifier.fillMaxSize()) { 
                                         Text("$ch", modifier = Modifier.align(Alignment.Center)) 
+                                        val timeSpentSec = chapterReadingTimes[ch] ?: 0L
+                                        if (timeSpentSec > 0) {
+                                            val minutes = timeSpentSec / 60
+                                            val sec = timeSpentSec % 60
+                                            val timeStr = if (minutes > 0) "${minutes}m" else "${sec}s"
+                                            Text(
+                                                text = timeStr,
+                                                modifier = Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = 2.dp),
+                                                fontSize = 8.sp,
+                                                color = Color(0xFFe0af68).copy(alpha = 0.9f),
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                            )
+                                        }
                                         if (wordCount > 0) {
                                             Text(
                                                 text = "$wordCount",
                                                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 4.dp, bottom = 2.dp),
                                                 fontSize = 8.sp,
                                                 color = Color(0xFF7aa2f7).copy(alpha = 0.8f),
-                                                fontWeight = FontWeight.Medium,
-                                                style = androidx.compose.ui.text.TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                                             )
                                         }
                                     } 

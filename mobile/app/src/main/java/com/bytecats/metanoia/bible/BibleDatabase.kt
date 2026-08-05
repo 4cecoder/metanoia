@@ -56,7 +56,7 @@ class BibleDatabase(private val context: Context) {
                   INSERT INTO verses_fts(docid, book, chapter, verse, text) VALUES (new.rowid, new.book, new.chapter, new.verse, new.text);
                 END;
             """.trimIndent())
-            db.execSQL("CREATE TABLE IF NOT EXISTS reading_progress (book TEXT, chapter INTEGER, first_read_at INTEGER, last_read_at INTEGER, read_count INTEGER, PRIMARY KEY(book, chapter))")
+            db.execSQL("CREATE TABLE IF NOT EXISTS reading_progress (book TEXT, chapter INTEGER, first_read_at INTEGER, last_read_at INTEGER, read_count INTEGER, reading_time_seconds INTEGER DEFAULT 0, PRIMARY KEY(book, chapter))")
             db.execSQL("CREATE TABLE IF NOT EXISTS reading_events (id INTEGER PRIMARY KEY AUTOINCREMENT, book TEXT, chapter INTEGER, timestamp INTEGER)")
             db.close()
         } catch (e: Exception) {
@@ -89,6 +89,8 @@ class BibleDatabase(private val context: Context) {
     fun getBookCompletion(): Map<String, Float> = verse.getBookCompletion()
     fun getChapterWordCounts(book: String): Map<Int, Int> = verse.getChapterWordCounts(book)
     fun getDownloadedChapters(book: String): Set<Int> = verse.getDownloadedChapters(book)
+    fun recordReadingTime(book: String, chapter: Int, additionalSeconds: Long) = readingAnalytics.recordReadingTime(book, chapter, additionalSeconds)
+    fun getChapterReadingTimes(book: String): Map<Int, Long> = readingAnalytics.getChapterReadingTimes(book)
 
     fun saveFavorite(strongs: String, lemma: String, definition: String) = favorites.saveFavorite(strongs, lemma, definition)
     fun getFavorites(): List<Favorite> = favorites.getFavorites()

@@ -248,6 +248,8 @@ class BibleManager(private val context: Context) {
     fun getDayOfWeekCounts(): IntArray = database.getDayOfWeekCounts()
     fun getHourOfDayCounts(): IntArray = database.getHourOfDayCounts()
     fun getTestamentReadCounts(): Map<String, Int> = database.getTestamentReadCounts()
+    fun recordReadingTime(book: String, chapter: Int, additionalSeconds: Long) = database.recordReadingTime(book, chapter, additionalSeconds)
+    fun getChapterReadingTimes(book: String): Map<Int, Long> = database.getChapterReadingTimes(book)
     fun getChapterWordCounts(book: String): Map<Int, Int> = database.getChapterWordCounts(book)
     fun getDownloadedChapters(book: String): Set<Int> = database.getDownloadedChapters(book)
 

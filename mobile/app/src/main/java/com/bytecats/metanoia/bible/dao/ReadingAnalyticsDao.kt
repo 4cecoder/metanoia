@@ -12,16 +12,17 @@ class ReadingAnalyticsDao(private val openDb: () -> SQLiteDatabase) {
         db.beginTransaction()
         try {
             val cursor = db.rawQuery(
-                "SELECT read_count, first_read_at FROM reading_progress WHERE book = ? AND chapter = ?",
+                "SELECT read_count, first_read_at, reading_time_seconds FROM reading_progress WHERE book = ? AND chapter = ?",
                 arrayOf(book, chapter.toString())
             )
             val existed = cursor.moveToFirst()
             val prevCount = if (existed) cursor.getInt(0) else 0
             val firstReadAt = if (existed) cursor.getLong(1) else now
+            val prevTime = if (existed && cursor.columnCount > 2) cursor.getLong(2) else 0L
             cursor.close()
             db.execSQL(
-                "INSERT OR REPLACE INTO reading_progress (book, chapter, first_read_at, last_read_at, read_count) VALUES (?, ?, ?, ?, ?)",
-                arrayOf(book, chapter, firstReadAt, now, prevCount + 1)
+                "INSERT OR REPLACE INTO reading_progress (book, chapter, first_read_at, last_read_at, read_count, reading_time_seconds) VALUES (?, ?, ?, ?, ?, ?)",
+                arrayOf(book, chapter, firstReadAt, now, prevCount + 1, prevTime)
             )
             db.execSQL(
                 "INSERT INTO reading_events (book, chapter, timestamp) VALUES (?, ?, ?)",
@@ -29,6 +30,41 @@ class ReadingAnalyticsDao(private val openDb: () -> SQLiteDatabase) {
             )
             db.setTransactionSuccessful()
         } finally { db.endTransaction(); db.close() }
+    }
+
+    fun recordReadingTime(book: String, chapter: Int, additionalSeconds: Long) {
+        if (additionalSeconds <= 0) return
+        val db = openDb()
+        val now = System.currentTimeMillis()
+        db.beginTransaction()
+        try {
+            val cursor = db.rawQuery(
+                "SELECT read_count, first_read_at, reading_time_seconds FROM reading_progress WHERE book = ? AND chapter = ?",
+                arrayOf(book, chapter.toString())
+            )
+            val existed = cursor.moveToFirst()
+            val prevCount = if (existed) cursor.getInt(0) else 0
+            val firstReadAt = if (existed) cursor.getLong(1) else now
+            val prevTime = if (existed && cursor.columnCount > 2) cursor.getLong(2) else 0L
+            cursor.close()
+
+            db.execSQL(
+                "INSERT OR REPLACE INTO reading_progress (book, chapter, first_read_at, last_read_at, read_count, reading_time_seconds) VALUES (?, ?, ?, ?, ?, ?)",
+                arrayOf(book, chapter, firstReadAt, now, prevCount, prevTime + additionalSeconds)
+            )
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction(); db.close() }
+    }
+
+    fun getChapterReadingTimes(book: String): Map<Int, Long> {
+        val map = mutableMapOf<Int, Long>()
+        val db = openDb()
+        val cursor = db.rawQuery("SELECT chapter, reading_time_seconds FROM reading_progress WHERE book = ?", arrayOf(book))
+        while (cursor.moveToNext()) {
+            map[cursor.getInt(0)] = cursor.getLong(1)
+        }
+        cursor.close(); db.close()
+        return map
     }
 
     fun getReadCompletion(): Map<String, Float> {
