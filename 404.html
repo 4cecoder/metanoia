@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metanoia - Scripture Deep Link</title>
+    <script>
+        (function redirectScriptureIntent() {
+            // Get current pathname e.g. /metanoia/bible/John/3/16 or /bible/John/3/16
+            const path = window.location.pathname;
+            const match = path.match(/\/bible\/([^\/]+)(?:\/(\d+))?(?:\/(\d+))?/i);
+            
+            if (match) {
+                const book = match[1];
+                const chapter = match[2] || '1';
+                const verse = match[3] || '1';
+                const customSchemeUri = `metanoia://bible/${book}/${chapter}/${verse}`;
+                
+                // Attempt to open in app via custom scheme intent
+                window.location.href = customSchemeUri;
+
+                // After a short timeout if app isn't installed, redirect back to root website home page
+                setTimeout(function() {
+                    window.location.href = 'https://4cecoder.github.io/metanoia/?fallback=true';
+                }, 2000);
+            } else {
+                window.location.href = 'https://4cecoder.github.io/metanoia/';
+            }
+        })();
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #090b10;
+            color: #c0caf5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .card {
+            background: rgba(20, 25, 36, 0.85);
+            padding: 2.5rem;
+            border-radius: 16px;
+            border: 1px solid rgba(186, 187, 208, 0.12);
+            max-width: 450px;
+        }
+        h2 { color: #7aa2f7; margin-bottom: 1rem; }
+        p { color: #7982a9; font-size: 0.95rem; margin-bottom: 1.5rem; }
+        a {
+            display: inline-block;
+            background: #7aa2f7;
+            color: #090b10;
+            padding: 0.75rem 1.5rem;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Opening Metanoia...</h2>
+        <p>Redirecting to Scripture passage in your Metanoia app.</p>
+        <a href="https://4cecoder.github.io/metanoia/">Return to Portal Home</a>
+    </div>
+</body>
+</html>
