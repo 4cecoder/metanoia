@@ -34,13 +34,18 @@ fun LexiconSheet(
                 .verticalScroll(rememberScrollState())
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                val isHebrew = word.strongs.startsWith("H") || detail.lemma.any { it in '\u0590'..'\u05FF' }
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        detail.lemma.ifEmpty { word.original },
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.ui.platform.LocalLayoutDirection provides (if (isHebrew) androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr)
+                    ) {
+                        Text(
+                            detail.lemma.ifEmpty { word.original },
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.Black,
+                            color = if (isHebrew) Color(0xFFe0af68) else MaterialTheme.colorScheme.primary
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         word.strongs,

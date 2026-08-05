@@ -343,17 +343,13 @@ fun BibleScreen(viewModel: MainViewModel) {
     }
 
     if (showLexiconSheet && lexiconWord != null) {
-        ModalBottomSheet(onDismissRequest = { showLexiconSheet = false; lexiconDetail = Pair("", "Loading...") }) {
-            Column(modifier = Modifier.padding(24.dp).fillMaxWidth().verticalScroll(rememberScrollState())) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { Text(lexiconDetail.first.ifEmpty { lexiconWord!!.original }, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary); Text(lexiconWord!!.strongs, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline) }
-                    IconButton({ viewModel.speak(lexiconDetail.second) }) { Icon(Icons.AutoMirrored.Filled.VolumeUp, "Speak", tint = MaterialTheme.colorScheme.primary) }
-                    IconButton({ bibleManager.saveFavorite(lexiconWord!!.strongs, lexiconDetail.first, lexiconDetail.second) }) { Icon(Icons.Default.Diamond, "Pin", tint = Color(0xFFbb9af7)) }
-                }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                Text(lexiconDetail.second, style = MaterialTheme.typography.bodyLarge, lineHeight = 24.sp); Spacer(modifier = Modifier.height(40.dp))
-            }
-        }
+        com.bytecats.metanoia.ui.components.bible.LexiconSheet(
+            word = lexiconWord!!,
+            detail = com.bytecats.metanoia.models.LexiconEntry(lexiconDetail.first, lexiconDetail.second),
+            onDismiss = { showLexiconSheet = false; lexiconDetail = Pair("", "Loading...") },
+            onSpeak = { viewModel.speak(it) },
+            onFavorite = { strongs, lemma, def -> bibleManager.saveFavorite(strongs, lemma, def) }
+        )
     }
 
     if (modalBook != null) {
