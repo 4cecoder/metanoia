@@ -1105,19 +1105,30 @@ startActivity(intent)</code>
             bgMesh.position.z = -2;
             scene.add(bgMesh);
 
-            // 3. Glowing Particle Stars
-            const particleCount = 800;
+            // 3. Layered 3D Floating Geometric Wireframe Grid (Zero lag, extremely lightweight)
+            const gridGeo = new THREE.PlaneGeometry(16, 16, 24, 24);
+            const gridMat = new THREE.MeshBasicMaterial({
+                color: 0x7aa2f7,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.08
+            });
+            const gridMesh = new THREE.Mesh(gridGeo, gridMat);
+            gridMesh.position.z = -1;
+            gridMesh.rotation.x = -Math.PI * 0.35;
+            scene.add(gridMesh);
+
+            // 4. Multi-Layered Glowing Particle Constellations
+            const particleCount = 450; // Optimized count for 60fps performance
             const particlesGeometry = new THREE.BufferGeometry();
             const posArray = new Float32Array(particleCount * 3);
             const sizesArray = new Float32Array(particleCount);
             
             for(let i = 0; i < particleCount * 3; i+=3) {
-                // Spread particles in a 3D volume
-                posArray[i] = (Math.random() - 0.5) * 12;
-                posArray[i+1] = (Math.random() - 0.5) * 12;
-                posArray[i+2] = (Math.random() - 0.5) * 6;
-                
-                sizesArray[i/3] = Math.random() * 2.0;
+                posArray[i] = (Math.random() - 0.5) * 14;
+                posArray[i+1] = (Math.random() - 0.5) * 14;
+                posArray[i+2] = (Math.random() - 0.5) * 8;
+                sizesArray[i/3] = Math.random() * 2.5;
             }
             
             particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
@@ -1192,9 +1203,12 @@ startActivity(intent)</code>
                 camera.position.y = -mouse.y * 0.5;
                 camera.lookAt(scene.position);
                 
-                // Parallax for particle system
+                // Parallax for particle system & 3D wireframe grid
                 particleSystem.rotation.y = mouse.x * 0.3 + dt * 0.02;
                 particleSystem.rotation.x = mouse.y * 0.3;
+                gridMesh.rotation.z = mouse.x * 0.15 + dt * 0.01;
+                gridMesh.position.x = mouse.x * 0.4;
+                gridMesh.position.y = -mouse.y * 0.4;
 
                 // Move liquid background slightly with mouse for added depth
                 bgMesh.position.x = mouse.x * 0.2;
