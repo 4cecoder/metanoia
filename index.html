@@ -11,7 +11,7 @@
     <link rel="icon" type="image/svg+xml" href="logo.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Fira+Code:wght@400;600&family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;600;800&family=Space+Grotesk:wght@500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@600;800;900&family=Fira+Code:wght@400;600&family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;600;800&family=Space+Grotesk:wght@500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
@@ -263,15 +263,27 @@
         }
 
         .hero h1 {
-            font-size: 3.5rem;
-            font-weight: 800;
-            line-height: 1.15;
+            font-family: 'Cinzel Decorative', 'Cinzel', serif;
+            font-size: 3.8rem;
+            font-weight: 900;
+            line-height: 1.18;
             color: var(--text-bright);
             margin-bottom: 1.25rem;
-            letter-spacing: -0.03em;
-            background: linear-gradient(135deg, #ffffff 0%, var(--text-primary) 50%, var(--accent) 100%);
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #ffffff 0%, #c0caf5 35%, var(--accent) 70%, var(--purple-accent) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 4px 18px rgba(122, 162, 247, 0.45));
+            text-transform: uppercase;
+        }
+
+        .hero h1 span.highlight {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--cyan-accent) 0%, var(--accent) 50%, var(--purple-accent) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: inline-block;
         }
 
         .hero p {
@@ -602,7 +614,7 @@
         <!-- Hero Section -->
         <section class="hero">
             <div class="hero-badge">⚡ Native Zig + GTK4 & Kotlin Android</div>
-            <h1>Universal Biblical Corpus & AI Voice Platform</h1>
+            <h1>Universal Biblical Corpus <br>& <span class="highlight">AI Voice Platform</span></h1>
             <p>
                 Metanoia is a high-performance cross-platform Bible reader built for discovering unedited ancient texts. 
                 Featuring complete multi-canonical indexing across Masoretic, Septuagint, and Ethiopic traditions, native local AI voice generation, and deep-linking integration.
