@@ -38,6 +38,9 @@ fun SettingsDashboard(navController: NavController) {
             SettingsLink("Changelog", "Recent commits and version history", Icons.Default.History) {
                 navController.navigate("settings_changelog")
             }
+            SettingsLink("Report Issue", "Submit feedback or report bugs securely", Icons.Default.BugReport) {
+                navController.navigate("settings_issues")
+            }
         }
     }
 }

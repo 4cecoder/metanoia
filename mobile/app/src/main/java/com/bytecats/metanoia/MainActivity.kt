@@ -98,6 +98,9 @@ class MainActivity : ComponentActivity() {
                     composable("settings_changelog") {
                         com.bytecats.metanoia.ui.screens.settings.ChangelogScreen { navController.popBackStack() }
                     }
+                    composable("settings_issues") {
+                        com.bytecats.metanoia.ui.screens.settings.ReportIssueScreen { navController.popBackStack() }
+                    }
                 }
             }
         }
