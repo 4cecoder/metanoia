@@ -70,7 +70,8 @@ object UpdateChecker {
             if (assets != null) {
                 for (i in 0 until assets.length()) {
                     val asset = assets.optJSONObject(i) ?: continue
-                    if (asset.optString("name") == APK_ASSET_NAME) {
+                    val name = asset.optString("name", "")
+                    if (name.lowercase().endsWith(".apk")) {
                         downloadUrl = asset.optString("browser_download_url", "").ifBlank { null }
                         break
                     }
