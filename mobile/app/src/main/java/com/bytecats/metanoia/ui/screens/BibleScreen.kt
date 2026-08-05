@@ -41,6 +41,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.bytecats.metanoia.ui.effects.cyberpunkHudBackground
+import com.bytecats.metanoia.ui.effects.cyberpunkGlowAura
+import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -48,6 +51,14 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
     val bibleManager = viewModel.bibleManager
     val settings = viewModel.settingsManager
     val narration by viewModel.narrationState
+
+    val time by produceState(initialValue = 0f) {
+        while (true) {
+            withInfiniteAnimationFrameMillis {
+                value = it / 1000f
+            }
+        }
+    }
     
     var step by remember { mutableStateOf("book") } 
     var selectedBook by remember { mutableStateOf<BibleBook?>(null) }
@@ -126,6 +137,7 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
     }
 
     Scaffold(
+        modifier = Modifier.cyberpunkHudBackground(time),
         topBar = {
             Column {
                 TopAppBar(
@@ -214,7 +226,9 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
                                 val lerpedColorInt = ReadingStats.lerpColor(baseColor, readGreen, progress)
                                 val containerColor = if (progress > 0f) Color(lerpedColorInt).copy(alpha = if (progress >= 1f) 0.35f else 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                                 Card(
-                                    modifier = Modifier.padding(4.dp).height(68.dp).combinedClickable(
+                                    modifier = Modifier.padding(4.dp).height(68.dp).let {
+                                        if (progress >= 1f) it.cyberpunkGlowAura(time, Color(0xFF9ece6a).copy(alpha = 0.3f)) else it
+                                    }.combinedClickable(
                                         onClick = { selectedBook = book; step = "chapter"; isSearchVisible = false },
                                         onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); modalBook = book }
                                     ),
@@ -282,7 +296,9 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
                                 val wordCount = chapterWordCounts[ch] ?: 0
                                 val isDownloaded = downloadedChapters.contains(ch)
                                 Card(
-                                    modifier = Modifier.padding(4.dp).aspectRatio(1f).clickable { 
+                                    modifier = Modifier.padding(4.dp).aspectRatio(1f).let {
+                                        if (isDownloaded) it.cyberpunkGlowAura(time, Color(0xFF9ece6a).copy(alpha = 0.2f)) else it
+                                    }.clickable { 
                                         selectedChapter = ch; 
                                         currentChapterContent = bibleManager.getChapter(selectedBook!!.name, ch); 
                                         highlights = bibleManager.getHighlights(selectedBook!!.name, ch); 
@@ -425,7 +441,14 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
                                 scope.launch {
                                     isDownloadingBook = true
                                     try {
-                                        for (ch in 1..targetBook.chapters) {
+                                        val existing = withContext(Dispatchers.IO) { bibleManager.getDownloadedChapters(targetBook.name) }
+                                        val maxExisting = existing.maxOrNull() ?: 0
+                                        // Start from maxExisting (re-download last chapter just in case) or 1
+                                        val startCh = if (maxExisting > 0) maxExisting else 1
+                                        for (ch in startCh..targetBook.chapters) {
+                                            if (existing.contains(ch) && ch < maxExisting) {
+                                                continue // Skip already completed chapters
+                                            }
                                             downloadStatusText = "Downloading Chapter $ch / ${targetBook.chapters}..."
                                             withContext(Dispatchers.IO) {
                                                 bibleManager.scrapeChapter(targetBook.name, ch, settings.bibleGatewayVersion)
