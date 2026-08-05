@@ -31,6 +31,7 @@ import com.bytecats.metanoia.models.Verse
 fun hasHebrewChars(text: String): Boolean =
     text.any { it in '\u0590'..'\u05FF' || it in '\uFB1D'..'\uFB4F' }
 
+
 /**
  * A single verse in the reader: verse number row + main text + optional interlinear expansion.
  */
@@ -208,9 +209,9 @@ private fun InterlinearWordItem(
     }
 }
 
-private fun verseBackground(isCurrent: Boolean, highlight: Int, primary: Color): Color {
+internal fun verseBackground(isCurrent: Boolean, highlight: Int, primary: Color): Color {
     return when {
-        isCurrent -> primary.copy(0.15f)
+        isCurrent -> primary.copy(alpha = 0.15f)
         highlight != 0 -> Color(highlight.toLong()).copy(alpha = 0.3f)
         else -> Color.Transparent
     }
