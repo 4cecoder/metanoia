@@ -161,7 +161,52 @@ class UniversalBibleSearch {
             bySection = bySection.mapKeys { it.key.name }.mapValues { it.value.size }
         )
     }
+
+    /**
+     * Map common Bible book abbreviations to their canonical full name.
+     */
+    fun resolveBookAbbreviation(input: String): String? {
+        val clean = input.lowercase().replace(".", "").trim()
+        val abbreviations = mapOf(
+            "gen" to "Genesis", "ex" to "Exodus", "exod" to "Exodus", "lev" to "Leviticus",
+            "num" to "Numbers", "deut" to "Deuteronomy", "dt" to "Deuteronomy", "josh" to "Joshua",
+            "judg" to "Judges", "ruth" to "Ruth", "1sam" to "1 Samuel", "2sam" to "2 Samuel",
+            "1kings" to "1 Kings", "2kings" to "2 Kings", "1chron" to "1 Chronicles", "2chron" to "2 Chronicles",
+            "ezra" to "Ezra", "neh" to "Nehemiah", "esth" to "Esther", "job" to "Job",
+            "ps" to "Psalms", "pss" to "Psalms", "psalm" to "Psalms", "psalms" to "Psalms",
+            "prov" to "Proverbs", "eccl" to "Ecclesiastes", "song" to "Song of Solomon", "isa" to "Isaiah",
+            "jer" to "Jeremiah", "lam" to "Lamentations", "ezek" to "Ezekiel", "dan" to "Daniel",
+            "hos" to "Hosea", "joel" to "Joel", "amos" to "Amos", "obad" to "Obadiah",
+            "jonah" to "Jonah", "mic" to "Micah", "nah" to "Nahum", "hab" to "Habakkuk",
+            "zeph" to "Zephaniah", "hag" to "Haggai", "zech" to "Zechariah", "mal" to "Malachi",
+            "matt" to "Matthew", "mt" to "Matthew", "mark" to "Mark", "mk" to "Mark",
+            "luke" to "Luke", "lk" to "Luke", "john" to "John", "jn" to "John",
+            "acts" to "Acts", "rom" to "Romans", "1cor" to "1 Corinthians", "2cor" to "2 Corinthians",
+            "gal" to "Galatians", "eph" to "Ephesians", "phil" to "Philippians", "col" to "Colossians",
+            "1thess" to "1 Thessalonians", "2thess" to "2 Thessalonians", "1tim" to "1 Timothy", "2tim" to "2 Timothy",
+            "titus" to "Titus", "philem" to "Philemon", "heb" to "Hebrews", "jas" to "James",
+            "1pet" to "1 Peter", "2pet" to "2 Peter", "1jn" to "1 John", "2jn" to "2 John", "3jn" to "3 John",
+            "jude" to "Jude", "rev" to "Revelation", "enoch" to "1 Enoch", "1enoch" to "1 Enoch"
+        )
+        return abbreviations[clean] ?: BOOKS.find { it.name.equals(input, ignoreCase = true) }?.name
+    }
+
+    /**
+     * Parse structured reference string like "John 3:16", "1 John 3:16", or "jn 3:16" into components.
+     */
+    fun parseReference(input: String): ParsedReference? {
+        val regex = Regex("""^((?:\d\s+)?[A-Za-z\s]+)\s+(\d+)(?::(\d+))?$""")
+        val match = regex.find(input.trim()) ?: return null
+        val bookRaw = match.groupValues[1].trim()
+        val chapter = match.groupValues[2].toIntOrNull() ?: return null
+        val verse = match.groupValues[3].toIntOrNull()
+
+        val resolvedBook = resolveBookAbbreviation(bookRaw) ?: bookRaw
+        return ParsedReference(resolvedBook, chapter, verse)
+    }
 }
+
+data class ParsedReference(val book: String, val chapter: Int, val verse: Int?)
 
 /**
  * Statistics about the complete biblical corpus.

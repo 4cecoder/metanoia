@@ -55,13 +55,17 @@ class SettingsManager(context: Context) {
         set(value) = prefs.edit().putBoolean("speak_defs_on_tap", value).apply()
 
     // --- Reader UI ---
+    var themeMode: String
+        get() = prefs.getString("theme_mode", "system") ?: "system"
+        set(value) = prefs.edit().putString("theme_mode", value).apply()
+
     var englishFontSize: Int
-        get() = prefs.getInt("english_font_size", 20)
-        set(value) = prefs.edit().putInt("english_font_size", value).apply()
+        get() = prefs.getInt("english_font_size", 20).coerceIn(10, 48)
+        set(value) = prefs.edit().putInt("english_font_size", value.coerceIn(10, 48)).apply()
 
     var ancientFontSize: Int
-        get() = prefs.getInt("ancient_font_size", 22)
-        set(value) = prefs.edit().putInt("ancient_font_size", value).apply()
+        get() = prefs.getInt("ancient_font_size", 22).coerceIn(10, 48)
+        set(value) = prefs.edit().putInt("ancient_font_size", value.coerceIn(10, 48)).apply()
 
     var hapticFeedbackEnabled: Boolean
         get() = prefs.getBoolean("haptic_enabled", true)

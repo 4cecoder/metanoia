@@ -43,10 +43,15 @@ class BPETokenizer(
         val cacheKey = text
         cache[cacheKey]?.let { return it }
         
+        // Fallback text cleaning: remove non-printable characters, normalize whitespace
+        val cleaned = text.replace(Regex("[\\p{C}&&[^\\r\\n\\t]]"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            
         // Convert to lowercase (common for TTS)
-        val normalized = text.lowercase()
+        val normalized = cleaned.lowercase()
         
-        // Basic tokenization (character-based with bigram merging)
+        // Basic tokenization (character-based with bigram matching)
         val tokens = mutableListOf<Int>()
         var i = 0
         
@@ -58,7 +63,8 @@ class BPETokenizer(
                 val substr = normalized.substring(i, i + len)
                 val tokenId = vocab[substr]
                 
-                if (tokenId != null) {
+                // Vocabulary boundary checks - ensure tokenId is valid
+                if (tokenId != null && tokenId >= 0) {
                     tokens.add(tokenId)
                     i += len
                     matched = true
@@ -68,7 +74,7 @@ class BPETokenizer(
             
             if (!matched) {
                 // Unknown character, use UNK token
-                vocab[UNK_TOKEN]?.let { tokens.add(it) }
+                vocab[UNK_TOKEN]?.let { if (it >= 0) tokens.add(it) }
                 i++
             }
         }

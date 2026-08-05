@@ -119,8 +119,17 @@ class Qwen3TTSEngine(
         temperature: Float = 0.5f,
         cfgScale: Float = 2.0f
     ): FloatArray {
-        val tokenIds = text.map { it.code % config.vocabSize }
-        val maxTokens = config.maxTokens(text.length)
+        // Fallback text cleaning
+        val cleanedText = text.replace(Regex("[\\p{C}&&[^\\r\\n\\t]]"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            
+        // Resilient tokenization with boundary checks
+        val tokenIds = cleanedText.map { char ->
+            val code = char.code
+            if (code >= 0) code % config.vocabSize else 0
+        }
+        val maxTokens = config.maxTokens(cleanedText.length)
         
         // Create embeddings (matching Zig's embedding lookup)
         val embeddings = createEmbeddings(tokenIds)
