@@ -73,7 +73,7 @@ fun Modifier.cyberpunkHudBackground(time: Float, baseColor: Color = Color(0xFF1A
             val shader = RuntimeShader(CyberpunkShaders.HUD_PROJECTION_SHADER)
             shader.setFloatUniform("resolution", size.width, size.height)
             shader.setFloatUniform("time", time)
-            shader.setColorUniform("baseColor", android.graphics.Color.valueOf(baseColor.red, baseColor.green, baseColor.blue, baseColor.alpha))
+            shader.setFloatUniform("baseColor", baseColor.red, baseColor.green, baseColor.blue, baseColor.alpha)
             val brush = ShaderBrush(shader)
             onDrawBehind {
                 drawRect(brush)
@@ -89,7 +89,7 @@ fun Modifier.cyberpunkGlowAura(time: Float, auraColor: Color = Color(0xFF7AA2F7)
             val shader = RuntimeShader(CyberpunkShaders.GLOW_AURA_SHADER)
             shader.setFloatUniform("resolution", size.width, size.height)
             shader.setFloatUniform("time", time)
-            shader.setColorUniform("auraColor", android.graphics.Color.valueOf(auraColor.red, auraColor.green, auraColor.blue, auraColor.alpha))
+            shader.setFloatUniform("auraColor", auraColor.red, auraColor.green, auraColor.blue, auraColor.alpha)
             renderEffect = RenderEffect.createRuntimeShaderEffect(shader, "composable").asComposeRenderEffect()
         }
     }
