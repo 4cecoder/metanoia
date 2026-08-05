@@ -19,7 +19,7 @@ pub fn scrape_verses(engine: std.Io, book: []const u8, chapter: i32) !void {
     const ch_str = try std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{chapter});
     defer std.heap.page_allocator.free(ch_str);
 
-    try runScraperScript(engine, &.{ "uv", "run", "python", "tools/scraper.py", book, ch_str });
+    try runScraperScript(engine, &.{ "uv", "run", "python", "tools/bible/scraper.py", book, ch_str });
 }
 
 /// Fetches original-language interlinear data for one chapter and caches it

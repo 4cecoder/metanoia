@@ -112,6 +112,11 @@ check_child_id.zig
 # the repo root.
 vendor/
 
+# tools/reference/ — nested reference checkout of the qwen3-tts-apple-silicon
+# project (its own full .git dir + unpacked clone). Dev reference material,
+# never to be added as files or a gitlink. Same rationale as vendor/.
+tools/reference/
+
 # aikit/examples/tommy_test.zig's reference clip — small (703KB), needed
 # for `zig build run-example` to actually run, same reasoning as the main
 # repo's data/*.wav exceptions above.

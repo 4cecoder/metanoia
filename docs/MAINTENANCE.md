@@ -16,8 +16,8 @@ doc is about the caching architecture, the testing strategy, and what's next.
 ## The original-language caching bug (why "verses aren't cached" happened)
 
 Original-language (Hebrew OT / Greek NT) interlinear + lexicon data is
-scraped from BibleHub by two Python scripts (`tools/interlinear_scraper.py`,
-`tools/lexicon_scraper.py`) run as subprocesses from
+scraped from BibleHub by two Python scripts (`tools/bible/interlinear_scraper.py`,
+`tools/bible/lexicon_scraper.py`) run as subprocesses from
 `src/scraper_client.zig`, triggered once from `src/services/llm_engine.zig`
 when a verse has no cached lexicon context yet. Three independent bugs
 combined to make this "just sometimes doesn't work, silently, forever":
@@ -143,11 +143,11 @@ not just "it exists on someone's machine."
 
 Follow-up to the caching-bug section above: `src/scraper_client.zig`'s
 `scrape_interlinear`/`scrape_lexicon` no longer shell out to
-`uv run python tools/interlinear_scraper.py`/`tools/lexicon_scraper.py` —
-they call a native Zig port, `src/native_scraper.zig`, directly. (`tools/scraper.py`,
+`uv run python tools/bible/interlinear_scraper.py`/`tools/bible/lexicon_scraper.py` —
+they call a native Zig port, `src/native_scraper.zig`, directly. (`tools/bible/scraper.py`,
 the separate verse-text scraper reachable via `scrape_verses`, is untouched —
-out of scope for this pass.) `tools/interlinear_scraper.py`,
-`tools/lexicon_scraper.py`, and `tools/scraper_common.py` are left in place
+out of scope for this pass.) `tools/bible/interlinear_scraper.py`,
+`tools/bible/lexicon_scraper.py`, and `tools/bible/scraper_common.py` are left in place
 (nothing else references them, and removing them wasn't asked for) but are no
 longer invoked by the app.
 
@@ -160,7 +160,7 @@ longer invoked by the app.
 - `parseInterlinearHtml` / `parseLexiconHtml` — pure functions (`[]const u8`
   in, no `std.Io`), so they're unit-tested against fixture strings with zero
   network access, per the brief's TDD preference.
-- `fetchWithRetry` — mirrors `tools/scraper_common.py`'s `fetch_with_retry`
+- `fetchWithRetry` — mirrors `tools/bible/scraper_common.py`'s `fetch_with_retry`
   exactly: 3 attempts, 1s/2s/4s backoff, retries timeout/connection-failure/5xx,
   does not retry 4xx. The real per-attempt 15s timeout is implemented via
   `std.Io.Select` racing the fetch against a timer and canceling the loser —
@@ -181,12 +181,12 @@ longer invoked by the app.
 see native_scraper.zig's docstring and inline comments for detail):**
 1. On today's live BibleHub markup, Hebrew (`tablefloatheb`) word tables use
    `class="strongsnt"` for their Strong's-number span, not `class="pos"`/
-   `class="strongs"` like Greek tables — so `tools/interlinear_scraper.py`'s
+   `class="strongs"` like Greek tables — so `tools/bible/interlinear_scraper.py`'s
    (and this port's) `find(class_=["pos","strongs"])` never matches for
    Hebrew, and OT strongs numbers come back empty on a fresh scrape. Same gap,
    same class list, both languages. (Confirmed by fetching a real page,
    `curl -A "Mozilla/5.0" https://biblehub.com/interlinear/obadiah/1.htm`.)
-2. `tools/lexicon_scraper.py`'s `scrape_strongs()` only populates `definition`
+2. `tools/bible/lexicon_scraper.py`'s `scrape_strongs()` only populates `definition`
    (and only if the page has `class="strongs"` and/or `class="strongsnt"`
    elements it never finds on today's real `/greek/N.htm`/`/hebrew/N.htm`
    pages); `lemma`/`transliteration`/`usage` are dead code, always `""`.
@@ -228,7 +228,7 @@ the empty lemma/definition on the very first live-fetched lexicon entry is
 live rather than just inferred from `data/bible.db`'s existing rows.
 
 **Next-session TODO:**
-- Consider whether `tools/interlinear_scraper.py`/`lexicon_scraper.py`/
+- Consider whether `tools/bible/interlinear_scraper.py`/`lexicon_scraper.py`/
   `scraper_common.py` should now be deleted, since nothing in the app invokes
   them anymore (kept for this pass only because deleting wasn't explicitly
   asked for).

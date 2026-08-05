@@ -8,11 +8,11 @@ import re
 import unicodedata
 
 try:
-    from tools.scraper_common import fetch_with_retry
+    from tools.bible.scraper_common import fetch_with_retry
 except ImportError:
     from scraper_common import fetch_with_retry
 
-_BIBLE_BOOKS_PATH = os.path.join(os.path.dirname(__file__), "bible_books.json")
+_BIBLE_BOOKS_PATH = os.path.join(os.path.dirname(__file__), "..", "bible_books.json")
 
 
 def load_testament_map():

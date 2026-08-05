@@ -1,6 +1,6 @@
 import time
 try:
-    from tools.interlinear_scraper import scrape_interlinear
+    from tools.bible.interlinear_scraper import scrape_interlinear
 except ImportError:
     from interlinear_scraper import scrape_interlinear
 

@@ -2,9 +2,9 @@ import sqlite3
 import time
 import sys
 try:
-    from tools.scraper import scrape_chapter
-    from tools.interlinear_scraper import scrape_interlinear
-    from tools.lexicon_scraper import cache_lexicon_from_db
+    from tools.bible.scraper import scrape_chapter
+    from tools.bible.interlinear_scraper import scrape_interlinear
+    from tools.bible.lexicon_scraper import cache_lexicon_from_db
 except ImportError:
     from scraper import scrape_chapter
     from interlinear_scraper import scrape_interlinear

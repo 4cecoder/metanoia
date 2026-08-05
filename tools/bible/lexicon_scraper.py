@@ -5,7 +5,7 @@ import sys
 import time
 
 try:
-    from tools.scraper_common import fetch_with_retry
+    from tools.bible.scraper_common import fetch_with_retry
 except ImportError:
     from scraper_common import fetch_with_retry
 
