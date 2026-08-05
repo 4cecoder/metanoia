@@ -1,10 +1,10 @@
 name: test
 
-# Runs the regression suite (zig build test + mobile unit tests) on every
-# push/PR. Nothing else in this repo did this before — release.yml and
-# release-unix.yml only build release artifacts on a tag push, so the tests
-# added alongside a change were never actually enforced anywhere. This is
-# the thing that turns "we wrote a test" into "the test caught something."
+# Runs the regression suite (zig build test + mobile unit tests) only when
+# relevant code changes. Nothing else in this repo did this before — release.yml
+# and release-unix.yml only build release artifacts on a tag push, so the tests
+# added alongside a change were never actually enforced anywhere. This is the
+# thing that turns "we wrote a test" into "the test caught something."
 on:
   push:
     branches: ["master"]
@@ -17,6 +17,14 @@ jobs:
       matrix:
         os: [macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    # Only run Zig tests when Zig/source files change, not when only
+    # docs/config changes
+    if: |
+      contains(github.event.commits[0].modified, 'src/') ||
+      contains(github.event.commits[0].modified, 'build.zig') ||
+      contains(github.event.commits[0].modified, '.zig') ||
+      contains(github.event.commits[0].modified, 'zig') ||
+      github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
@@ -56,6 +64,11 @@ jobs:
 
   mobile-test:
     runs-on: ubuntu-latest
+    # Only run mobile tests when mobile code changes, not when only
+    # desktop/docs changes
+    if: |
+      contains(github.event.commits[0].modified, 'mobile/') ||
+      github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
