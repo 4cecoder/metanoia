@@ -454,15 +454,18 @@ jobs:
         working-directory: mobile
         run: ./gradlew assembleDebug --no-daemon
 
+      - name: Rename APK for release
+        run: cp mobile/app/build/outputs/apk/debug/app-debug.apk dist/Metanoia-android-debug.apk
+
       - name: Publish Android APK release asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: "Latest (master @ ${{ github.sha }})"
           body: |
-            Android: Install Metanoia.apk on your Android device.
+            Android: Install Metanoia-android-debug.apk on your Android device.
             Rebuilt from `${{ github.sha }}`, replaced on every push to master.
           prerelease: true
           files: |
-            mobile/app/build/outputs/apk/debug/app-debug.apk
+            dist/Metanoia-android-debug.apk
 
