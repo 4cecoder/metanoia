@@ -64,6 +64,7 @@ android {
 
     testOptions {
         unitTests {
+            isIncludeAndroidResources = true
             // Some code paths under test (e.g. GatewayClient's catch-and-log
             // swallow) call android.util.Log, which is a stub that throws by
             // default under plain JUnit (no Robolectric). This makes Log.*
