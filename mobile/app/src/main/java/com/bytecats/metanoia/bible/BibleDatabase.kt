@@ -10,7 +10,7 @@ import java.io.File
 class BibleDatabase(private val context: Context) {
     private val dbFile = File(context.filesDir, "bible.db")
 
-    private fun openDb(readOnly: Boolean = true): SQLiteDatabase =
+    fun openDb(readOnly: Boolean = false): SQLiteDatabase =
         SQLiteDatabase.openDatabase(dbFile.absolutePath, null, openFlags(readOnly))
 
     val verse = VerseDao(::openDb)
