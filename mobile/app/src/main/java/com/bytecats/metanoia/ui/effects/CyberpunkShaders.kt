@@ -18,7 +18,7 @@ object CyberpunkShaders {
     const val HUD_PROJECTION_SHADER = """
         uniform float2 resolution;
         uniform float time;
-        uniform half4 baseColor;
+        layout(color) uniform half4 baseColor;
         
         half4 main(float2 fragCoord) {
             float2 uv = fragCoord / resolution.xy;
@@ -51,7 +51,7 @@ object CyberpunkShaders {
         uniform shader composable;
         uniform float2 resolution;
         uniform float time;
-        uniform half4 auraColor;
+        layout(color) uniform half4 auraColor;
         
         half4 main(float2 fragCoord) {
             float2 uv = fragCoord / resolution.xy;
@@ -73,7 +73,7 @@ fun Modifier.cyberpunkHudBackground(time: Float, baseColor: Color = Color(0xFF1A
             val shader = RuntimeShader(CyberpunkShaders.HUD_PROJECTION_SHADER)
             shader.setFloatUniform("resolution", size.width, size.height)
             shader.setFloatUniform("time", time)
-            shader.setFloatUniform("baseColor", baseColor.red, baseColor.green, baseColor.blue, baseColor.alpha)
+            shader.setColorUniform("baseColor", android.graphics.Color.valueOf(baseColor.red, baseColor.green, baseColor.blue, baseColor.alpha).toArgb())
             val brush = ShaderBrush(shader)
             onDrawBehind {
                 drawRect(brush)
@@ -89,7 +89,7 @@ fun Modifier.cyberpunkGlowAura(time: Float, auraColor: Color = Color(0xFF7AA2F7)
             val shader = RuntimeShader(CyberpunkShaders.GLOW_AURA_SHADER)
             shader.setFloatUniform("resolution", size.width, size.height)
             shader.setFloatUniform("time", time)
-            shader.setFloatUniform("auraColor", auraColor.red, auraColor.green, auraColor.blue, auraColor.alpha)
+            shader.setColorUniform("auraColor", android.graphics.Color.valueOf(auraColor.red, auraColor.green, auraColor.blue, auraColor.alpha).toArgb())
             renderEffect = RenderEffect.createRuntimeShaderEffect(shader, "composable").asComposeRenderEffect()
         }
     }
