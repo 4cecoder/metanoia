@@ -11,6 +11,13 @@ name: release-latest
 on:
   push:
     branches: ["master"]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'index.html*'
+      - '.well-known/**'
 
 concurrency:
   group: release-latest
