@@ -7,10 +7,22 @@ class LexiconDao(private val openDb: () -> SQLiteDatabase) {
 
     fun getLexiconDetail(strongs: String): LexiconEntry {
         val db = openDb()
-        val cursor = db.rawQuery("SELECT lemma, definition FROM lexicon WHERE strongs = ?", arrayOf(strongs))
+        var cursor = db.rawQuery("SELECT lemma, definition FROM lexicon WHERE strongs = ?", arrayOf(strongs))
+        if (cursor.moveToFirst()) {
+            val res = LexiconEntry(cursor.getString(0) ?: "", cursor.getString(1) ?: "")
+            cursor.close()
+            db.close()
+            return res
+        }
+        cursor.close()
+
+        val num = strongs.filter { it.isDigit() }
+        val alt = if (strongs.all { it.isDigit() }) "H$num" else num
+        cursor = db.rawQuery("SELECT lemma, definition FROM lexicon WHERE strongs = ?", arrayOf(alt))
         var res = LexiconEntry("", "")
         if (cursor.moveToFirst()) res = LexiconEntry(cursor.getString(0) ?: "", cursor.getString(1) ?: "")
-        cursor.close(); db.close()
+        cursor.close()
+        db.close()
         return res
     }
 

@@ -19,7 +19,6 @@ class BibleManager(private val context: Context) {
     private val client = OkHttpClient()
     private val database = BibleDatabase(context)
 
-    // NEW: Organized scraper manager with rate limiting and fallback
     private val scraperManager = ScraperManager(
         scrapers = listOf(
             BibleGatewayScraper(client = client),
@@ -27,6 +26,12 @@ class BibleManager(private val context: Context) {
         ),
         cache = ScratchpadCache(context)
     )
+
+    private val hebrewLexiconRepository = com.bytecats.metanoia.bible.lexicon.HebrewLexiconRepository(client, ::getDbForLexicon)
+
+    private fun getDbForLexicon(): SQLiteDatabase {
+        return getDb(false)
+    }
 
     val books = BOOKS
     val gateway = GatewayClient(baseUrlProvider = { "http://192.168.122.2:8000" })
@@ -130,7 +135,27 @@ class BibleManager(private val context: Context) {
 
     fun getChapter(book: String, chapter: Int): List<Pair<Int, String>> { if (!dbFile.exists()) return emptyList(); val db = getDb(); val cursor = db.rawQuery("SELECT verse, text FROM verses WHERE book = ? AND chapter = ? ORDER BY verse ASC", arrayOf(book, chapter.toString())); val verses = mutableListOf<Pair<Int, String>>(); while (cursor.moveToNext()) verses.add(Pair(cursor.getInt(0), cursor.getString(1))); cursor.close(); db.close(); return verses }
     fun getInterlinear(book: String, chapter: Int, verse: Int): List<InterlinearWord> { if (!dbFile.exists()) return emptyList(); val db = getDb(); val cursor = db.rawQuery("SELECT original_text, strongs, translation FROM interlinear WHERE book = ? AND chapter = ? AND verse = ? ORDER BY word_index ASC", arrayOf(book, chapter.toString(), verse.toString())); val words = mutableListOf<InterlinearWord>(); while (cursor.moveToNext()) words.add(InterlinearWord(cursor.getString(0), cursor.getString(1), cursor.getString(2))); cursor.close(); db.close(); return words }
-    fun getLexiconDetail(strongs: String): Pair<String, String> { if (!dbFile.exists()) return Pair("", ""); val db = getDb(); val cursor = db.rawQuery("SELECT lemma, definition FROM lexicon WHERE strongs = ?", arrayOf(strongs)); var res = Pair("", ""); if (cursor.moveToFirst()) res = Pair(cursor.getString(0) ?: "", cursor.getString(1) ?: ""); cursor.close(); db.close(); return res }
+    fun getLexiconDetail(strongs: String): Pair<String, String> { 
+        if (!dbFile.exists()) return Pair("", "")
+        val db = getDb()
+        var cursor = db.rawQuery("SELECT lemma, definition FROM lexicon WHERE strongs = ?", arrayOf(strongs))
+        if (cursor.moveToFirst()) {
+            val res = Pair(cursor.getString(0) ?: "", cursor.getString(1) ?: "")
+            cursor.close()
+            db.close()
+            return res
+        }
+        cursor.close()
+        
+        val num = strongs.filter { it.isDigit() }
+        val alt = if (strongs.all { it.isDigit() }) "H$num" else num
+        cursor = db.rawQuery("SELECT lemma, definition FROM lexicon WHERE strongs = ?", arrayOf(alt))
+        var res = Pair("", "")
+        if (cursor.moveToFirst()) res = Pair(cursor.getString(0) ?: "", cursor.getString(1) ?: "")
+        cursor.close()
+        db.close()
+        return res
+    }
 
     suspend fun fetchChapter(book: String, chapter: Int, version: String = "NKJV") = withContext(Dispatchers.IO) {
         if (book in DeuterocanonRouting.NO_SOURCE_BOOKS) {
@@ -192,7 +217,7 @@ class BibleManager(private val context: Context) {
 
     suspend fun scrapeStrong(strongs: String, bookName: String? = null) = withContext(Dispatchers.IO) {
         val isG = if (bookName != null) books.find { it.name == bookName }?.testament == "New" else strongs.startsWith("G")
-        if (isG) scrapeGreekStrong(strongs) else scrapeHebrewStrong(strongs)
+        if (isG) scrapeGreekStrong(strongs) else hebrewLexiconRepository.scrapeHebrewStrong(strongs)
     }
 
     private fun scrapeGreekStrong(strongs: String) {
@@ -209,35 +234,7 @@ class BibleManager(private val context: Context) {
         } catch (e: Exception) { e.printStackTrace() }
     }
 
-    private fun scrapeHebrewStrong(strongs: String) {
-        val num = strongs.filter { it.isDigit() }
-        val formattedStrongs = if (strongs.startsWith("H") || strongs.all { it.isDigit() }) "H$num" else strongs
-        val request = Request.Builder().url("https://biblehub.com/hebrew/$num.htm").header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)").build()
-        try {
-            val response = client.newCall(request).execute()
-            val html = response.body?.string() ?: return
-            val doc = Jsoup.parse(html)
-            val lemma = doc.select("span.hebrew, span.greek").first()?.text()?.trim() ?: ""
-            val tr = doc.select("span.translit").first()?.text()?.trim() ?: ""
-            var def = doc.select("div.strongsnt, div.heading, div.vheading").text().trim()
-            if (def.isEmpty()) { 
-                val lb = doc.select("div#leftbox, div.maincontent").first()
-                lb?.select("iframe, script, ins")?.remove()
-                def = lb?.text()?.trim()?.take(3000) ?: "" 
-            }
-            if (def.isEmpty()) {
-                def = doc.body().text().take(1500)
-            }
-            if (def.isNotEmpty()) { 
-                val db = getDb(false)
-                db.execSQL("INSERT OR REPLACE INTO lexicon (strongs, language, lemma, transliteration, definition) VALUES (?, 'hebrew', ?, ?, ?)", arrayOf(formattedStrongs, lemma, tr, def))
-                if (formattedStrongs != strongs) {
-                    db.execSQL("INSERT OR REPLACE INTO lexicon (strongs, language, lemma, transliteration, definition) VALUES (?, 'hebrew', ?, ?, ?)", arrayOf(strongs, lemma, tr, def))
-                }
-                db.close() 
-            }
-        } catch (e: Exception) { e.printStackTrace() }
-    }
+
 
     // --- DELEGATED METHODS TO BibleDatabase (for ReadingAnalyticsScreen) ---
     fun getMostReadBooks(limit: Int = 5): List<Pair<String, Int>> = database.getMostReadBooks(limit)
