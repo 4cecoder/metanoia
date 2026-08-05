@@ -43,34 +43,42 @@ fun StudySheet(
                 fontWeight = FontWeight.Black
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Highlight Color", style = MaterialTheme.typography.labelLarge)
+            Text("Highlight Color", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 listOf(0xFFFF9E6A, 0xFF9ECE6A, 0xFF7AA2F7, 0xFFBB9AF7, 0).forEach { color ->
+                    val isTransparent = color.toLong() == 0L
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(48.dp)
                             .background(
-                                if (color.toLong() == 0L) Color.Transparent else Color(color.toLong()),
+                                if (isTransparent) MaterialTheme.colorScheme.surfaceVariant else Color(color.toLong()),
                                 CircleShape
                             )
-                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            .clickable { onHighlight(color.toInt()) }
+                            .border(
+                                2.dp,
+                                if (isTransparent) MaterialTheme.colorScheme.outline else Color.Transparent,
+                                CircleShape
+                            )
+                            .clickable { onHighlight(color.toInt()) },
+                        contentAlignment = Alignment.Center
                     ) {
-                        if (color.toLong() == 0L) {
+                        if (isTransparent) {
                             Icon(
                                 Icons.Default.Close,
-                                contentDescription = null,
-                                modifier = Modifier.align(Alignment.Center)
+                                contentDescription = "Clear Highlight",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("Study Notes", style = MaterialTheme.typography.labelLarge)
+            Spacer(modifier = Modifier.height(32.dp))
+            Text("Study Notes", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(8.dp))
             notes.forEach { note ->
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),

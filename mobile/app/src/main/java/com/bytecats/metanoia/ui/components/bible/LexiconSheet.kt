@@ -37,14 +37,15 @@ fun LexiconSheet(
                 Column(Modifier.weight(1f)) {
                     Text(
                         detail.lemma.ifEmpty { word.original },
-                        style = MaterialTheme.typography.headlineLarge,
+                        style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.primary
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         word.strongs,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.outline
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.secondary
                     )
                 }
                 IconButton({ onSpeak(detail.definition) }) {
@@ -63,8 +64,8 @@ fun LexiconSheet(
                 }
             }
             HorizontalDivider(
-                modifier = Modifier.padding(vertical = 16.dp),
-                color = MaterialTheme.colorScheme.outlineVariant
+                modifier = Modifier.padding(vertical = 24.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
             )
             Text(
                 detail.definition,

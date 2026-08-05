@@ -36,6 +36,26 @@ class BibleDatabase(private val context: Context) {
             db.execSQL("CREATE TABLE IF NOT EXISTS highlights (book TEXT, chapter INTEGER, verse INTEGER, color INTEGER, PRIMARY KEY(book, chapter, verse))")
             db.execSQL("CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY AUTOINCREMENT, book TEXT, chapter INTEGER, verse INTEGER, content TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
             db.execSQL("CREATE TABLE IF NOT EXISTS verses (book TEXT, chapter INTEGER, verse INTEGER, text TEXT, version TEXT, PRIMARY KEY(book, chapter, verse))")
+            db.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS verses_fts USING fts4(book, chapter, verse, text)")
+            
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS verses_ai AFTER INSERT ON verses BEGIN
+                  INSERT INTO verses_fts(docid, book, chapter, verse, text) VALUES (new.rowid, new.book, new.chapter, new.verse, new.text);
+                END;
+            """.trimIndent())
+            
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS verses_ad AFTER DELETE ON verses BEGIN
+                  INSERT INTO verses_fts(verses_fts, docid, book, chapter, verse, text) VALUES('delete', old.rowid, old.book, old.chapter, old.verse, old.text);
+                END;
+            """.trimIndent())
+            
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS verses_au AFTER UPDATE ON verses BEGIN
+                  INSERT INTO verses_fts(verses_fts, docid, book, chapter, verse, text) VALUES('delete', old.rowid, old.book, old.chapter, old.verse, old.text);
+                  INSERT INTO verses_fts(docid, book, chapter, verse, text) VALUES (new.rowid, new.book, new.chapter, new.verse, new.text);
+                END;
+            """.trimIndent())
             db.execSQL("CREATE TABLE IF NOT EXISTS reading_progress (book TEXT, chapter INTEGER, first_read_at INTEGER, last_read_at INTEGER, read_count INTEGER, PRIMARY KEY(book, chapter))")
             db.execSQL("CREATE TABLE IF NOT EXISTS reading_events (id INTEGER PRIMARY KEY AUTOINCREMENT, book TEXT, chapter INTEGER, timestamp INTEGER)")
             db.close()

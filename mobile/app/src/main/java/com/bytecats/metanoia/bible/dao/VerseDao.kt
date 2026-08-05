@@ -22,11 +22,15 @@ class VerseDao(private val openDb: () -> SQLiteDatabase) {
         val db = openDb()
         db.beginTransaction()
         try {
+            val stmt = db.compileStatement("INSERT OR REPLACE INTO verses (book, chapter, verse, text, version) VALUES (?, ?, ?, ?, ?)")
             for (v in verses) {
-                db.execSQL(
-                    "INSERT OR REPLACE INTO verses (book, chapter, verse, text, version) VALUES (?, ?, ?, ?, ?)",
-                    arrayOf(book, chapter, v.number, v.text, version)
-                )
+                stmt.bindString(1, book)
+                stmt.bindLong(2, chapter.toLong())
+                stmt.bindLong(3, v.number.toLong())
+                stmt.bindString(4, v.text)
+                stmt.bindString(5, version)
+                stmt.execute()
+                stmt.clearBindings()
             }
             db.setTransactionSuccessful()
         } finally { db.endTransaction(); db.close() }
@@ -60,8 +64,8 @@ class VerseDao(private val openDb: () -> SQLiteDatabase) {
             }
         }
         val cursor = db.rawQuery(
-            "SELECT book, chapter, verse, text FROM verses WHERE text LIKE ? LIMIT 50",
-            arrayOf("%$query%")
+            "SELECT book, chapter, verse, text FROM verses_fts WHERE text MATCH ? LIMIT 50",
+            arrayOf("$query*")
         )
         while (cursor.moveToNext()) {
             list.add(SearchResult(cursor.getString(0), cursor.getInt(1), cursor.getInt(2), cursor.getString(3)))
@@ -72,16 +76,17 @@ class VerseDao(private val openDb: () -> SQLiteDatabase) {
 
     fun getStats(): LibraryStats {
         val db = openDb()
-        val otList = BOOKS.filter { it.testament == "Old" }.joinToString(",") { "'${it.name}'" }
-        val ntList = BOOKS.filter { it.testament == "New" }.joinToString(",") { "'${it.name}'" }
-        val vOt = if (otList.isEmpty()) 0
-        else db.rawQuery("SELECT COUNT(*) FROM verses WHERE book IN ($otList)", null).use {
-            if (it.moveToFirst()) it.getInt(0) else 0
+        var vOt = 0
+        var vNt = 0
+        val cursor = db.rawQuery("SELECT book, COUNT(*) FROM verses GROUP BY book", null)
+        while (cursor.moveToNext()) {
+            val book = cursor.getString(0)
+            val count = cursor.getInt(1)
+            val testament = BOOKS.find { it.name == book }?.testament
+            if (testament == "Old") vOt += count
+            else if (testament == "New") vNt += count
         }
-        val vNt = if (ntList.isEmpty()) 0
-        else db.rawQuery("SELECT COUNT(*) FROM verses WHERE book IN ($ntList)", null).use {
-            if (it.moveToFirst()) it.getInt(0) else 0
-        }
+        cursor.close()
         val lHeb = db.rawQuery("SELECT COUNT(*) FROM lexicon WHERE language = 'hebrew'", null).use {
             if (it.moveToFirst()) it.getInt(0) else 0
         }
