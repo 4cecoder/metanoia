@@ -79,13 +79,13 @@ fun ReadingAnalyticsScreen(navController: NavController, viewModel: MainViewMode
     // each book's read-chapter count from its fraction * its total chapters.
     val readCompletion = remember(resetNonce) { bible.getReadCompletion() }
     val totalChapters = remember { BOOKS.sumOf { it.chapters } }
-    val readChapters = remember(readCompletion) {
-        readCompletion.entries.sumOf { (name, frac) ->
-            val total = BOOKS.find { it.name == name }?.chapters ?: 0
-            (frac * total).toInt()
-        }
+    val overallFraction = remember(readCompletion, totalChapters) {
+        ReadingStats.calculateOverallCompletion(
+            readCompletion,
+            getBookTotalChapters = { name -> BOOKS.find { it.name == name }?.chapters ?: 0 },
+            totalChapters
+        )
     }
-    val overallFraction = if (totalChapters > 0) readChapters.toFloat() / totalChapters else 0f
     // Reuses the same pure interpolation the book-card read gradient uses
     // (ReadingStats.lerpColor), from the theme's neutral outline tone up to
     // the existing Tokyo Night "read" green (#9ece6a) -- not a new color.

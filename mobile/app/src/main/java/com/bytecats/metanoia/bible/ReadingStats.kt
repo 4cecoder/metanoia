@@ -141,4 +141,14 @@ object ReadingStats {
         val best = buckets.maxByOrNull { it.second }
         return if (best == null || best.second == 0) NOT_ENOUGH_DATA else best.first
     }
+
+    /**
+     * Calculates the overall completion fraction across all books.
+     */
+    fun calculateOverallCompletion(readCompletion: Map<String, Float>, getBookTotalChapters: (String) -> Int, totalChapters: Int): Float {
+        val readChapters = readCompletion.entries.sumOf { (name, frac) ->
+            (frac * getBookTotalChapters(name)).toInt()
+        }
+        return if (totalChapters > 0) readChapters.toFloat() / totalChapters else 0f
+    }
 }
