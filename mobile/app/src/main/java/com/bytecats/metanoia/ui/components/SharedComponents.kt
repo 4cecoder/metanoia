@@ -33,26 +33,25 @@ fun ModuleCard(
     Card(
         onClick = onClick,
         modifier = modifier.height(130.dp).padding(4.dp),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.25f))
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.padding(16.dp).fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
             Box(
                 modifier = Modifier
-                    .size(70.dp)
-                    .offset(x = 10.dp, y = (-10).dp)
-                    .background(Brush.radialGradient(listOf(accent.copy(alpha = 0.15f), Color.Transparent)), CircleShape)
-                    .align(Alignment.TopEnd)
-            )
-            Column(
-                modifier = Modifier.padding(16.dp).fillMaxSize(),
-                verticalArrangement = Arrangement.SpaceBetween
+                    .size(40.dp)
+                    .background(accent.copy(alpha = 0.12f), CircleShape),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(icon, null, tint = accent, modifier = Modifier.size(28.dp))
-                Column {
-                    Text(title, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium)
-                    Text(sub, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                }
+                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
+            }
+            Column {
+                Text(title, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                Text(sub, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, maxLines = 1)
             }
         }
     }
