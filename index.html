@@ -11,9 +11,21 @@
     <link rel="icon" type="image/svg+xml" href="logo.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Fira+Code:wght@400;600&family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;600;800&family=Space+Grotesk:wght@500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
+        #webgl-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            pointer-events: none;
+            opacity: 0.65;
+        }
+
         :root {
             --bg-primary: #090b10;
             --bg-secondary: #11141d;
@@ -930,7 +942,86 @@ startActivity(intent)</code>
         </footer>
     </div>
 
+    <canvas id="webgl-bg"></canvas>
+
     <script>
+        // Cinematic WebGL Liquid Shader
+        (function initShader() {
+            const canvas = document.getElementById('webgl-bg');
+            if (!canvas || typeof THREE === 'undefined') return;
+
+            const scene = new THREE.Scene();
+            const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+            const geometry = new THREE.PlaneGeometry(2, 2);
+
+            const fragmentShader = `
+                uniform float u_time;
+                uniform vec2 u_resolution;
+                varying vec2 vUv;
+
+                void main() {
+                    vec2 st = gl_FragCoord.xy / u_resolution.xy;
+                    st.x *= u_resolution.x / u_resolution.y;
+
+                    vec2 pos = st * 3.0;
+                    float time = u_time * 0.25;
+
+                    float color1 = sin(pos.x + time) + cos(pos.y + time);
+                    float color2 = sin(pos.x * 1.5 - time) * cos(pos.y * 1.5 + time);
+                    float finalColor = sin(color1 + color2 + time);
+
+                    vec3 c1 = vec3(0.05, 0.07, 0.12);
+                    vec3 c2 = vec3(0.48, 0.63, 0.97);
+                    vec3 c3 = vec3(0.73, 0.60, 0.97);
+
+                    vec3 mixedColor = mix(c1, c2, clamp(finalColor * 0.4 + 0.2, 0.0, 1.0));
+                    mixedColor = mix(mixedColor, c3, clamp(sin(time + pos.x) * 0.2 + 0.1, 0.0, 1.0));
+
+                    gl_FragColor = vec4(mixedColor, 0.35);
+                }
+            `;
+
+            const vertexShader = `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = vec4(position, 1.0);
+                }
+            `;
+
+            const uniforms = {
+                u_time: { value: 1.0 },
+                u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+            };
+
+            const material = new THREE.ShaderMaterial({
+                uniforms: uniforms,
+                vertexShader: vertexShader,
+                fragmentShader: fragmentShader,
+                transparent: true
+            });
+
+            const mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+
+            function animate(t) {
+                requestAnimationFrame(animate);
+                uniforms.u_time.value = t * 0.001;
+                renderer.render(scene, camera);
+            }
+            requestAnimationFrame(animate);
+
+            window.addEventListener('resize', () => {
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
+            });
+        })();
+
         function handleIssueSubmit(e) {
             e.preventDefault();
             const type = document.getElementById('issueType').value;
