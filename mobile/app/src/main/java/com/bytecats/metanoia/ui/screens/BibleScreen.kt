@@ -55,6 +55,15 @@ fun BibleScreen(viewModel: MainViewModel) {
     var interlinearData by remember(selectedBook, selectedChapter) { mutableStateOf<Map<Int, List<InterlinearWord>>>(emptyMap()) }
     var highlights by remember(selectedBook, selectedChapter) { mutableStateOf<Map<Int, Int>>(emptyMap()) }
     var expandedVerses by remember(selectedBook, selectedChapter) { mutableStateOf<Set<Int>>(emptySet()) }
+    var chapterWordCounts by remember(selectedBook) { mutableStateOf<Map<Int, Int>>(emptyMap()) }
+    
+    LaunchedEffect(selectedBook) {
+        if (selectedBook != null) {
+            withContext(Dispatchers.IO) {
+                chapterWordCounts = bibleManager.getChapterWordCounts(selectedBook!!.name)
+            }
+        }
+    }
     
     var studyVerse by remember { mutableStateOf<Int?>(null) }
     var lexiconWord by remember { mutableStateOf<InterlinearWord?>(null) }
@@ -210,9 +219,62 @@ fun BibleScreen(viewModel: MainViewModel) {
                     }
                 }
                 "chapter" -> {
-                    LazyVerticalGrid(columns = GridCells.Fixed(5), modifier = Modifier.padding(16.dp)) {
-                        items((1..(selectedBook?.chapters ?: 1)).toList()) { ch ->
-                            Card(modifier = Modifier.padding(4.dp).aspectRatio(1f).clickable { selectedChapter = ch; currentChapterContent = bibleManager.getChapter(selectedBook!!.name, ch); highlights = bibleManager.getHighlights(selectedBook!!.name, ch); step = "read" }) { Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("$ch") } }
+                    val totalWords = ReadingStats.calculateBookWordCount(chapterWordCounts)
+                    val avgWords = if ((selectedBook?.chapters ?: 0) > 0) totalWords / selectedBook!!.chapters else 0
+                    val readTime = ReadingStats.formatReadingTime(totalWords)
+
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .background(Color(0xFF1a1b26).copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+                                .border(1.dp, Color(0xFF7aa2f7).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("TOTAL WORDS", fontSize = 10.sp, color = Color(0xFF7aa2f7), fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                                Text("$totalWords", fontSize = 16.sp, color = Color(0xFFc0caf5), fontWeight = FontWeight.Black)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("AVG/CHAPTER", fontSize = 10.sp, color = Color(0xFF9ece6a), fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                                Text("$avgWords", fontSize = 16.sp, color = Color(0xFFc0caf5), fontWeight = FontWeight.Black)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("READ TIME", fontSize = 10.sp, color = Color(0xFFbb9af7), fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                                Text(readTime, fontSize = 16.sp, color = Color(0xFFc0caf5), fontWeight = FontWeight.Black)
+                            }
+                        }
+
+                        LazyVerticalGrid(columns = GridCells.Fixed(5), modifier = Modifier.padding(16.dp)) {
+                            items((1..(selectedBook?.chapters ?: 1)).toList()) { ch ->
+                                val wordCount = chapterWordCounts[ch] ?: 0
+                                Card(
+                                    modifier = Modifier.padding(4.dp).aspectRatio(1f).clickable { 
+                                        selectedChapter = ch; 
+                                        currentChapterContent = bibleManager.getChapter(selectedBook!!.name, ch); 
+                                        highlights = bibleManager.getHighlights(selectedBook!!.name, ch); 
+                                        step = "read" 
+                                    },
+                                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                                ) { 
+                                    Box(modifier = Modifier.fillMaxSize()) { 
+                                        Text("$ch", modifier = Modifier.align(Alignment.Center)) 
+                                        if (wordCount > 0) {
+                                            Text(
+                                                text = "$wordCount",
+                                                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 4.dp, bottom = 2.dp),
+                                                fontSize = 8.sp,
+                                                color = Color(0xFF7aa2f7).copy(alpha = 0.8f),
+                                                fontWeight = FontWeight.Medium,
+                                                style = androidx.compose.ui.text.TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                                            )
+                                        }
+                                    } 
+                                }
+                            }
                         }
                     }
                 }

@@ -87,6 +87,7 @@ class BibleDatabase(private val context: Context) {
     fun checkIntegrity(): String = verse.checkIntegrity()
     fun vacuum() = verse.vacuum()
     fun getBookCompletion(): Map<String, Float> = verse.getBookCompletion()
+    fun getChapterWordCounts(book: String): Map<Int, Int> = verse.getChapterWordCounts(book)
 
     fun saveFavorite(strongs: String, lemma: String, definition: String) = favorites.saveFavorite(strongs, lemma, definition)
     fun getFavorites(): List<Favorite> = favorites.getFavorites()

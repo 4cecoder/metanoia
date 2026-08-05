@@ -164,4 +164,21 @@ class VerseDao(private val openDb: () -> SQLiteDatabase) {
         cursor.close(); db.close()
         return completion
     }
+
+    fun getChapterWordCounts(book: String): Map<Int, Int> {
+        val db = openDb()
+        val cursor = db.rawQuery(
+            "SELECT chapter, text FROM verses WHERE book = ?",
+            arrayOf(book)
+        )
+        val wordCounts = mutableMapOf<Int, Int>()
+        while (cursor.moveToNext()) {
+            val chapter = cursor.getInt(0)
+            val text = cursor.getString(1)
+            val words = com.bytecats.metanoia.bible.ReadingStats.calculateWordCount(text)
+            wordCounts[chapter] = (wordCounts[chapter] ?: 0) + words
+        }
+        cursor.close(); db.close()
+        return wordCounts
+    }
 }

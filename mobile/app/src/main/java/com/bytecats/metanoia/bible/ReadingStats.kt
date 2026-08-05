@@ -151,4 +151,19 @@ object ReadingStats {
         }
         return if (totalChapters > 0) readChapters.toFloat() / totalChapters else 0f
     }
+
+    fun calculateWordCount(text: String): Int {
+        if (text.isBlank()) return 0
+        return text.trim().split("\\s+".toRegex()).size
+    }
+
+    fun formatReadingTime(wordCount: Int, wordsPerMinute: Int = 200): String {
+        val minutes = wordCount / wordsPerMinute
+        if (minutes < 1) return "< 1 min"
+        return "$minutes min"
+    }
+
+    fun calculateBookWordCount(chapterWordCounts: Map<Int, Int>): Int {
+        return chapterWordCounts.values.sum()
+    }
 }
