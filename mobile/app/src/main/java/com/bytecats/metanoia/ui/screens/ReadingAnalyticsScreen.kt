@@ -223,6 +223,54 @@ fun ReadingAnalyticsScreen(navController: NavController, viewModel: MainViewMode
                 }
             }
 
+            Text("BOOK PROGRESS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))) {
+                if (readCompletion.isEmpty()) {
+                    Text(
+                        "No reading progress recorded yet -- start reading chapters to track progress.",
+                        modifier = Modifier.padding(24.dp),
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                } else {
+                    Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        readCompletion.entries.sortedByDescending { it.value }.forEachIndexed { idx, (bookName, fraction) ->
+                            val bookObj = BOOKS.find { it.name == bookName }
+                            val totalCh = bookObj?.chapters ?: 1
+                            val readCh = (fraction * totalCh).toInt()
+                            val accentColor = if (fraction >= 1.0f) TokyoGreen else if (fraction > 0.5f) TokyoBlue else TokyoAmber
+                            
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(bookName, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "$readCh / $totalCh ch (%.0f%%)".format(fraction * 100),
+                                        color = accentColor,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                                LinearProgressIndicator(
+                                    progress = { fraction.coerceIn(0f, 1f) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp),
+                                    color = accentColor,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                                )
+                            }
+                            if (idx < readCompletion.size - 1) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), modifier = Modifier.padding(top = 4.dp))
+                            }
+                        }
+                    }
+                }
+            }
+
             Text("MOST READ", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))) {
                 if (mostRead.isEmpty()) {
