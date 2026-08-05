@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metanoia - Developer Portal</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="/icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/icon.png">
+    <style>
+        :root {
+            --bg-primary: #0f1117;
+            --bg-secondary: #161922;
+            --text-primary: #a9b1d6;
+            --text-secondary: #787c99;
+            --accent: #7aa2f7;
+            --accent-hover: #5d7fd3;
+            --success: #9ece6a;
+            --warning: #e0af68;
+            --error: #f7768e;
+            --liquid-glass: rgba(26, 27, 38, 0.7);
+            --liquid-glass-border: rgba(186, 187, 208, 0.1);
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            --backdrop-blur: 20px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            background-image: 
+                radial-gradient(ellipse at top, rgba(122, 162, 247, 0.1) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom, rgba(158, 206, 255, 0.05) 0%, transparent 50%);
+        }
+
+        .liquid-glass {
+            background: var(--liquid-glass);
+            backdrop-filter: blur(var(--backdrop-blur));
+            -webkit-backdrop-filter: blur(var(--backdrop-blur));
+            border: 1px solid var(--liquid-glass-border);
+            box-shadow: var(--shadow);
+            border-radius: 16px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            padding: 3rem 0;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+            text-shadow: 0 0 30px rgba(122, 162, 247, 0.3);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+
+        nav {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 2rem;
+            flex-wrap: wrap;
+        }
+
+        nav a {
+            color: var(--text-primary);
+            text-decoration: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        nav a:hover {
+            color: var(--accent);
+            background: rgba(122, 162, 247, 0.1);
+        }
+
+        main {
+            padding: 2rem 0;
+        }
+
+        .section {
+            margin-bottom: 3rem;
+        }
+
+        h2 {
+            font-size: 2rem;
+            color: var(--accent);
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid var(--accent);
+            padding-bottom: 0.5rem;
+            display: inline-block;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .card {
+            padding: 2rem;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .card h3 {
+            color: var(--accent);
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+        }
+
+        .card p {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+
+        .code-block {
+            background: var(--bg-secondary);
+            border: 1px solid var(--liquid-glass-border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .code-block code {
+            color: var(--text-primary);
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(122, 162, 247, 0.2);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+        }
+
+        .copy-btn:hover {
+            background: rgba(122, 162, 247, 0.3);
+        }
+
+        .code-block {
+            position: relative;
+        }
+
+        .method-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .method-badge.http {
+            background: rgba(158, 206, 255, 0.2);
+            color: #9ece6a;
+            border: 1px solid rgba(158, 206, 255, 0.3);
+        }
+
+        .method-badge.custom {
+            background: rgba(122, 162, 247, 0.2);
+            color: #7aa2f7;
+            border: 1px solid rgba(122, 162, 247, 0.3);
+        }
+
+        .example-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+        }
+
+        .example-table th, .example-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--liquid-glass-border);
+        }
+
+        .example-table th {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .example-table tr:hover {
+            background: rgba(122, 162, 247, 0.05);
+        }
+
+        .warning-box {
+            background: rgba(224, 175, 104, 0.1);
+            border: 1px solid rgba(224, 175, 104, 0.3);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+        }
+
+        .warning-box h3 {
+            color: var(--warning);
+            margin-bottom: 0.5rem;
+        }
+
+        .success-box {
+            background: rgba(158, 206, 255, 0.1);
+            border: 1px solid rgba(158, 206, 255, 0.3);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+        }
+
+        .success-box h3 {
+            color: var(--success);
+            margin-bottom: 0.5rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 3rem 0;
+            color: var(--text-secondary);
+            border-top: 1px solid var(--liquid-glass-border);
+            margin-top: 3rem;
+        }
+
+        .hero-section {
+            text-align: center;
+            padding: 4rem 0;
+        }
+
+        .hero-section h1 {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .hero-section .subtitle {
+            font-size: 1.5rem;
+            max-width: 600px;
+            margin: 0 auto 2rem;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background: var(--accent);
+            color: var(--bg-primary);
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 20px rgba(122, 162, 247, 0.3);
+        }
+
+        .cta-button:hover {
+            background: var(--accent-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(122, 162, 247, 0.4);
+        }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 2.5rem; }
+            .hero-section h1 { font-size: 2.5rem; }
+            .container { padding: 1rem; }
+            .card-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Metanoia Developer Portal</h1>
+            <p class="subtitle">Link directly to Bible verses from your Android app</p>
+            <nav>
+                <a href="#linking">Linking Guide</a>
+                <a href="#examples">Examples</a>
+                <a href="#testing">Testing</a>
+                <a href="#faq">FAQ</a>
+                <a href="https://github.com/4cecoder/metanoia">GitHub</a>
+            </nav>
+        </header>
+
+        <main>
+            <div class="section">
+                <div class="hero-section">
+                    <h1>Deep Link to Bible Verses</h1>
+                    <p class="subtitle">Enable users to jump from your app directly to specific passages in Metanoia</p>
+                    <a href="#linking" class="cta-button">Get Started</a>
+                </div>
+            </div>
+
+            <div class="section" id="linking">
+                <h2>How It Works</h2>
+                <p class="subtitle">Two simple link formats, automatic verse resolution</p>
+                
+                <div class="card-grid">
+                    <div class="card liquid-glass">
+                        <span class="method-badge http">HTTPS</span>
+                        <h3>Web-Friendly Links</h3>
+                        <p>Use standard HTTPS URLs that work in browsers and automatically open Metanoia with App Link verification.</p>
+                        <div class="code-block">
+                            <code>https://metanoia.bytecats.codes/bible/John/3/16</code>
+                            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                        </div>
+                    </div>
+                    
+                    <div class="card liquid-glass">
+                        <span class="method-badge custom">Custom Scheme</span>
+                        <h3>Direct App Links</h3>
+                        <p>Use the metanoia:// scheme for immediate deep links without web verification needed.</p>
+                        <div class="code-block">
+                            <code>metanoia://bible/John/3/16</code>
+                            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                        </div>
+                    </div>
+                    
+                    <div class="card liquid-glass">
+                        <span class="method-badge http">Flexible</span>
+                        <h3>Smart Resolution</h3>
+                        <p>Supports full book names, common abbreviations, and automatic chapter/verse validation.</p>
+                        <div class="code-block">
+                            <code>https://metanoia.bytecats.codes/bible/jn/3/16</code>
+                            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="implementation">
+                <h2>Integration Guide</h2>
+                
+                <div class="card liquid-glass">
+                    <h3>Kotlin/Android</h3>
+                    <p>Launch Metanoia from your Android app with a specific verse reference:</p>
+                    <div class="code-block">
+                        <code>val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://metanoia.bytecats.codes/bible/John/3/16"))
+startActivity(intent)</code>
+                        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    </div>
+                </div>
+
+                <div class="card liquid-glass">
+                    <h3>Web/HTML</h3>
+                    <p>Create clickable links that open Metanoia directly:</p>
+                    <div class="code-block">
+                        <code>&lt;a href="https://metanoia.bytecats.codes/bible/Romans/8/28"&gt;Read Romans 8:28&lt;/a&gt;</code>
+                        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    </div>
+                </div>
+
+                <div class="card liquid-glass">
+                    <h3>JavaScript/Web</h3>
+                    <p>Programmatic links from web apps:</p>
+                    <div class="code-block">
+                        <code>window.open('https://metanoia.bytecats.codes/bible/Genesis/1/1', '_self');</code>
+                        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="examples">
+                <h2>Link Examples</h2>
+                
+                <div class="success-box">
+                    <h3>✅ Tested & Working</h3>
+                    <p>These links have been verified to work correctly with the latest Metanoia app.</p>
+                </div>
+
+                <table class="example-table">
+                    <thead>
+                        <tr>
+                            <th>Link</th>
+                            <th>Opens</th>
+                            <th>Type</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>metanoia://bible/John/3/16</code></td>
+                            <td>John 3:16</td>
+                            <td><span class="method-badge custom">Custom</span></td>
+                        </tr>
+                        <tr>
+                            <td><code>https://metanoia.bytecats.codes/bible/Genesis/1</code></td>
+                            <td>Genesis 1 (chapter)</td>
+                            <td><span class="method-badge http">HTTPS</span></td>
+                        </tr>
+                        <tr>
+                            <td><code>https://metanoia.bytecats.codes/bible/1Samuel/17/45</code></td>
+                            <td>1 Samuel 17:45</td>
+                            <td><span class="method-badge http">HTTPS</span></td>
+                        </tr>
+                        <tr>
+                            <td><code>metanoia://bible/SongofSolomon/2/1</code></td>
+                            <td>Song of Solomon 2:1</td>
+                            <td><span class="method-badge custom">Custom</span></td>
+                        </tr>
+                        <tr>
+                            <td><code>https://metanoia.bytecats.codes/bible/jn/3/16</code></td>
+                            <td>John 3:16 (abbreviation)</td>
+                            <td><span class="method-badge http">HTTPS</span></td>
+                        </tr>
+                        <tr>
+                            <td><code>https://metanoia.bytecats.codes/bible/Romans/8/28</code></td>
+                            <td>Romans 8:28</td>
+                            <td><span class="method-badge http">HTTPS</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="section" id="testing">
+                <h2>Testing Links</h2>
+                
+                <div class="warning-box">
+                    <h3>⚠️ ADB Testing</h3>
+                    <p>Test deep links directly from your development machine:</p>
+                    <div class="code-block">
+                        <code>adb shell am start -W -a android.intent.action.VIEW \
+  -d "metanoia://bible/John/3/16" com.bytecats.metanoia</code>
+                        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    </div>
+                </div>
+
+                <div class="card liquid-glass">
+                    <h3>Live Testing</h3>
+                    <p>Try these links right now (requires Metanoia app installed):</p>
+                    <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem;">
+                        <a href="https://metanoia.bytecats.codes/bible/John/3/16" class="cta-button" style="font-size: 0.9rem; padding: 0.75rem 1.5rem;">Test John 3:16</a>
+                        <a href="https://metanoia.bytecats.codes/bible/Genesis/1" class="cta-button" style="font-size: 0.9rem; padding: 0.75rem 1.5rem;">Test Genesis 1</a>
+                        <a href="https://metanoia.bytecats.codes/bible/Romans/8/28" class="cta-button" style="font-size: 0.9rem; padding: 0.75rem 1.5rem;">Test Romans 8:28</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="faq">
+                <h2>Frequently Asked Questions</h2>
+                
+                <div class="card-grid">
+                    <div class="card liquid-glass">
+                        <h3>What if Metanoia isn't installed?</h3>
+                        <p>The HTTPS link will open in a web browser. Users can then choose to install Metanoia from the link.</p>
+                    </div>
+                    
+                    <div class="card liquid-glass">
+                        <h3>Does this work on iOS?</h3>
+                        <p>Currently Android-only. iOS deep linking support is planned for future releases.</p>
+                    </div>
+                    
+                    <div class="card liquid-glass">
+                        <h3>Can I link to specific translations?</h3>
+                        <p>Not yet. Links open the user's currently selected translation. Translation-specific links are planned.</p>
+                    </div>
+                    
+                    <div class="card liquid-glass">
+                        <h3>What about deuterocanonical books?</h3>
+                        <p>Currently only 66-book Protestant canon. Use full book names (e.g., "Tobit") for other canons until abbreviations are added.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Developer Resources</h2>
+                <div class="card-grid">
+                    <div class="card liquid-glass">
+                        <h3>Source Code</h3>
+                        <p><a href="https://github.com/4cecoder/metanoia" style="color: var(--accent);">View on GitHub</a></p>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem;">MIT License - Open Source</p>
+                    </div>
+                    
+                    <div class="card liquid-glass">
+                        <h3>Documentation</h3>
+                        <p><a href="https://github.com/4cecoder/metanoia/tree/main/docs" style="color: var(--accent);">Full Documentation</a></p>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem;">Implementation details & technical notes</p>
+                    </div>
+                    
+                    <div class="card liquid-glass">
+                        <h3>Issues & Support</h3>
+                        <p><a href="https://github.com/4cecoder/metanoia/issues" style="color: var(--accent);">Report Issues</a></p>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem;">Bug reports & feature requests</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Made with ❤️ by the Metanoia community • <a href="https://github.com/4cecoder/metanoia" style="color: var(--accent);">GitHub</a></p>
+            <p style="font-size: 0.9rem; margin-top: 0.5rem;">© 2024 Metanoia Project. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+        function copyCode(button) {
+            const codeBlock = button.parentElement;
+            const code = codeBlock.querySelector('code');
+            navigator.clipboard.writeText(code.textContent).then(() => {
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                setTimeout(() => {
+                    button.textContent = originalText;
+                }, 2000);
+            });
+        }
+
+        // Smooth scroll for navigation
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
