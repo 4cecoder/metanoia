@@ -58,6 +58,15 @@ class BibleDatabase(private val context: Context) {
             """.trimIndent())
             db.execSQL("CREATE TABLE IF NOT EXISTS reading_progress (book TEXT, chapter INTEGER, first_read_at INTEGER, last_read_at INTEGER, read_count INTEGER, reading_time_seconds INTEGER DEFAULT 0, PRIMARY KEY(book, chapter))")
             db.execSQL("CREATE TABLE IF NOT EXISTS reading_events (id INTEGER PRIMARY KEY AUTOINCREMENT, book TEXT, chapter INTEGER, timestamp INTEGER)")
+            
+            // Migration: Add reading_time_seconds column if it doesn't exist
+            try {
+                db.execSQL("ALTER TABLE reading_progress ADD COLUMN reading_time_seconds INTEGER DEFAULT 0")
+            } catch (e: Exception) {
+                // Column already exists or other error - ignore
+                Log.d("BibleDatabase", "Migration for reading_time_seconds: ${e.message}")
+            }
+            
             db.close()
         } catch (e: Exception) {
             Log.e("BibleDatabase", "Init failed: ${e.message}")

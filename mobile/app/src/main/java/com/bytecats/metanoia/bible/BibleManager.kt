@@ -34,6 +34,7 @@ class BibleManager(private val context: Context) {
     }
 
     val books = BOOKS
+    @Suppress("DEPRECATION") // Deprecated gateway used for backward compatibility
     val gateway = GatewayClient(baseUrlProvider = { "http://192.168.122.2:8000" })
 
     private fun getDb(readOnly: Boolean = true): SQLiteDatabase {
@@ -252,5 +253,54 @@ class BibleManager(private val context: Context) {
     fun getChapterReadingTimes(book: String): Map<Int, Long> = database.getChapterReadingTimes(book)
     fun getChapterWordCounts(book: String): Map<Int, Int> = database.getChapterWordCounts(book)
     fun getDownloadedChapters(book: String): Set<Int> = database.getDownloadedChapters(book)
+
+    /**
+     * Calculates detailed reading progress for a book using time-based metrics.
+     * Considers both chapter visits and actual reading time vs word count.
+     */
+    fun getBookReadingProgress(book: String): ReadingStats.BookReadingProgress {
+        val chapterWordCounts = getChapterWordCounts(book)
+        val chapterReadingTimes = getChapterReadingTimes(book)
+        val totalChapters = books.find { it.name == book }?.chapters ?: chapterWordCounts.size
+        
+        return ReadingStats.BookReadingProgress(
+            bookName = book,
+            totalChapters = totalChapters,
+            completionFraction = ReadingStats.calculateBookCompletion(
+                chapterReadingTimes = chapterReadingTimes,
+                chapterWordCounts = chapterWordCounts,
+                totalChapters = totalChapters
+            ),
+            chapterStatus = ReadingStats.getChapterReadingStatus(
+                chapterReadingTimes = chapterReadingTimes,
+                chapterWordCounts = chapterWordCounts
+            ),
+            totalWords = ReadingStats.calculateBookWordCount(chapterWordCounts),
+            totalReadingTimeSeconds = chapterReadingTimes.values.sum()
+        )
+    }
+
+    /**
+     * Gets overall reading completion across all books using time-based metrics.
+     */
+    fun getTimeBasedCompletion(): Map<String, Float> {
+        return books.associate { book ->
+            val progress = getBookReadingProgress(book.name)
+            book.name to progress.completionFraction
+        }
+    }
+
+    /**
+     * Estimates current reading session progress and completion time.
+     */
+    fun estimateCurrentReadingProgress(book: String, chapter: Int): Pair<Float, Long> {
+        val wordCount = getChapterWordCounts(book)[chapter] ?: 0
+        val readingTime = getChapterReadingTimes(book)[chapter] ?: 0L
+        
+        return ReadingStats.estimateSessionCompletion(
+            wordCount = wordCount,
+            elapsedTimeSeconds = readingTime
+        )
+    }
 
 }

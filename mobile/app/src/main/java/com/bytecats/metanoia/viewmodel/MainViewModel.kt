@@ -10,12 +10,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bytecats.metanoia.bible.BibleManager
 import com.bytecats.metanoia.bible.VerseReference
-import com.bytecats.metanoia.gateway.GatewayClient
 import com.bytecats.metanoia.models.*
 import com.bytecats.metanoia.settings.SettingsManager
 import com.bytecats.metanoia.stt.STTManager
 import com.bytecats.metanoia.models.RemoteVoice
 import com.bytecats.metanoia.tts.TTSManager
+import com.bytecats.metanoia.tts.NativeTTSService
 import com.bytecats.metanoia.update.NightlyUpdateInfo
 import com.bytecats.metanoia.update.UpdateChecker
 import kotlinx.coroutines.Dispatchers
@@ -38,22 +38,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
 
     val settingsManager = SettingsManager(context)
     val bibleManager = BibleManager(context)
-    val gateway: GatewayClient = bibleManager.gateway
-    var ttsManager: TTSManager? = null
+
+    // Native TTS service (replaces deprecated gateway system)
+    var nativeTTSService: NativeTTSService? = null
+    @Deprecated("Use nativeTTSService instead of gateway client", level = DeprecationLevel.WARNING)
+    val gateway = bibleManager.gateway //保留用于向后兼容，但不推荐使用
+    var ttsManager: TTSManager? = null // 保留用于向后兼容
     var sttManager: STTManager? = null
     private var systemTts: TextToSpeech? = null
 
     val voiceLogs = mutableStateListOf<String>()
 
-    // Detailed voice state
-    var serverVoices = mutableStateListOf<RemoteVoice>()
-    var isDiscovering by mutableStateOf(false)
+    // Voice state (now using GGUF models instead of server voices)
+    var availableVoices = mutableStateListOf<com.bytecats.metanoia.tts.VoiceModel>()
+    var isInitializingTTS by mutableStateOf(false)
 
-    // Gateway status
-    var gatewayOnline by mutableStateOf(false)
-    var isTestingGateway by mutableStateOf(false)
+    // Native TTS status
+    var isNativeTTSReady by mutableStateOf(false)
 
-    val isRemoteTtsActive: Boolean get() = settingsManager.useExperimentalTTS && gatewayOnline
+    val isRemoteTtsActive: Boolean get() = settingsManager.useExperimentalTTS && isNativeTTSReady
 
     private val _narrationState = mutableStateOf(NarrationState())
     val narrationState: State<NarrationState> = _narrationState
@@ -83,16 +86,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
 
         viewModelScope.launch {
             try {
+                // Initialize native TTS service
+                nativeTTSService = NativeTTSService(context) { msg ->
+                    voiceLogs.add("[${currentTime()}] $msg")
+                }
+
+                // Initialize native TTS engine
+                initializeNativeTTS()
+
+                // Initialize other managers
                 ttsManager = TTSManager(context) { msg ->
                     voiceLogs.add("[${currentTime()}] $msg")
                 }
                 sttManager = STTManager(context)
 
-                // Check gateway on startup
-                checkGatewayConnection()
-
-                // Initial load
-                refreshServerVoices()
+                // Refresh available voices (GGUF models)
+                refreshAvailableVoices()
 
                 // Aggressive auto-update when experimental updates enabled:
                 // checks immediately on startup, then re-checks hourly
@@ -102,7 +111,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
                     startAutoUpdateLoop()
                 }
             } catch (e: Exception) {
-                Log.e("VM", "Hardware fail: ${e.message}")
+                Log.e("VM", "Initialization failed: ${e.message}")
+                voiceLogs.add("[${currentTime()}] ERROR: ${e.message}")
             }
         }
     }
@@ -114,29 +124,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     }
 
     // -----------------------------------------------------------------------
-    // Gateway connection
+    // Native TTS initialization
     // -----------------------------------------------------------------------
 
-    fun checkGatewayConnection() {
+    /**
+     * Initialize the native Qwen3-TTS engine.
+     * Replaces deprecated gateway connection checks.
+     */
+    fun initializeNativeTTS() {
+        if (isInitializingTTS) return
+        isInitializingTTS = true
+
         viewModelScope.launch {
-            isTestingGateway = true
-            gatewayOnline = withContext(Dispatchers.IO) {
-                gateway?.health() ?: false
+            voiceLogs.add("[${currentTime()}] Initializing native Qwen3-TTS engine...")
+            val success = nativeTTSService?.initialize() ?: false
+            isNativeTTSReady = success
+            isInitializingTTS = false
+
+            if (success) {
+                val status = nativeTTSService?.getStatus()
+                voiceLogs.add("[${currentTime()}] Native TTS READY: ${status?.availableVoices} voices available")
+            } else {
+                voiceLogs.add("[${currentTime()}] Native TTS FAILED - falling back to system TTS")
             }
-            isTestingGateway = false
-            voiceLogs.add("[${currentTime()}] Gateway ${settingsManager.gatewayUrl}: ${if (gatewayOnline) "ONLINE" else "OFFLINE"}")
         }
     }
 
+    /**
+     * Refresh available voice models (GGUF files).
+     * Replaces deprecated server voice discovery.
+     */
+    fun refreshAvailableVoices() {
+        viewModelScope.launch {
+            val voices = nativeTTSService?.getAvailableVoices() ?: emptyList()
+            availableVoices.clear()
+            availableVoices.addAll(voices)
+            voiceLogs.add("[${currentTime()}] Found ${voices.size} voice models")
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Legacy gateway methods (deprecated - kept for backward compatibility)
+    // -----------------------------------------------------------------------
+
+    @Deprecated("Use initializeNativeTTS() instead", level = DeprecationLevel.WARNING)
+    fun checkGatewayConnection() {
+        initializeNativeTTS()
+    }
+
+    @Deprecated("Use initializeNativeTTS() instead", level = DeprecationLevel.WARNING)
     fun testGatewayConnection(onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
-            isTestingGateway = true
-            val result = withContext(Dispatchers.IO) {
-                gateway?.health() ?: false
-            }
-            gatewayOnline = result
-            isTestingGateway = false
-            onResult(result)
+            val success = nativeTTSService?.initialize() ?: false
+            onResult(success)
         }
     }
 
@@ -204,69 +244,76 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     // TTS / Voice
     // -----------------------------------------------------------------------
 
+    /**
+     * Refresh available voice models (GGUF files).
+     * This replaces the deprecated discoverServer() method.
+     */
     fun discoverServer() {
-        if (isDiscovering) return
-        isDiscovering = true
-        viewModelScope.launch {
-            ttsManager?.discoverServer()?.let { url ->
-                settingsManager.ttsServerUrl = url
-                refreshServerVoices()
-            }
-            isDiscovering = false
-        }
+        refreshAvailableVoices()
     }
 
+    /**
+     * Refresh available voice models (GGUF files).
+     * This replaces the deprecated refreshServerVoices() method.
+     */
     fun refreshServerVoices() {
-        viewModelScope.launch {
-            val voices = ttsManager?.fetchFullStatus() ?: emptyList()
-            serverVoices.clear()
-            serverVoices.addAll(voices)
-        }
+        refreshAvailableVoices()
     }
 
+    /**
+     * Check if a voice model is available.
+     * @param voiceId Voice model identifier (GGUF filename without extension)
+     */
+    fun hasVoiceModel(voiceId: String): Boolean {
+        return nativeTTSService?.hasVoiceModel(voiceId) ?: false
+    }
+
+    /**
+     * Get native TTS engine status.
+     */
+    fun getTTSEngineStatus(): com.bytecats.metanoia.tts.EngineStatus? {
+        return nativeTTSService?.getStatus()
+    }
+
+    // -----------------------------------------------------------------------
+    // Legacy voice management methods (deprecated - GGUF models managed as files)
+    // -----------------------------------------------------------------------
+
+    @Deprecated("Voice management now uses GGUF model files. Manage voices via file system.", level = DeprecationLevel.WARNING)
     fun deleteServerVoice(key: String) {
-        viewModelScope.launch {
-            if (ttsManager?.deleteVoice(key) == true) {
-                voiceLogs.add("[${currentTime()}] Voice '$key' deleted.")
-                refreshServerVoices()
-            }
-        }
+        voiceLogs.add("[${currentTime()}] Voice deletion deprecated - manage GGUF files directly")
     }
 
+    @Deprecated("Voice creation now uses GGUF model files. Create voices via VoiceLab.", level = DeprecationLevel.WARNING)
     fun createServerVoice(name: String, text: String) {
-        viewModelScope.launch {
-            if (ttsManager?.upsertVoice(name, text) == true) {
-                voiceLogs.add("[${currentTime()}] Voice '$name' created.")
-                refreshServerVoices()
-            }
-        }
+        voiceLogs.add("[${currentTime()}] Voice creation deprecated - use VoiceLab for GGUF models")
     }
 
+    @Deprecated("Voice sample upload deprecated - use GGUF model files instead", level = DeprecationLevel.WARNING)
     fun uploadVoiceSample(key: String, file: File) {
-        viewModelScope.launch {
-            if (ttsManager?.uploadSample(key, file) == true) {
-                voiceLogs.add("[${currentTime()}] Audio for '$key' updated.")
-                refreshServerVoices()
-            }
-        }
+        voiceLogs.add("[${currentTime()}] Voice upload deprecated - use GGUF model files instead")
     }
 
     fun speak(text: String) {
-        if (settingsManager.useExperimentalTTS && ttsManager != null) {
+        if (settingsManager.useExperimentalTTS && nativeTTSService != null) {
             viewModelScope.launch {
                 val voice = settingsManager.selectedVoice
-                voiceLogs.add("[${currentTime()}] Synthesis request ($voice): ${text.take(15)}...")
+                voiceLogs.add("[${currentTime()}] Native synthesis ($voice): ${text.take(15)}...")
 
-                ttsManager?.generateSpeech(text, voice)?.let { file ->
-                    ttsManager?.playAudio(file)
+                // Use native TTS service for synthesis
+                val audioFile = nativeTTSService?.synthesize(text, voice)
+
+                audioFile?.let { file ->
+                    nativeTTSService?.playAudio(file)
                     if (_narrationState.value.isPlaying) advanceNarration()
                 } ?: run {
-                    val url = settingsManager.gatewayUrl
-                    voiceLogs.add("[${currentTime()}] ERROR: Remote engine fail at $url. Check server or IP.")
+                    voiceLogs.add("[${currentTime()}] ERROR: Native synthesis failed - falling back to system TTS")
+                    // Fallback to system TTS
                     systemTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "metanoia_utterance")
                 }
             }
         } else {
+            // Use system TTS
             systemTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "metanoia_utterance")
         }
     }
@@ -316,8 +363,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     }
 
     override fun onCleared() {
+        // Clean up native TTS service
+        nativeTTSService?.shutdown()
+        nativeTTSService = null
+
+        // Clean up legacy TTS manager
+        ttsManager?.shutdown()
+        ttsManager = null
+
+        // Clean up system TTS
         systemTts?.stop()
         systemTts?.shutdown()
+
         super.onCleared()
     }
 }

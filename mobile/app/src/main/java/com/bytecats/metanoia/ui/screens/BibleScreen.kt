@@ -69,8 +69,8 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
     var expandedVerses by remember(selectedBook, selectedChapter) { mutableStateOf<Set<Int>>(emptySet()) }
     var chapterWordCounts by remember(selectedBook) { mutableStateOf<Map<Int, Int>>(emptyMap()) }
     var downloadedChapters by remember(selectedBook) { mutableStateOf<Set<Int>>(emptySet()) }
-    
     var chapterReadingTimes by remember(selectedBook) { mutableStateOf<Map<Int, Long>>(emptyMap()) }
+    var bookReadingProgress by remember(selectedBook) { mutableStateOf<ReadingStats.BookReadingProgress?>(null) }
     
     LaunchedEffect(selectedBook) {
         if (selectedBook != null) {
@@ -141,8 +141,30 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text(if (step == "read") "${selectedBook?.name} $selectedChapter" else "BIBLE") },
-                    navigationIcon = { if (step != "book") IconButton({ step = if (step == "read") "chapter" else "book"; isSearchVisible = (step == "book"); viewModel.stopNarration() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
+                    title = { Text(if (step == "read") "${selectedBook?.name} $selectedChapter" else if (step == "chapter") "${selectedBook?.name}" else "BIBLE") },
+                    navigationIcon = { 
+                        if (step != "book") {
+                            IconButton({ 
+                                when (step) {
+                                    "read" -> {
+                                        step = "chapter"
+                                        interlinearData = emptyMap()
+                                        expandedVerses = emptySet()
+                                    }
+                                    "chapter" -> {
+                                        step = "book"
+                                        selectedBook = null
+                                        chapterWordCounts = emptyMap()
+                                        downloadedChapters = emptySet()
+                                        chapterReadingTimes = emptyMap()
+                                        bookReadingProgress = null
+                                    }
+                                }
+                                isSearchVisible = (step == "book")
+                                viewModel.stopNarration() 
+                            }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
+                        }
+                    },
                     actions = { 
                         IconButton({ isSearchVisible = !isSearchVisible }) { Icon(Icons.Default.Search, null) }
                         IconButton({ onNavigateToSettings() }) { Icon(Icons.Default.Settings, null) }
@@ -187,6 +209,8 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
                                         selectedChapter = res.chapter
                                         currentChapterContent = bibleManager.getChapter(res.book, res.chapter)
                                         highlights = bibleManager.getHighlights(res.book, res.chapter)
+                                        interlinearData = emptyMap()
+                                        expandedVerses = emptySet()
                                         searchQuery = ""; isSearchVisible = false; step = "read" 
                                     }
                                 )
@@ -225,9 +249,10 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
                                 val readGreen = 0x9ECE6A
                                 val lerpedColorInt = ReadingStats.lerpColor(baseColor, readGreen, progress)
                                 val containerColor = if (progress > 0f) Color(lerpedColorInt).copy(alpha = if (progress >= 1f) 0.35f else 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                val phaseOffset = book.name.hashCode().toFloat() * 0.1f
                                 Card(
                                     modifier = Modifier.padding(4.dp).height(68.dp).let {
-                                        if (progress >= 1f) it.cyberpunkGlowAura(time, Color(0xFF9ece6a).copy(alpha = 0.3f)) else it
+                                        if (progress >= 1f) it.cyberpunkGlowAura(time, Color(0xFF9ece6a).copy(alpha = 0.3f), phaseOffset) else it
                                     }.combinedClickable(
                                         onClick = { selectedBook = book; step = "chapter"; isSearchVisible = false },
                                         onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); modalBook = book }

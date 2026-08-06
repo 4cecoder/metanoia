@@ -6,6 +6,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,9 +32,38 @@ fun AudioSettingsPage(navController: NavController, settings: SettingsManager) {
     }) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
 
+            // NATIVE TTS NOTICE
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Native Neural TTS",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Using Qwen3-TTS forward pass with GGUF models - no gateway required!",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        "Supported: Neural synthesis, voice cloning via GGUF, 24kHz audio output",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
             Text("TTS Engine", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Text(
-                "Kokoro = lightweight neural (recommended)\nVoice Clone = Qwen3-TTS zero-shot cloning\nSystem = Android built-in (offline)",
+                "Native = Qwen3-TTS neural (recommended, offline)\nGateway = Remote gateway (deprecated)\nSystem = Android built-in (offline, basic)",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline
             )
@@ -47,13 +77,13 @@ fun AudioSettingsPage(navController: NavController, settings: SettingsManager) {
                 value = voice,
                 onValueChange = { voice = it; settings.selectedVoice = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Voice Profile") },
-                placeholder = { Text("af_nicole") },
+                label = { Text("Voice Model") },
+                placeholder = { Text("qwen_tts_2b.gguf") },
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.RecordVoiceOver, null) }
             )
             Text(
-                "Kokoro voices: af_nicole, af_heart, am_lennox, etc.\nClone voices: registered voice profile names from gateway.",
+                "GGUF voice models: qwen_tts_2b.gguf, custom voices via VoiceLab\nLoad from app data directory or VoiceLab interface.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline
             )
@@ -66,16 +96,35 @@ fun AudioSettingsPage(navController: NavController, settings: SettingsManager) {
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                "Server: ${settings.gatewayUrl}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline
-            )
-            Text(
-                "Configure gateway IP/port in Settings > Gateway Connection",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline
-            )
+            
+            // DEPRECATED GATEWAY REFERENCE
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(0.3f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Gateway Settings",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Legacy Gateway URL: ${settings.gatewayUrl}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Text(
+                        "⚠️ Gateway settings are deprecated. Use native GGUF models.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
         }
     }
 }

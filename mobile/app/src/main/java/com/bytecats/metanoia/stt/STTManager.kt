@@ -14,10 +14,23 @@ import org.json.JSONObject
  *  - Voice search (speak a verse reference)
  *  - Audio note transcription
  *  - TTS quality verification (transcribe generated audio back to text)
+ *
+ * @deprecated Gateway STT is deprecated. Use Android Speech Recognition as fallback.
+ * Native Whisper implementation coming soon.
+ *
+ * Migration example:
+ * OLD: STTManager(context).transcribe(audioBytes)
+ * NEW: Use Android SpeechRecognizer or upcoming native Whisper implementation
  */
+@Deprecated(
+    message = "Gateway STT is deprecated. Use Android Speech Recognition as fallback.",
+    replaceWith = ReplaceWith("SpeechRecognizer.createSpeechRecognizer(context)", "android.speech.SpeechRecognizer"),
+    level = DeprecationLevel.WARNING
+)
 class STTManager(context: Context) {
 
     private val settings = SettingsManager(context)
+    @Suppress("DEPRECATION") // Deprecated class used internally for backward compatibility
     private val gateway = GatewayClient { settings.gatewayUrl }
     private val tag = "STTManager"
 

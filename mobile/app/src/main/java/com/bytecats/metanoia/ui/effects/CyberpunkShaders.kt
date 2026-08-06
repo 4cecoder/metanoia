@@ -51,6 +51,7 @@ object CyberpunkShaders {
         uniform shader composable;
         uniform float2 resolution;
         uniform float time;
+        uniform float phaseOffset;
         layout(color) uniform half4 auraColor;
         
         half4 main(float2 fragCoord) {
@@ -59,9 +60,11 @@ object CyberpunkShaders {
             float2 center = float2(0.5, 0.5);
             float dist = distance(uv, center);
             
-            float pulse = 0.5 + 0.5 * sin(time * 3.0);
-            float intensity = 1.0 - smoothstep(0.0, 0.8 + 0.2 * pulse, dist);
-            half4 aura = half4(auraColor.rgb * half(intensity), auraColor.a * half(intensity * 0.5));
+            float adjustedTime = time + phaseOffset;
+            float pulse = 0.5 + 0.5 * sin(adjustedTime * 2.5);
+            float shimmer = 0.5 + 0.5 * sin(adjustedTime * 7.0 + dist * 10.0);
+            float intensity = (1.0 - smoothstep(0.0, 0.7 + 0.15 * pulse, dist)) * (0.8 + 0.4 * shimmer);
+            half4 aura = half4(auraColor.rgb * half(intensity), auraColor.a * half(intensity * 0.6));
             return orig + aura;
         }
     """
@@ -83,12 +86,13 @@ fun Modifier.cyberpunkHudBackground(time: Float, baseColor: Color = Color(0xFF1A
     return this
 }
 
-fun Modifier.cyberpunkGlowAura(time: Float, auraColor: Color = Color(0xFF7AA2F7)): Modifier {
+fun Modifier.cyberpunkGlowAura(time: Float, auraColor: Color = Color(0xFF7AA2F7), phaseOffset: Float = 0f): Modifier {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         return this.graphicsLayer {
             val shader = RuntimeShader(CyberpunkShaders.GLOW_AURA_SHADER)
             shader.setFloatUniform("resolution", size.width, size.height)
             shader.setFloatUniform("time", time)
+            shader.setFloatUniform("phaseOffset", phaseOffset)
             shader.setColorUniform("auraColor", android.graphics.Color.valueOf(auraColor.red, auraColor.green, auraColor.blue, auraColor.alpha).toArgb())
             renderEffect = RenderEffect.createRuntimeShaderEffect(shader, "composable").asComposeRenderEffect()
         }

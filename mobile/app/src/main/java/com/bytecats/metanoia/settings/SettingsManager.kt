@@ -6,19 +6,58 @@ import android.content.SharedPreferences
 class SettingsManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("metanoia_settings", Context.MODE_PRIVATE)
 
-    // --- Gateway Connection ---
+    // ========================================================================
+    // NATIVE TTS CONFIGURATION
+    // ========================================================================
+
+    /** Enable/disable native Qwen3-TTS neural synthesis */
+    var useNativeTTS: Boolean
+        get() = prefs.getBoolean("use_native_tts", true)
+        set(value) = prefs.edit().putBoolean("use_native_tts", value).apply()
+
+    /** Selected voice model identifier (GGUF filename without extension) */
+    var selectedVoice: String
+        get() = prefs.getString("selected_voice", "qwen_tts_2b") ?: "qwen_tts_2b"
+        set(value) = prefs.edit().putString("selected_voice", value).apply()
+
+    /** Default speech speed multiplier (1.0 = normal speed) */
+    var speechSpeed: Float
+        get() = prefs.getFloat("speech_speed", 1.0f)
+        set(value) = prefs.edit().putFloat("speech_speed", value.coerceIn(0.5f, 2.0f)).apply()
+
+    /** Speech generation temperature (lower = more deterministic) */
+    var speechTemperature: Float
+        get() = prefs.getFloat("speech_temperature", 0.5f)
+        set(value) = prefs.edit().putFloat("speech_temperature", value.coerceIn(0.1f, 1.0f)).apply()
+
+    /** Custom model directory path (empty = use default app directory) */
+    var customModelDirectory: String
+        get() = prefs.getString("custom_model_dir", "") ?: ""
+        set(value) = prefs.edit().putString("custom_model_dir", value).apply()
+
+    // ========================================================================
+    // LEGACY GATEWAY SETTINGS (DEPRECATED)
+    // ========================================================================
+    // @deprecated All gateway connection settings are deprecated.
+    // The native Qwen3-TTS forward pass implementation replaces gateway TTS.
+    // See docs/GATEWAY_MIGRATION.md for migration guide.
+
+    @Deprecated("Gateway IP setting is deprecated. Native TTS no longer requires gateway connectivity.", level = DeprecationLevel.WARNING)
     var gatewayIp: String
         get() = prefs.getString("gateway_ip", "192.168.122.2") ?: "192.168.122.2"
         set(value) = prefs.edit().putString("gateway_ip", value).apply()
 
+    @Deprecated("Gateway port setting is deprecated. Native TTS no longer requires gateway connectivity.", level = DeprecationLevel.WARNING)
     var gatewayPort: String
         get() = prefs.getString("gateway_port", "8000") ?: "8000"
         set(value) = prefs.edit().putString("gateway_port", value).apply()
 
+    @Deprecated("Gateway URL is deprecated. Native TTS no longer requires gateway connectivity.", level = DeprecationLevel.WARNING)
     val gatewayUrl: String
         get() = "http://${gatewayIp}:${gatewayPort}"
 
     /** Legacy compat — delegates to gatewayUrl */
+    @Deprecated("Gateway URL is deprecated. Use native Qwen3TTSEngine instead.", level = DeprecationLevel.WARNING)
     var ttsServerUrl: String
         get() = gatewayUrl
         set(value) {
@@ -33,18 +72,21 @@ class SettingsManager(context: Context) {
             }
         }
 
+    @Deprecated("Bible gateway API setting is deprecated. Direct scraping via BibleGatewayScraper is recommended.", level = DeprecationLevel.WARNING)
     var useGatewayBible: Boolean
         get() = prefs.getBoolean("use_gateway_bible", true)
         set(value) = prefs.edit().putBoolean("use_gateway_bible", value).apply()
 
     // --- Audio & TPU ---
+    /** Legacy setting - now delegates to useNativeTTS for backward compatibility */
+    @Deprecated("Use useNativeTTS instead", level = DeprecationLevel.WARNING)
     var useExperimentalTTS: Boolean
-        get() = prefs.getBoolean("use_experimental_tts", false)
-        set(value) = prefs.edit().putBoolean("use_experimental_tts", value).apply()
-
-    var selectedVoice: String
-        get() = prefs.getString("selected_voice", "lennox") ?: "lennox"
-        set(value) = prefs.edit().putString("selected_voice", value).apply()
+        get() = useNativeTTS
+        set(value) {
+            useNativeTTS = value
+            // Also update the legacy setting for any code that still reads it directly
+            prefs.edit().putBoolean("use_experimental_tts", value).apply()
+        }
 
     var tpuEnabled: Boolean
         get() = prefs.getBoolean("tpu_enabled", true)

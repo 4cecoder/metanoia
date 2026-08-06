@@ -14,7 +14,25 @@ import java.util.concurrent.TimeUnit
 /**
  * Unified HTTP client for the AI VM Gateway.
  * All managers (TTS, STT, Bible) route through this.
+ *
+ * @deprecated This class is deprecated and will be removed in a future version.
+ * All functionality has been replaced by native Qwen3-TTS forward pass implementation in Kotlin.
+ * Use [com.bytecats.metanoia.tts.Qwen3TTSEngine] for local neural TTS instead of gateway TTS.
+ * See migration guide at docs/GATEWAY_MIGRATION.md for details.
+ *
+ * Migration guide:
+ * - TTS: Replace gateway.ttsClone() with Qwen3TTSEngine.synthesize()
+ * - STT: Use local Whisper implementation (coming soon) instead of gateway.sttTranscribe()
+ * - Bible: Direct scraping is already implemented - use BibleGatewayScraper directly
+ *
+ * Last version using this: v2.x
+ * Target removal version: v3.0
  */
+@Deprecated(
+    message = "Replaced by native Qwen3-TTS forward pass in Kotlin. Use Qwen3TTSEngine for local TTS.",
+    replaceWith = ReplaceWith("com.bytecats.metanoia.tts.Qwen3TTSEngine", "com.bytecats.metanoia.tts.Qwen3TTSEngine"),
+    level = DeprecationLevel.WARNING
+)
 class GatewayClient(
     private val client: Call.Factory = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -30,8 +48,11 @@ class GatewayClient(
 
     // -----------------------------------------------------------------------
     // Health & connectivity
+    // @deprecated All gateway connectivity features are deprecated.
+    // Use native engine initialization checks instead.
     // -----------------------------------------------------------------------
 
+    @Deprecated("Gateway connectivity is deprecated. Use native engine initialization.", level = DeprecationLevel.WARNING)
     fun health(): Boolean {
         return try {
             val req = Request.Builder().url("$baseUrl/health").get().build()
@@ -42,6 +63,7 @@ class GatewayClient(
         }
     }
 
+    @Deprecated("Gateway connectivity is deprecated. Use native engine initialization.", level = DeprecationLevel.WARNING)
     fun ttsCloneHealth(): JSONObject? {
         return try {
             val req = Request.Builder().url("$baseUrl/tts/clone/health").get().build()
@@ -114,8 +136,15 @@ class GatewayClient(
 
     // -----------------------------------------------------------------------
     // TTS — Kokoro (lightweight, fast)
+    // @deprecated Use Qwen3TTSEngine.synthesize() for native neural TTS.
+    // Example replacement: engine.synthesize(text, speed = 1.0f)
     // -----------------------------------------------------------------------
 
+    @Deprecated(
+        "Replace with Qwen3TTSEngine.synthesize() for native neural TTS",
+        replaceWith = ReplaceWith("Qwen3TTSEngine(modelPath, codecPath).synthesize(text)", "com.bytecats.metanoia.tts.Qwen3TTSEngine"),
+        level = DeprecationLevel.WARNING
+    )
     fun ttsKokoro(text: String, voice: String = "af_nicole"): ByteArray? {
         val url = "$baseUrl/tts/kokoro?text=${java.net.URLEncoder.encode(text, "UTF-8")}" +
                   "&voice=${java.net.URLEncoder.encode(voice, "UTF-8")}"
@@ -124,14 +153,25 @@ class GatewayClient(
 
     // -----------------------------------------------------------------------
     // TTS — Voice Clone (Qwen3-TTS zero-shot)
+    // @deprecated Use Qwen3TTSEngine.synthesize() for native neural TTS.
+    // Voice cloning is now handled locally via GGUF models.
     // -----------------------------------------------------------------------
 
+    @Deprecated(
+        "Replace with Qwen3TTSEngine.synthesize() for native neural TTS with GGUF voice models",
+        replaceWith = ReplaceWith("Qwen3TTSEngine(modelPath, voiceModelPath).synthesize(text)", "com.bytecats.metanoia.tts.Qwen3TTSEngine"),
+        level = DeprecationLevel.WARNING
+    )
     fun ttsClone(text: String, voice: String = "default"): ByteArray? {
         val url = "$baseUrl/tts/clone?text=${java.net.URLEncoder.encode(text, "UTF-8")}" +
                   "&voice=${java.net.URLEncoder.encode(voice, "UTF-8")}"
         return getBytes(url)
     }
 
+    @Deprecated(
+        "Dynamic voice cloning now supported natively via GGUF models. See Qwen3TTSEngine documentation.",
+        level = DeprecationLevel.WARNING
+    )
     fun ttsCloneDynamic(text: String, refAudio: ByteArray, refText: String = ""): ByteArray? {
         val multipart = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("text", text)
@@ -147,18 +187,24 @@ class GatewayClient(
 
     // -----------------------------------------------------------------------
     // TTS — Voice DB (profile management)
+    // @deprecated Voice profiles are now managed via GGUF model files.
+    // Use GGUFReader and BPETokenizer for local voice management.
     // -----------------------------------------------------------------------
 
+    @Deprecated("Voice profiles now managed via GGUF model files. See GGUFReader and BPETokenizer.", level = DeprecationLevel.WARNING)
     fun voiceList(tag: String? = null): JSONObject? {
         val url = if (tag != null) "/tts/clone/voices?tag=$tag" else "/tts/clone/voices"
         return getJson(url)
     }
 
+    @Deprecated("Voice profiles now managed via GGUF model files.", level = DeprecationLevel.WARNING)
     fun voiceSearch(query: String): JSONObject? =
         getJson("/tts/clone/voices/search?q=${java.net.URLEncoder.encode(query, "UTF-8")}")
 
+    @Deprecated("Voice profiles now managed via GGUF model files.", level = DeprecationLevel.WARNING)
     fun voiceGet(name: String): JSONObject? = getJson("/tts/clone/voices/$name")
 
+    @Deprecated("Voice profiles now managed via GGUF model files.", level = DeprecationLevel.WARNING)
     fun voiceGenerate(name: String, text: String): ByteArray? {
         val multipart = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("text", text).build()
@@ -168,6 +214,7 @@ class GatewayClient(
         }
     }
 
+    @Deprecated("Voice profiles now managed via GGUF model files.", level = DeprecationLevel.WARNING)
     fun voiceUpload(name: String, audio: ByteArray, transcript: String = "",
                     tags: String = "", description: String = ""): JSONObject? {
         val multipart = MultipartBody.Builder().setType(MultipartBody.FORM)
@@ -185,6 +232,7 @@ class GatewayClient(
         }
     }
 
+    @Deprecated("Voice profiles now managed via GGUF model files.", level = DeprecationLevel.WARNING)
     fun voiceDelete(name: String): Boolean = delete("/tts/clone/voices/$name")
 
     // -----------------------------------------------------------------------
@@ -202,8 +250,11 @@ class GatewayClient(
 
     // -----------------------------------------------------------------------
     // STT — Transcription (Whisper)
+    // @deprecated Native Whisper implementation coming soon.
+    // Temporary: Use Android Speech Recognition as fallback.
     // -----------------------------------------------------------------------
 
+    @Deprecated("Native Whisper implementation in progress. Use Android Speech Recognition as fallback.", level = DeprecationLevel.WARNING)
     fun sttTranscribe(audio: ByteArray, filename: String = "audio.wav",
                       language: String = "en", task: String = "transcribe"): JSONObject? {
         val multipart = MultipartBody.Builder().setType(MultipartBody.FORM)

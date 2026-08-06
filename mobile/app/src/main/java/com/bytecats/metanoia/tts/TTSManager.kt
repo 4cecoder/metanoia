@@ -16,7 +16,11 @@ import java.util.Locale
 /**
  * TTS Manager — routes all synthesis through the AI VM Gateway.
  *
- * Gateway endpoints used:
+ * @deprecated This class is deprecated and replaced by native Qwen3-TTS forward pass.
+ * Use [com.bytecats.metanoia.tts.Qwen3TTSEngine] directly for neural synthesis.
+ * See migration guide at docs/GATEWAY_MIGRATION.md for details.
+ *
+ * Gateway endpoints used (deprecated):
  *  - GET  /tts/clone/voices/list      → list registered voice profiles
  *  - POST /tts/clone/voices/upsert     → create/update a voice profile
  *  - POST /tts/clone/voices/{key}/audio → upload reference audio
@@ -24,12 +28,22 @@ import java.util.Locale
  *  - POST /tts/clone/generate           → generate speech from registered voice
  *  - POST /tts/clone/dynamic            → clone from arbitrary audio
  *  - GET  /health                       → health check
+ *
+ * Migration example:
+ * OLD: TTSManager(context).generateSpeech("Hello", "lennox")
+ * NEW: Qwen3TTSEngine("model.gguf", "codec.gguf").synthesize("Hello")
  */
+@Deprecated(
+    message = "Replaced by native Qwen3TTSEngine for direct neural synthesis",
+    replaceWith = ReplaceWith("Qwen3TTSEngine(modelPath, codecPath)", "com.bytecats.metanoia.tts.Qwen3TTSEngine"),
+    level = DeprecationLevel.WARNING
+)
 class TTSManager(
     private val context: Context,
     private val logger: (String) -> Unit = {}
 ) {
     private val settings = SettingsManager(context)
+    @Suppress("DEPRECATION") // Deprecated class used internally for backward compatibility
     private val gateway = GatewayClient { settings.gatewayUrl }
     private val audioPlayer = TTSAudioPlayer()
     private val tag = "TTSManager"
@@ -46,8 +60,10 @@ class TTSManager(
 
     // ------------------------------------------------------------------
     // Voice discovery & management
+    // @deprecated Use GGUF model loading and BPETokenizer for native voice management
     // ------------------------------------------------------------------
 
+    @Deprecated("Use GGUF model loading instead of gateway voice discovery", level = DeprecationLevel.WARNING)
     suspend fun discoverServer(): String? = withContext(Dispatchers.IO) {
         val current = settings.gatewayUrl
         if (gateway.health()) {
@@ -73,6 +89,7 @@ class TTSManager(
         null
     }
 
+    @Deprecated("Use GGUF model loading instead of gateway voice discovery", level = DeprecationLevel.WARNING)
     suspend fun fetchFullStatus(): List<RemoteVoice> = withContext(Dispatchers.IO) {
         if (!gateway.health()) return@withContext emptyList()
         try {

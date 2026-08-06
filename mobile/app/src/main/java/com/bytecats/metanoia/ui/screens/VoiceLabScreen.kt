@@ -39,7 +39,17 @@ fun VoiceLabScreen(navController: NavController, viewModel: MainViewModel) {
     var showCreateSheet by remember { mutableStateOf(false) }
     
     val logs = viewModel.voiceLogs
-    val voices = viewModel.serverVoices
+    
+    // Fallback: Convert VoiceModel to RemoteVoice for UI compatibility
+    val voices: List<com.bytecats.metanoia.models.RemoteVoice> = viewModel.availableVoices.map { voiceModel ->
+        com.bytecats.metanoia.models.RemoteVoice(
+            key = voiceModel.id,
+            displayName = voiceModel.name,
+            exists = true,
+            type = "native"
+        )
+    }
+    
     val context = LocalContext.current
     
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -104,11 +114,11 @@ fun VoiceLabScreen(navController: NavController, viewModel: MainViewModel) {
                     Button(
                         onClick = { viewModel.discoverServer() },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !viewModel.isDiscovering,
+                        enabled = !viewModel.isInitializingTTS,
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                     ) {
-                        if (viewModel.isDiscovering) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                        if (viewModel.isInitializingTTS) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
                         else Text("AUTO-DISCOVER ON NETWORK")
                     }
                 }

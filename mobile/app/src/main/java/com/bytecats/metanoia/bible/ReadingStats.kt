@@ -37,6 +37,39 @@ object ReadingStats {
         return (r shl 16) or (g shl 8) or b
     }
 
+    /**
+     * Comprehensive reading progress data for a book.
+     */
+    data class BookReadingProgress(
+        val bookName: String,
+        val totalChapters: Int,
+        val completionFraction: Float,
+        val chapterStatus: Map<Int, ChapterReadingStatus>,
+        val totalWords: Int,
+        val totalReadingTimeSeconds: Long
+    ) {
+        val completedChapters: Int get() = chapterStatus.values.count { it.isConsideredRead }
+        val averageReadingSpeed: Int get() = 
+            if (totalReadingTimeSeconds > 0) {
+                val minutes = totalReadingTimeSeconds / 60
+                (totalWords / minutes).toInt()
+            } else 0
+        
+        val formattedReadingTime: String get() = formatTotalReadingTime(totalReadingTimeSeconds)
+        
+        companion object {
+            fun formatTotalReadingTime(totalSeconds: Long): String {
+                val hours = totalSeconds / 3600
+                val minutes = (totalSeconds % 3600) / 60
+                return when {
+                    hours > 0 -> "${hours}h ${minutes}m"
+                    minutes > 0 -> "${minutes}m"
+                    else -> "< 1m"
+                }
+            }
+        }
+    }
+
     // -----------------------------------------------------------------
     // Streaks
     // -----------------------------------------------------------------
@@ -165,5 +198,157 @@ object ReadingStats {
 
     fun calculateBookWordCount(chapterWordCounts: Map<Int, Int>): Int {
         return chapterWordCounts.values.sum()
+    }
+
+    /**
+     * Calculates reading progress based on time spent vs word count.
+     * Uses average reading speed of 200 words per minute to determine
+     * what constitutes "completing" a chapter.
+     */
+    fun calculateTimeBasedProgress(
+        readingTimeSeconds: Long,
+        wordCount: Int,
+        wordsPerMinute: Int = 200
+    ): Float {
+        if (wordCount <= 0) return 0f
+        
+        val expectedReadTimeSeconds = (wordCount.toFloat() / wordsPerMinute * 60f)
+        val progress = readingTimeSeconds.toFloat() / expectedReadTimeSeconds
+        return progress.coerceIn(0f, 1f)
+    }
+
+    /**
+     * Determines if a chapter should be considered "read" based on
+     * sufficient time spent reading vs word count.
+     * Requires at least 50% of expected reading time.
+     */
+    fun isChapterConsideredRead(
+        readingTimeSeconds: Long,
+        wordCount: Int,
+        wordsPerMinute: Int = 200,
+        minimumThreshold: Float = 0.5f
+    ): Boolean {
+        return calculateTimeBasedProgress(readingTimeSeconds, wordCount, wordsPerMinute) >= minimumThreshold
+    }
+
+    /**
+     * Calculates overall book completion combining both chapter visits
+     * and time-based reading progress.
+     */
+    fun calculateBookCompletion(
+        chapterReadingTimes: Map<Int, Long>,
+        chapterWordCounts: Map<Int, Int>,
+        totalChapters: Int,
+        wordsPerMinute: Int = 200,
+        minimumThreshold: Float = 0.5f
+    ): Float {
+        if (totalChapters <= 0) return 0f
+        
+        var completedChapters = 0
+        var totalProgress = 0f
+        
+        for ((chapter, wordCount) in chapterWordCounts) {
+            val readingTime = chapterReadingTimes[chapter] ?: 0L
+            val progress = calculateTimeBasedProgress(readingTime, wordCount, wordsPerMinute)
+            
+            if (progress >= minimumThreshold) {
+                completedChapters++
+            }
+            totalProgress += progress
+        }
+        
+        // Weight toward completed chapters but include partial progress
+        val completionWeight = 0.7f
+        val progressWeight = 0.3f
+        
+        val chapterFraction = completedChapters.toFloat() / totalChapters
+        val timeFraction = totalProgress / totalChapters
+        
+        return (chapterFraction * completionWeight + timeFraction * progressWeight).coerceIn(0f, 1f)
+    }
+
+    /**
+     * Gets reading status for a chapter with detailed breakdown.
+     */
+    data class ChapterReadingStatus(
+        val chapter: Int,
+        val wordCount: Int,
+        val readingTimeSeconds: Long,
+        val expectedTimeSeconds: Float,
+        val progress: Float,
+        val isConsideredRead: Boolean,
+        val remainingTimeSeconds: Float
+    )
+
+    /**
+     * Calculates detailed reading status for each chapter.
+     */
+    fun getChapterReadingStatus(
+        chapterReadingTimes: Map<Int, Long>,
+        chapterWordCounts: Map<Int, Int>,
+        wordsPerMinute: Int = 200,
+        minimumThreshold: Float = 0.5f
+    ): Map<Int, ChapterReadingStatus> {
+        val result = mutableMapOf<Int, ChapterReadingStatus>()
+        
+        for ((chapter, wordCount) in chapterWordCounts) {
+            val readingTime = chapterReadingTimes[chapter] ?: 0L
+            val expectedTime = wordCount.toFloat() / wordsPerMinute * 60f
+            val progress = calculateTimeBasedProgress(readingTime, wordCount, wordsPerMinute)
+            val isRead = progress >= minimumThreshold
+            val remainingTime = maxOf(0f, expectedTime - readingTime)
+            
+            result[chapter] = ChapterReadingStatus(
+                chapter = chapter,
+                wordCount = wordCount,
+                readingTimeSeconds = readingTime,
+                expectedTimeSeconds = expectedTime,
+                progress = progress,
+                isConsideredRead = isRead,
+                remainingTimeSeconds = remainingTime
+            )
+        }
+        
+        return result
+    }
+
+    /**
+     * Formats remaining reading time in a human-readable format.
+     */
+    fun formatRemainingTime(remainingSeconds: Float): String {
+        return formatReadingTime(remainingSeconds.toInt())
+    }
+
+    /**
+     * Gets reading speed category based on words per minute.
+     */
+    fun getReadingSpeedCategory(wordsPerMinute: Int): String {
+        return when {
+            wordsPerMinute < 150 -> "Leisurely"
+            wordsPerMinute < 200 -> "Average"
+            wordsPerMinute < 250 -> "Focused"
+            wordsPerMinute < 300 -> "Speed Reader"
+            else -> "Scholar"
+        }
+    }
+
+    /**
+     * Estimates reading session completion based on current pace.
+     */
+    fun estimateSessionCompletion(
+        wordCount: Int,
+        elapsedTimeSeconds: Long,
+        wordsPerMinute: Int = 200
+    ): Pair<Float, Long> {
+        if (elapsedTimeSeconds <= 0 || wordCount <= 0) {
+            return 0f to 0L
+        }
+        
+        val currentWpm = (wordCount.toFloat() / elapsedTimeSeconds) * 60f
+        val expectedTimeSeconds = (wordCount.toFloat() / wordsPerMinute * 60f)
+        val progress = elapsedTimeSeconds.toFloat() / expectedTimeSeconds
+        val remainingSeconds = maxOf(0L, expectedTimeSeconds.toLong() - elapsedTimeSeconds)
+        
+        return progress.coerceIn(0f, 1f) to remainingSeconds
     }
 }

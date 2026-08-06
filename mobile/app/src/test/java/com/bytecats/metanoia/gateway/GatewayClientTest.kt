@@ -21,7 +21,10 @@ import java.io.IOException
  * okhttp3.Call.Factory trick as BibleScraperTest — GatewayClient now takes
  * an injectable Call.Factory (defaulting to a real OkHttpClient) so this
  * doesn't need real network access.
+ *
+ * @deprecated GatewayClient is deprecated. Tests maintained for backward compatibility.
  */
+@Deprecated("GatewayClient tests are deprecated but maintained for compatibility.", level = DeprecationLevel.WARNING)
 class GatewayClientTest {
 
     private class FailingCall(private val req: Request) : Call {
