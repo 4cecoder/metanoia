@@ -7,12 +7,33 @@ import com.bytecats.metanoia.bible.dao.*
 import com.bytecats.metanoia.models.*
 import java.io.File
 
+/**
+ * Bible database manager providing access to all Bible-related DAOs.
+ *
+ * Manages the SQLite database file and provides typed access to different data access objects:
+ * - [VerseDao]: Bible verse queries and storage
+ * - [FavoritesDao]: User's favorite Strong's numbers
+ * - [HighlightsDao]: Verse highlights with colors
+ * - [NotesDao]: User notes on passages
+ * - [ReadingAnalyticsDao]: Reading progress tracking
+ * - [InterlinearDao]: Interlinear word-by-word translations
+ * - [LexiconDao]: Strong's lexicon definitions
+ *
+ * Database location: /data/data/com.bytecats.metanoia/files/bible.db
+ *
+ * @property context Android context for file system access
+ */
 class BibleDatabase(private val context: Context) {
     private val dbFile = File(context.filesDir, "bible.db")
 
+    /**
+     * Open the Bible database with specified access mode.
+     *
+     * @param readOnly If true, opens in read-only mode; otherwise opens in read-write mode
+     * @return SQLiteDatabase instance
+     */
     fun openDb(readOnly: Boolean = false): SQLiteDatabase =
         SQLiteDatabase.openDatabase(dbFile.absolutePath, null, openFlags(readOnly))
-
     val verse = VerseDao(::openDb)
     val favorites = FavoritesDao(::openDb)
     val highlights = HighlightsDao(::openDb)

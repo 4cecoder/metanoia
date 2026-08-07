@@ -62,7 +62,7 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
     
     var step by remember { mutableStateOf("book") } 
     var selectedBook by remember { mutableStateOf<BibleBook?>(null) }
-    var selectedChapter by remember { mutableStateOf(1) }
+    var selectedChapter by remember { mutableIntStateOf(1) }
     var currentChapterContent by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
     var interlinearData by remember(selectedBook, selectedChapter) { mutableStateOf<Map<Int, List<InterlinearWord>>>(emptyMap()) }
     var highlights by remember(selectedBook, selectedChapter) { mutableStateOf<Map<Int, Int>>(emptyMap()) }
@@ -221,7 +221,7 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
             }
         }
     ) { innerPadding ->
-        var dragOffset by remember { mutableStateOf(0f) }
+        var dragOffset by remember { mutableFloatStateOf(0f) }
         var hasTriggered by remember { mutableStateOf(false) }
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize().pointerInput(Unit) { 
             detectDragGestures(

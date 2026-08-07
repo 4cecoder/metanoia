@@ -6,11 +6,15 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.bytecats.metanoia.BuildConfig
 import com.bytecats.metanoia.viewmodel.MainViewModel
+import com.bytecats.metanoia.update.ReleaseChannel
+import com.bytecats.metanoia.update.UpdateChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -19,7 +23,8 @@ import kotlinx.coroutines.withContext
 @Composable
 fun UpdateSettingsPage(navController: NavController, viewModel: MainViewModel) {
     val settings = viewModel.settingsManager
-    var nightlyEnabled by remember { mutableStateOf(settings.nightlyUpdatesEnabled) }
+    var releaseChannel by remember { mutableStateOf(settings.releaseChannel) }
+    var updatesEnabled by remember { mutableStateOf(settings.updatesEnabled) }
     var isChecking by remember { mutableStateOf(false) }
     var hasChecked by remember { mutableStateOf(false) }
     val updateInfo = viewModel.availableUpdate.value
@@ -34,10 +39,7 @@ fun UpdateSettingsPage(navController: NavController, viewModel: MainViewModel) {
         try {
             val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             appVersionName = pInfo.versionName ?: "-"
-            appVersionCode = (
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) pInfo.longVersionCode
-                else @Suppress("DEPRECATION") pInfo.versionCode.toLong()
-            ).toString()
+            appVersionCode = pInfo.longVersionCode.toString()
         } catch (e: Exception) {
             appVersionName = "-"
             appVersionCode = "-"
@@ -58,17 +60,47 @@ fun UpdateSettingsPage(navController: NavController, viewModel: MainViewModel) {
             modifier = Modifier.padding(innerPadding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            SettingToggle(
-                "Nightly / Experimental Updates",
-                "Opt in to check GitHub for the latest master build. Sideload-only, may be unstable.",
-                nightlyEnabled
-            ) {
-                nightlyEnabled = it
-                settings.nightlyUpdatesEnabled = it
+            // Update Channel Selection
+            SettingSection("Release Channel") {
+                SettingDropdown(
+                    label = "Release Channel",
+                    description = "Choose which release channel to receive updates from",
+                    options = ReleaseChannel.values().toList(),
+                    selectedOption = releaseChannel,
+                    optionLabel = { it.displayName },
+                    onOptionSelected = {
+                        releaseChannel = it
+                        settings.releaseChannel = it
+                        // If switching to nightly, enable updates automatically
+                        if (it == ReleaseChannel.NIGHTLY) {
+                            updatesEnabled = true
+                            settings.updatesEnabled = true
+                        }
+                        hasChecked = false // Reset check state when channel changes
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Channel descriptions
+                ChannelDescriptionCard(releaseChannel)
             }
 
+            HorizontalDivider()
+
+            // Enable Updates Toggle
+            SettingToggle(
+                "Check for Updates",
+                "Automatically check for new releases on the selected channel",
+                updatesEnabled
+            ) {
+                updatesEnabled = it
+                settings.updatesEnabled = it
+            }
+
+            // Build Information
             Text(
-                "Current build: ${com.bytecats.metanoia.BuildConfig.GIT_COMMIT_SHA.take(7)}",
+                "Current build: ${BuildConfig.GIT_COMMIT_SHA.take(7)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline
             )
@@ -78,9 +110,9 @@ fun UpdateSettingsPage(navController: NavController, viewModel: MainViewModel) {
                 color = MaterialTheme.colorScheme.outline
             )
 
-            if (!nightlyEnabled) {
+            if (!updatesEnabled) {
                 Text(
-                    "Enable to check for nightly builds",
+                    "Enable updates to check for new releases",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -92,12 +124,15 @@ fun UpdateSettingsPage(navController: NavController, viewModel: MainViewModel) {
                         isChecking = true
                         scope.launch {
                             val result = withContext(Dispatchers.IO) {
-                                com.bytecats.metanoia.update.UpdateChecker.fetchLatest()
+                                UpdateChecker.fetchLatestForChannel(releaseChannel)
                             }
                             settings.lastUpdateCheckMillis = System.currentTimeMillis()
-                            val avail = com.bytecats.metanoia.update.UpdateChecker.isUpdateAvailable(
-                                com.bytecats.metanoia.BuildConfig.GIT_COMMIT_SHA, result
+                            val avail = UpdateChecker.isUpdateAvailable(
+                                BuildConfig.GIT_COMMIT_SHA, result
                             )
+                            if (result != null) {
+                                settings.lastCheckedVersion = result.version
+                            }
                             viewModel.availableUpdate.value = if (result != null && avail) result else null
                             hasChecked = true
                             isChecking = false
@@ -120,9 +155,9 @@ fun UpdateSettingsPage(navController: NavController, viewModel: MainViewModel) {
                     !hasChecked && !updateAvailable -> "Not checked yet this session"
                     updateAvailable -> {
                         val shortSha = updateInfo?.commitSha?.take(7) ?: "unknown"
-                        "Update available (commit $shortSha, published ${updateInfo?.publishedAt ?: "unknown"})"
+                        "Update available: ${updateInfo?.tagName ?: "unknown"} (commit $shortSha, published ${updateInfo?.publishedAt ?: "unknown"})"
                     }
-                    else -> "Up to date"
+                    else -> "Up to date on ${releaseChannel.displayName.lowercase()} channel"
                 }
                 Text(
                     statusText,
@@ -179,6 +214,68 @@ fun UpdateSettingsPage(navController: NavController, viewModel: MainViewModel) {
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelDescriptionCard(channel: ReleaseChannel) {
+    val (title, description, icon, color) = when (channel) {
+        ReleaseChannel.STABLE -> listOf(
+            "Stable Channel",
+            "Production-ready releases. Thoroughly tested and recommended for most users.",
+            Icons.Default.CheckCircle,
+            MaterialTheme.colorScheme.primary
+        )
+        ReleaseChannel.BETA -> listOf(
+            "Beta Channel",
+            "Testing releases with new features. May have bugs but receives regular testing.",
+            Icons.Default.Science,
+            MaterialTheme.colorScheme.tertiary
+        )
+        ReleaseChannel.ALPHA -> listOf(
+            "Alpha Channel",
+            "Early builds with the latest changes. May be unstable and is for developers only.",
+            Icons.Default.BugReport,
+            MaterialTheme.colorScheme.error
+        )
+        ReleaseChannel.NIGHTLY -> listOf(
+            "Nightly Channel",
+            "Latest master builds from the rolling \"latest\" tag. May be very unstable.",
+            Icons.Default.Flare,
+            MaterialTheme.colorScheme.secondary
+        )
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = color.copy(alpha = 0.1f)
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(24.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
             }
         }
     }

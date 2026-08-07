@@ -7,6 +7,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -32,7 +36,7 @@ fun SettingsDashboard(navController: NavController) {
             SettingsLink("Data & Library", "Database Management", Icons.Default.Storage) {
                 navController.navigate("data_management")
             }
-            SettingsLink("Updates", "Nightly / experimental builds", Icons.Default.SystemUpdate) {
+            SettingsLink("Updates", "Release channels and update checking", Icons.Default.SystemUpdate) {
                 navController.navigate("settings_updates")
             }
             SettingsLink("Changelog", "Recent commits and version history", Icons.Default.History) {
@@ -69,6 +73,78 @@ fun SettingToggle(title: String, sub: String, state: Boolean, onToggle: (Boolean
             Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
         }
         Switch(state, onToggle)
+    }
+}
+
+@Composable
+fun SettingSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold
+        )
+        content()
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun <T> SettingsDropdown(
+    label: String,
+    description: String,
+    options: List<T>,
+    selectedOption: T,
+    optionLabel: (T) -> String,
+    onOptionSelected: (T) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            label,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline
+        )
+
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                value = optionLabel(selectedOption),
+                onValueChange = {},
+                readOnly = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(),
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                colors = ExposedDropdownMenuDefaults.textFieldColors()
+            )
+
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(optionLabel(option)) },
+                        onClick = {
+                            onOptionSelected(option)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
     }
 }
 

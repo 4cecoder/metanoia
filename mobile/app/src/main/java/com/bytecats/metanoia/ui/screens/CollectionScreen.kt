@@ -19,7 +19,7 @@ import com.bytecats.metanoia.viewmodel.MainViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CollectionScreen(navController: NavController, viewModel: MainViewModel) {
-    var tabIndex by remember { mutableStateOf(0) }
+    var tabIndex by remember { mutableIntStateOf(0) }
     val favs = remember { viewModel.bibleManager.getFavorites() }
 
     Scaffold(topBar = {

@@ -13,8 +13,8 @@ import com.bytecats.metanoia.settings.SettingsManager
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderSettingsPage(navController: NavController, settings: SettingsManager) {
-    var engSize by remember { mutableStateOf(settings.englishFontSize.toFloat()) }
-    var ancSize by remember { mutableStateOf(settings.ancientFontSize.toFloat()) }
+    var engSize by remember { mutableFloatStateOf(settings.englishFontSize.toFloat()) }
+    var ancSize by remember { mutableFloatStateOf(settings.ancientFontSize.toFloat()) }
     var showEthiopian by remember { mutableStateOf(settings.showEthiopianCanon) }
     var showApocrypha by remember { mutableStateOf(settings.showApocrypha) }
     Scaffold(topBar = {

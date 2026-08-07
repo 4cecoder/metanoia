@@ -14,6 +14,23 @@ import com.bytecats.metanoia.gateway.GatewayClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/**
+ * Primary Bible data manager for the Metanoia app.
+ *
+ * Manages Bible content, scraping from web sources, database operations,
+ * and provides high-level APIs for the UI layer.
+ *
+ * Features:
+ * - Verse retrieval from local SQLite database or web scrapers
+ * - Full-text and reference-based search
+ * - Favorites, highlights, and notes management
+ * - Interlinear data access
+ * - Strong's lexicon integration
+ * - Reading progress tracking
+ * - Multiple scraping sources with fallback (BibleGateway, BibleHub)
+ *
+ * @property context Android context for database and cache access
+ */
 class BibleManager(private val context: Context) {
     private val dbFile = File(context.filesDir, "bible.db")
     private val client = OkHttpClient()

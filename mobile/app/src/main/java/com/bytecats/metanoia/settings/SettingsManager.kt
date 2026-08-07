@@ -2,6 +2,7 @@ package com.bytecats.metanoia.settings
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.bytecats.metanoia.update.ReleaseChannel
 
 class SettingsManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("metanoia_settings", Context.MODE_PRIVATE)
@@ -140,9 +141,26 @@ class SettingsManager(context: Context) {
         set(value) = prefs.edit().putString("scraper_user_agent", value).apply()
 
     // --- Updates ---
+    /** Release channel for updates: STABLE, BETA, ALPHA, or NIGHTLY */
+    var releaseChannel: ReleaseChannel
+        get() = ReleaseChannel.fromString(prefs.getString("release_channel", ReleaseChannel.STABLE.name))
+        set(value) = prefs.edit().putString("release_channel", value.name).apply()
+
+    /** Enable/disable automatic update checking for the selected channel */
+    var updatesEnabled: Boolean
+        get() = prefs.getBoolean("updates_enabled", true)
+        set(value) = prefs.edit().putBoolean("updates_enabled", value).apply()
+
+    @Deprecated("Use releaseChannel instead", level = DeprecationLevel.WARNING)
     var nightlyUpdatesEnabled: Boolean
         get() = prefs.getBoolean("nightly_updates_enabled", false)
-        set(value) = prefs.edit().putBoolean("nightly_updates_enabled", value).apply()
+        set(value) {
+            prefs.edit().putBoolean("nightly_updates_enabled", value).apply()
+            // If enabling nightly, also switch to nightly channel for consistency
+            if (value) {
+                releaseChannel = ReleaseChannel.NIGHTLY
+            }
+        }
 
     var lastUpdateCheckMillis: Long
         get() = prefs.getLong("last_update_check_millis", 0L)
@@ -151,4 +169,9 @@ class SettingsManager(context: Context) {
     var dismissedUpdateSha: String
         get() = prefs.getString("dismissed_update_sha", "") ?: ""
         set(value) = prefs.edit().putString("dismissed_update_sha", value).apply()
+
+    /** Last checked version for the current release channel */
+    var lastCheckedVersion: String
+        get() = prefs.getString("last_checked_version", "") ?: ""
+        set(value) = prefs.edit().putString("last_checked_version", value).apply()
 }

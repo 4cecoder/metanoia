@@ -6,8 +6,10 @@ import com.bytecats.metanoia.models.BOOKS
 
 /**
  * A resolved deep-link target: a specific book/chapter, optionally a verse.
- * `book` is always the canonical BOOKS entry's exact name (e.g. "SongofSolomon",
- * "1Samuel") — never the raw path segment from the incoming URI.
+ *
+ * @property book The canonical BOOKS entry's exact name (e.g., "SongofSolomon", "1Samuel")
+ * @property chapter The chapter number (1-based)
+ * @property verse Optional verse number (null if only chapter specified)
  */
 data class VerseReference(val book: String, val chapter: Int, val verse: Int?)
 
@@ -47,9 +49,23 @@ data class VerseReference(val book: String, val chapter: Int, val verse: Int?)
  */
 object DeepLink {
 
+    /**
+     * Parse a deep-link URI into a VerseReference.
+     *
+     * @param uri The Android Uri to parse (either metanoia:// or https:// scheme)
+     * @return A VerseReference if the URI is valid, null otherwise
+     */
     fun parse(uri: Uri): VerseReference? =
         parseParts(uri.scheme, uri.host, uri.pathSegments?.toList() ?: emptyList())
 
+    /**
+     * Parse deep-link components into a VerseReference.
+     *
+     * @param scheme The URI scheme ("metanoia", "https", or "http")
+     * @param host The URI host (for custom scheme URIs)
+     * @param pathSegments The path segments from the URI
+     * @return A VerseReference if the components are valid, null otherwise
+     */
     fun parseParts(scheme: String?, host: String?, pathSegments: List<String>): VerseReference? {
         // Custom-scheme URIs (metanoia://bible/...) put "bible" in the host,
         // not the path -- Uri parses "bible" as the authority there, so the
