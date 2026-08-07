@@ -41,9 +41,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.bytecats.metanoia.ui.effects.cyberpunkHudBackground
-import com.bytecats.metanoia.ui.effects.cyberpunkGlowAura
-import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -52,14 +49,6 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
     val settings = viewModel.settingsManager
     val narration by viewModel.narrationState
 
-    val time by produceState(initialValue = 0f) {
-        while (true) {
-            withInfiniteAnimationFrameMillis {
-                value = it / 1000f
-            }
-        }
-    }
-    
     var step by remember { mutableStateOf("book") } 
     var selectedBook by remember { mutableStateOf<BibleBook?>(null) }
     var selectedChapter by remember { mutableStateOf(1) }
@@ -137,7 +126,6 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
     }
 
     Scaffold(
-        modifier = Modifier.cyberpunkHudBackground(time),
         topBar = {
             Column {
                 TopAppBar(
@@ -249,11 +237,8 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
                                 val readGreen = 0x9ECE6A
                                 val lerpedColorInt = ReadingStats.lerpColor(baseColor, readGreen, progress)
                                 val containerColor = if (progress > 0f) Color(lerpedColorInt).copy(alpha = if (progress >= 1f) 0.35f else 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                val phaseOffset = book.name.hashCode().toFloat() * 0.1f
                                 Card(
-                                    modifier = Modifier.padding(4.dp).height(68.dp).let {
-                                        if (progress >= 1f) it.cyberpunkGlowAura(time, Color(0xFF9ece6a).copy(alpha = 0.3f), phaseOffset) else it
-                                    }.combinedClickable(
+                                    modifier = Modifier.padding(4.dp).height(68.dp).combinedClickable(
                                         onClick = { selectedBook = book; step = "chapter"; isSearchVisible = false },
                                         onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); modalBook = book }
                                     ),
@@ -321,9 +306,7 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
                                 val wordCount = chapterWordCounts[ch] ?: 0
                                 val isDownloaded = downloadedChapters.contains(ch)
                                 Card(
-                                    modifier = Modifier.padding(4.dp).aspectRatio(1f).let {
-                                        if (isDownloaded) it.cyberpunkGlowAura(time, Color(0xFF9ece6a).copy(alpha = 0.2f)) else it
-                                    }.clickable { 
+                                    modifier = Modifier.padding(4.dp).aspectRatio(1f).clickable { 
                                         selectedChapter = ch; 
                                         currentChapterContent = bibleManager.getChapter(selectedBook!!.name, ch); 
                                         highlights = bibleManager.getHighlights(selectedBook!!.name, ch); 

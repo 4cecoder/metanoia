@@ -17,6 +17,7 @@ import com.bytecats.metanoia.models.RemoteVoice
 import com.bytecats.metanoia.tts.TTSManager
 import com.bytecats.metanoia.tts.NativeTTSService
 import com.bytecats.metanoia.update.NightlyUpdateInfo
+import com.bytecats.metanoia.update.ReleaseInfo
 import com.bytecats.metanoia.update.UpdateChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -61,8 +62,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     private val _narrationState = mutableStateOf(NarrationState())
     val narrationState: State<NarrationState> = _narrationState
 
-    // Nightly/experimental update notice (opt-in, throttled — see checkForNightlyUpdateIfDue)
-    val availableUpdate = mutableStateOf<NightlyUpdateInfo?>(null)
+    // Channel-aware update notice (supports alpha/beta/stable/nightly)
+    val availableUpdate = mutableStateOf<ReleaseInfo?>(null)
 
     // Set by MainActivity when a deep link (metanoia://bible/... or an
     // https App Link) resolves to a specific passage — see
@@ -103,11 +104,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
                 // Refresh available voices (GGUF models)
                 refreshAvailableVoices()
 
-                // Aggressive auto-update when experimental updates enabled:
+                // Channel-aware auto-update:
                 // checks immediately on startup, then re-checks hourly
                 // while the app is running, and auto-downloads + installs
                 // any new build it finds.
-                if (settingsManager.nightlyUpdatesEnabled) {
+                if (settingsManager.updatesEnabled) {
                     startAutoUpdateLoop()
                 }
             } catch (e: Exception) {
@@ -186,8 +187,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
 
     /**
      * Launches a background coroutine that checks for updates immediately,
-     * then re-checks every hour while the app is alive. When `nightlyUpdatesEnabled`
-     * is on, this runs continuously — no 24h throttle, no manual button needed.
+     * then re-checks every hour while the app is alive. When `updatesEnabled`
+     * is on, this runs continuously.
      */
     private fun startAutoUpdateLoop() {
         viewModelScope.launch {
@@ -199,13 +200,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     }
 
     /**
-     * Single auto-update tick: fetches the latest release, auto-downloads
-     * and installs if a newer build is found. Silently retries on failure.
+     * Single auto-update tick: fetches the latest release for the configured
+     * channel, auto-downloads and installs if a newer build is found.
+     * Silently retries on failure.
      */
     private suspend fun performAutoUpdate() {
         try {
+            val channel = settingsManager.releaseChannel
             val result = withContext(Dispatchers.IO) {
-                UpdateChecker.fetchLatest()
+                UpdateChecker.fetchLatestForChannel(channel)
             }
             settingsManager.lastUpdateCheckMillis = System.currentTimeMillis()
 
@@ -216,7 +219,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
 
             if (isAvail) {
                 availableUpdate.value = result
-                Log.i("VM", "Auto-update: ${result!!.commitSha?.take(7)} available, downloading...")
+                Log.i("VM", "Auto-update: ${result!!.tagName} (${result.channel.displayName}) available, downloading...")
 
                 val apk = withContext(Dispatchers.IO) {
                     ApkInstaller.download(getApplication(), result.downloadUrl!!)
@@ -225,6 +228,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
                     Log.i("VM", "Auto-update: downloaded, launching installer...")
                     ApkInstaller.install(getApplication(), apk)
                     settingsManager.dismissedUpdateSha = result.commitSha ?: ""
+                    settingsManager.lastCheckedVersion = result.version
                     availableUpdate.value = null
                 } else {
                     Log.w("VM", "Auto-update: download failed, will retry next cycle.")
