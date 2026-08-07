@@ -11,18 +11,42 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicReference
 
+/**
+ * Audio player state for TTS playback.
+ */
 enum class AudioPlayerState {
-    IDLE, PLAYING, STOPPED, ERROR
+    /** Player is idle and ready to play */
+    IDLE,
+    /** Currently playing audio */
+    PLAYING,
+    /** Playback was stopped */
+    STOPPED,
+    /** An error occurred during playback */
+    ERROR
 }
 
+/**
+ * TTS audio player - handles playback of generated speech audio.
+ *
+ * Supports both MediaPlayer (for WAV files) and AudioTrack (for PCM audio),
+ * with automatic fallback and state management.
+ */
 class TTSAudioPlayer {
     private var mediaPlayer: MediaPlayer? = null
     private var audioTrack: AudioTrack? = null
     private val tag = "TTSAudioPlayer"
     
     private val _state = AtomicReference(AudioPlayerState.IDLE)
+    /** Current playback state (thread-safe) */
     val state: AudioPlayerState get() = _state.get()
 
+    /**
+     * Play audio from a file.
+     * Automatically handles WAV file playback via MediaPlayer,
+     * with fallback to PCM playback if MediaPlayer fails.
+     *
+     * @param file Audio file to play (WAV format recommended)
+     */
     fun play(file: File) {
         stop()
         try {
@@ -53,6 +77,9 @@ class TTSAudioPlayer {
         }
     }
 
+    /**
+     * Stop current playback and reset state.
+     */
     fun stop() {
         val currentState = _state.get()
         if (currentState == AudioPlayerState.STOPPED || currentState == AudioPlayerState.IDLE) {

@@ -33,6 +33,22 @@ data class NarrationState(
     val queue: List<Verse> = emptyList()
 )
 
+/**
+ * Main ViewModel for the Metanoia Bible Reader app.
+ *
+ * Manages application state including:
+ * - Bible data and navigation
+ * - Text-to-Speech (TTS) via native Qwen3-TTS engine
+ * - Speech-to-Text (STT) capabilities
+ * - Settings and user preferences
+ * - Auto-update management
+ * - Deep link handling
+ *
+ * The ViewModel uses [AndroidViewModel] to safely access the application context
+ * without memory leaks (applicationContext is tied to application lifecycle, not activities).
+ *
+ * @property application The application context for accessing system services
+ */
 class MainViewModel(application: Application) : AndroidViewModel(application), TextToSpeech.OnInitListener {
     private val context = application.applicationContext
 

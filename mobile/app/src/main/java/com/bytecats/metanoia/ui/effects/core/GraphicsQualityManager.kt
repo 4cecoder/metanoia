@@ -436,7 +436,7 @@ class GraphicsQualityManager(
      * Check if device supports compute shaders
      */
     private fun supportsComputeShaders(): Boolean {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
+        return true // Always true for minSdkVersion 28+
     }
 
     /**

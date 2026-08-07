@@ -1,6 +1,5 @@
 package com.bytecats.metanoia.bible
 
-import okhttp3.Call
 import java.io.IOException
 
 /**

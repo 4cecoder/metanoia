@@ -21,6 +21,16 @@ import com.bytecats.metanoia.ui.theme.MetanoiaTheme
 import com.bytecats.metanoia.viewmodel.MainViewModel
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 
+/**
+ * Main activity for the Metanoia Bible Reader app.
+ *
+ * Handles deep linking, navigation, and the main Compose UI setup.
+ * The activity is configured with launchMode="singleTask" to handle
+ * deep links properly when the app is already running.
+ *
+ * Deep links are processed through [DeepLink.parse] and consumed
+ * once to prevent replay when navigating back.
+ */
 class MainActivity : ComponentActivity() {
     // Set from onCreate's initial intent and from onNewIntent (the activity
     // is launchMode="singleTask" — see AndroidManifest.xml — specifically so
