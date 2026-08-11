@@ -1,0 +1,41 @@
+name: release-ios
+
+on:
+  push:
+    tags: ["20*.*.*"]
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+      
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      
+      - name: Generate Xcode project
+        run: cd ios/Metanoia && xcodegen generate
+      
+      - name: Build iOS app
+        run: |
+          cd ios/Metanoia
+          xcodebuild -project Metanoia.xcodeproj -scheme Metanoia -sdk iphoneos -configuration Release -archivePath build/Metanoia.xcarchive archive
+      
+      - name: Create IPA
+        run: |
+          cd ios/Metanoia/build
+          mkdir -p Payload
+          mv Metanoia.xcarchive/Products/Applications/Metanoia.app Payload/
+          zip -r Metanoia.ipa Payload
+      
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ github.ref_name }}"
+          body: "iOS build (unsigned — requires manual signing for device install)"
+          files: ios/Metanoia/build/Metanoia.ipa
