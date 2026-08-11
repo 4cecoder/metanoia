@@ -51,13 +51,20 @@ class BibleManager(private val context: Context) {
             db.execSQL("CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY AUTOINCREMENT, book TEXT, chapter INTEGER, verse INTEGER, content TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
             db.execSQL("CREATE TABLE IF NOT EXISTS verses (book TEXT, chapter INTEGER, verse INTEGER, text TEXT, version TEXT, PRIMARY KEY(book, chapter, verse))")
             db.close()
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) { Log.e("BibleManager", "Failed to initialize database tables", e) }
+    }
+
+    private val allowedTables = setOf("favorites", "lexicon", "interlinear", "highlights", "notes", "verses")
+
+    private fun validateTableName(tableName: String) {
+        require(tableName in allowedTables) { "Invalid table name: $tableName" }
     }
 
     // --- NEW: TABLE INSPECTOR ENGINE ---
     fun getTableRows(tableName: String, limit: Int = 100): List<Map<String, String>> {
         val list = mutableListOf<Map<String, String>>()
         if (!dbFile.exists()) return list
+        validateTableName(tableName)
         val db = getDb()
         try {
             val cursor = db.rawQuery("SELECT * FROM $tableName LIMIT $limit", null)
@@ -117,7 +124,7 @@ class BibleManager(private val context: Context) {
         return LibraryStats(vOt, vNt, lHeb, lGk, n, h, i, dbFile.length() / (1024.0 * 1024.0))
     }
 
-    fun clearTable(tableName: String) { val db = getDb(false); db.execSQL("DELETE FROM $tableName"); db.execSQL("VACUUM"); db.close() }
+    fun clearTable(tableName: String) { validateTableName(tableName); val db = getDb(false); db.execSQL("DELETE FROM $tableName"); db.execSQL("VACUUM"); db.close() }
     fun factoryReset() { val db = getDb(false); db.execSQL("DELETE FROM verses"); db.execSQL("DELETE FROM lexicon"); db.execSQL("DELETE FROM interlinear"); db.execSQL("DELETE FROM highlights"); db.execSQL("DELETE FROM notes"); db.execSQL("DELETE FROM favorites"); db.execSQL("VACUUM"); db.close() }
     fun checkIntegrity(): String { if (!dbFile.exists()) return "DB Missing"; val db = getDb(); val cursor = db.rawQuery("PRAGMA integrity_check", null); var result = "Unknown"; if (cursor.moveToFirst()) result = cursor.getString(0); cursor.close(); db.close(); return result }
     fun vacuumDatabase() { val db = getDb(false); db.execSQL("VACUUM"); db.close() }
@@ -232,7 +239,7 @@ class BibleManager(private val context: Context) {
             var def = doc.select("div.strongsnt").text().trim()
             if (def.isEmpty()) { val lb = doc.select("div#leftbox").first(); lb?.select("iframe, script, ins, .vheading")?.remove(); def = lb?.text()?.trim()?.take(3000) ?: "" }
             if (def.isNotEmpty()) { val db = getDb(false); db.execSQL("INSERT OR REPLACE INTO lexicon (strongs, language, lemma, transliteration, definition) VALUES (?, 'greek', ?, ?, ?)", arrayOf(strongs, lemma, tr, def)); db.close() }
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) { Log.e("BibleManager", "Failed to scrape Greek strongs: $strongs", e) }
     }
 
 

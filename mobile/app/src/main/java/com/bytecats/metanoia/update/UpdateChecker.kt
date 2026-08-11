@@ -29,7 +29,7 @@ data class NightlyUpdateInfo(
 object UpdateChecker {
 
     const val RELEASES_API_URL = "https://api.github.com/repos/4cecoder/metanoia/releases/tags/latest"
-    const val APK_ASSET_NAME = "Metanoia-android-debug.apk"
+    const val APK_ASSET_NAME = "Metanoia-android.apk"
 
     private const val TAG = "UpdateChecker"
 

@@ -14,7 +14,7 @@ import com.bytecats.metanoia.ui.components.ModuleCard
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExperimentalHub(navController: NavController) {
-    Scaffold(topBar = { TopAppBar(title = { Text("EXPERIMENTAL HUB") }) }) { innerPadding ->
+    Scaffold(topBar = { TopAppBar(title = { Text("LABS") }) }) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             ModuleCard("NEURAL STUDIO", "Remote Voice Engineering", Icons.Default.GraphicEq, Color(0xFF9ece6a)) {
                 navController.navigate("voice_lab")

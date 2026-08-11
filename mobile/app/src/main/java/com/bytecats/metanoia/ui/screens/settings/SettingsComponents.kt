@@ -32,7 +32,7 @@ fun SettingsDashboard(navController: NavController) {
             SettingsLink("Data & Library", "Database Management", Icons.Default.Storage) {
                 navController.navigate("data_management")
             }
-            SettingsLink("Updates", "Nightly / experimental builds", Icons.Default.SystemUpdate) {
+            SettingsLink("Updates", "Nightly builds", Icons.Default.SystemUpdate) {
                 navController.navigate("settings_updates")
             }
             SettingsLink("Changelog", "Recent commits and version history", Icons.Default.History) {

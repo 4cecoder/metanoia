@@ -1,6 +1,7 @@
 package com.bytecats.metanoia.bible.lexicon
 
 import android.database.sqlite.SQLiteDatabase
+import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
@@ -36,7 +37,7 @@ class HebrewLexiconRepository(
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("HebrewLexicon", "Failed to scrape Hebrew strongs: $strongs", e)
         }
         
         // Fallback if empty

@@ -2,8 +2,6 @@ package com.bytecats.metanoia.viewmodel
 
 import com.bytecats.metanoia.BuildConfig
 import android.app.Application
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import androidx.compose.runtime.*
 import androidx.lifecycle.AndroidViewModel
@@ -33,7 +31,7 @@ data class NarrationState(
     val queue: List<Verse> = emptyList()
 )
 
-class MainViewModel(application: Application) : AndroidViewModel(application), TextToSpeech.OnInitListener {
+class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val context = application.applicationContext
 
     val settingsManager = SettingsManager(context)
@@ -45,7 +43,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     val gateway = bibleManager.gateway //保留用于向后兼容，但不推荐使用
     var ttsManager: TTSManager? = null // 保留用于向后兼容
     var sttManager: STTManager? = null
-    private var systemTts: TextToSpeech? = null
 
     val voiceLogs = mutableStateListOf<String>()
 
@@ -56,7 +53,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     // Native TTS status
     var isNativeTTSReady by mutableStateOf(false)
 
-    val isRemoteTtsActive: Boolean get() = settingsManager.useExperimentalTTS && isNativeTTSReady
+    val isRemoteTtsActive: Boolean get() = isNativeTTSReady
 
     private val _narrationState = mutableStateOf(NarrationState())
     val narrationState: State<NarrationState> = _narrationState
@@ -73,17 +70,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     var pendingDeepLink by mutableStateOf<VerseReference?>(null)
 
     init {
-        systemTts = TextToSpeech(context, this)
-        systemTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(id: String?) {}
-            override fun onDone(id: String?) {
-                if (_narrationState.value.isPlaying) {
-                    viewModelScope.launch { advanceNarration() }
-                }
-            }
-            override fun onError(id: String?) {}
-        })
-
         viewModelScope.launch {
             try {
                 // Initialize native TTS service
@@ -119,10 +105,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
 
     private fun currentTime() = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
 
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) systemTts?.language = Locale.US
-    }
-
     // -----------------------------------------------------------------------
     // Native TTS initialization
     // -----------------------------------------------------------------------
@@ -145,7 +127,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
                 val status = nativeTTSService?.getStatus()
                 voiceLogs.add("[${currentTime()}] Native TTS READY: ${status?.availableVoices} voices available")
             } else {
-                voiceLogs.add("[${currentTime()}] Native TTS FAILED - falling back to system TTS")
+                voiceLogs.add("[${currentTime()}] Native TTS FAILED - TTS unavailable")
             }
         }
     }
@@ -294,27 +276,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
         voiceLogs.add("[${currentTime()}] Voice upload deprecated - use GGUF model files instead")
     }
 
+    /**
+     * Speak text using custom native Qwen3-TTS neural forward pass engine.
+     * Built-in Android TextToSpeech is deprecated in favor of native GGUF synthesis.
+     */
     fun speak(text: String) {
-        if (settingsManager.useExperimentalTTS && nativeTTSService != null) {
-            viewModelScope.launch {
-                val voice = settingsManager.selectedVoice
-                voiceLogs.add("[${currentTime()}] Native synthesis ($voice): ${text.take(15)}...")
+        viewModelScope.launch {
+            val voice = settingsManager.selectedVoice
+            voiceLogs.add("[${currentTime()}] Native Qwen3-TTS forward pass ($voice): ${text.take(20)}...")
 
-                // Use native TTS service for synthesis
-                val audioFile = nativeTTSService?.synthesize(text, voice)
+            val service = nativeTTSService ?: NativeTTSService(context) { msg ->
+                voiceLogs.add("[${currentTime()}] $msg")
+            }.also { nativeTTSService = it }
 
-                audioFile?.let { file ->
-                    nativeTTSService?.playAudio(file)
-                    if (_narrationState.value.isPlaying) advanceNarration()
-                } ?: run {
-                    voiceLogs.add("[${currentTime()}] ERROR: Native synthesis failed - falling back to system TTS")
-                    // Fallback to system TTS
-                    systemTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "metanoia_utterance")
-                }
+            val audioFile = service.synthesize(text, voice)
+
+            if (audioFile != null && audioFile.exists()) {
+                service.playAudio(audioFile)
+                if (_narrationState.value.isPlaying) advanceNarration()
+            } else {
+                voiceLogs.add("[${currentTime()}] ERROR: Native Qwen3-TTS synthesis failed. System TTS deprecated.")
             }
-        } else {
-            // Use system TTS
-            systemTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "metanoia_utterance")
         }
     }
 
@@ -358,22 +340,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application), T
     }
 
     fun stopNarration() {
-        systemTts?.stop()
+        nativeTTSService?.stopPlayback()
         _narrationState.value = NarrationState(isPlaying = false)
     }
 
     override fun onCleared() {
-        // Clean up native TTS service
         nativeTTSService?.shutdown()
         nativeTTSService = null
 
-        // Clean up legacy TTS manager
         ttsManager?.shutdown()
         ttsManager = null
-
-        // Clean up system TTS
-        systemTts?.stop()
-        systemTts?.shutdown()
 
         super.onCleared()
     }

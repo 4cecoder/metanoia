@@ -17,11 +17,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.bytecats.metanoia.ui.components.ModuleCard
 import com.bytecats.metanoia.viewmodel.MainViewModel
-import com.bytecats.metanoia.ui.effects.cyberpunkHudBackground
-import com.bytecats.metanoia.ui.effects.cyberpunkGlowAura
-import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.getValue
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

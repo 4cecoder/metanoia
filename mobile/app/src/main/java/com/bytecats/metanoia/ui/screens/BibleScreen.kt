@@ -41,9 +41,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.bytecats.metanoia.ui.effects.cyberpunkHudBackground
-import com.bytecats.metanoia.ui.effects.cyberpunkGlowAura
-import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
+
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -52,14 +50,7 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
     val settings = viewModel.settingsManager
     val narration by viewModel.narrationState
 
-    val time by produceState(initialValue = 0f) {
-        while (true) {
-            withInfiniteAnimationFrameMillis {
-                value = it / 1000f
-            }
-        }
-    }
-    
+
     var step by remember { mutableStateOf("book") } 
     var selectedBook by remember { mutableStateOf<BibleBook?>(null) }
     var selectedChapter by remember { mutableStateOf(1) }
@@ -73,23 +64,23 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
     var bookReadingProgress by remember(selectedBook) { mutableStateOf<ReadingStats.BookReadingProgress?>(null) }
     
     LaunchedEffect(selectedBook) {
-        if (selectedBook != null) {
-            withContext(Dispatchers.IO) {
-                chapterWordCounts = bibleManager.getChapterWordCounts(selectedBook!!.name)
-                downloadedChapters = bibleManager.getDownloadedChapters(selectedBook!!.name)
-                chapterReadingTimes = bibleManager.getChapterReadingTimes(selectedBook!!.name)
-            }
+        val book = selectedBook ?: return@LaunchedEffect
+        withContext(Dispatchers.IO) {
+            chapterWordCounts = bibleManager.getChapterWordCounts(book.name)
+            downloadedChapters = bibleManager.getDownloadedChapters(book.name)
+            chapterReadingTimes = bibleManager.getChapterReadingTimes(book.name)
         }
     }
 
     LaunchedEffect(step, selectedBook, selectedChapter) {
-        if (step == "read" && selectedBook != null) {
+        val book = selectedBook
+        if (step == "read" && book != null) {
             var activeSeconds = 0L
             while (true) {
                 kotlinx.coroutines.delay(1000L)
                 activeSeconds += 1L
                 if (activeSeconds % 5L == 0L) {
-                    val bookName = selectedBook!!.name
+                    val bookName = book.name
                     val ch = selectedChapter
                     withContext(Dispatchers.IO) {
                         bibleManager.recordReadingTime(bookName, ch, 5L)
@@ -137,7 +128,7 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
     }
 
     Scaffold(
-        modifier = Modifier.cyberpunkHudBackground(time),
+        modifier = Modifier,
         topBar = {
             Column {
                 TopAppBar(
@@ -173,14 +164,15 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
                             else IconButton({ viewModel.startChapterNarration(currentChapterContent.map { (num, txt) -> Verse(num, txt) }) }) { Icon(Icons.Default.PlayCircle, null) }
                             IconButton({ scope.launch {
                                 try {
-                                    bibleManager.scrapeChapter(selectedBook!!.name, selectedChapter, settings.bibleGatewayVersion)
-                                    currentChapterContent = bibleManager.getChapter(selectedBook!!.name, selectedChapter)
-                                    highlights = bibleManager.getHighlights(selectedBook!!.name, selectedChapter)
+                                    val book = selectedBook ?: return@launch
+                                    bibleManager.scrapeChapter(book.name, selectedChapter, settings.bibleGatewayVersion)
+                                    currentChapterContent = bibleManager.getChapter(book.name, selectedChapter)
+                                    highlights = bibleManager.getHighlights(book.name, selectedChapter)
                                     // Interlinear is optional - skip if unavailable (e.g., apocrypha)
                                     try {
-                                        bibleManager.scrapeInterlinear(selectedBook!!.name, selectedChapter)
+                                        bibleManager.scrapeInterlinear(book.name, selectedChapter)
                                     } catch (e: Exception) {
-                                        android.util.Log.w("BibleScreen", "Interlinear not available for ${selectedBook!!.name} $selectedChapter: ${e.message}")
+                                        android.util.Log.w("BibleScreen", "Interlinear not available for ${book.name} $selectedChapter: ${e.message}")
                                     }
                                 } catch (e: Exception) {
                                     android.util.Log.e("BibleScreen", "Failed to fetch chapter: ${e.message}", e)
@@ -249,11 +241,8 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
                                 val readGreen = 0x9ECE6A
                                 val lerpedColorInt = ReadingStats.lerpColor(baseColor, readGreen, progress)
                                 val containerColor = if (progress > 0f) Color(lerpedColorInt).copy(alpha = if (progress >= 1f) 0.35f else 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                val phaseOffset = book.name.hashCode().toFloat() * 0.1f
                                 Card(
-                                    modifier = Modifier.padding(4.dp).height(68.dp).let {
-                                        if (progress >= 1f) it.cyberpunkGlowAura(time, Color(0xFF9ece6a).copy(alpha = 0.3f), phaseOffset) else it
-                                    }.combinedClickable(
+                                    modifier = Modifier.padding(4.dp).height(68.dp).combinedClickable(
                                         onClick = { selectedBook = book; step = "chapter"; isSearchVisible = false },
                                         onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); modalBook = book }
                                     ),
@@ -288,7 +277,7 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
                 }
                 "chapter" -> {
                     val totalWords = ReadingStats.calculateBookWordCount(chapterWordCounts)
-                    val avgWords = if ((selectedBook?.chapters ?: 0) > 0) totalWords / selectedBook!!.chapters else 0
+                    val avgWords = selectedBook?.let { if (it.chapters > 0) totalWords / it.chapters else 0 } ?: 0
                     val readTime = ReadingStats.formatReadingTime(totalWords)
 
                     Column(modifier = Modifier.fillMaxSize()) {
@@ -321,12 +310,12 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
                                 val wordCount = chapterWordCounts[ch] ?: 0
                                 val isDownloaded = downloadedChapters.contains(ch)
                                 Card(
-                                    modifier = Modifier.padding(4.dp).aspectRatio(1f).let {
-                                        if (isDownloaded) it.cyberpunkGlowAura(time, Color(0xFF9ece6a).copy(alpha = 0.2f)) else it
-                                    }.clickable { 
-                                        selectedChapter = ch; 
-                                        currentChapterContent = bibleManager.getChapter(selectedBook!!.name, ch); 
-                                        highlights = bibleManager.getHighlights(selectedBook!!.name, ch); 
+                                    modifier = Modifier.padding(4.dp).aspectRatio(1f).clickable {
+                                        selectedChapter = ch
+                                        selectedBook?.let { book ->
+                                            currentChapterContent = bibleManager.getChapter(book.name, ch)
+                                            highlights = bibleManager.getHighlights(book.name, ch)
+                                        }
                                         step = "read" 
                                     },
                                     colors = CardDefaults.cardColors(containerColor = if (isDownloaded) Color(0xFF9ece6a).copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant),
@@ -370,7 +359,7 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
                             val isExpanded = expandedVerses.contains(vs)
                             val hl = highlights[vs] ?: 0
                             val isCurrent = narration.isPlaying && narration.currentVerse == vs
-                            val hasNotes = bibleManager.getNotes(selectedBook!!.name, selectedChapter, vs).isNotEmpty()
+                            val hasNotes = selectedBook?.let { bibleManager.getNotes(it.name, selectedChapter, vs).isNotEmpty() } ?: false
                             val isHebrew = selectedBook?.testament == "Old"
                             
                             Column(modifier = Modifier.padding(vertical = 12.dp).combinedClickable(onClick = { }, onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); studyVerse = vs; showStudySheet = true })) {
@@ -380,7 +369,7 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
                                     if (hasNotes) Icon(Icons.AutoMirrored.Filled.Notes, "Notes", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
                                     IconButton({ viewModel.speak(text) }, modifier = Modifier.size(24.dp)) { Icon(Icons.AutoMirrored.Filled.VolumeUp, "Read", modifier = Modifier.size(16.dp), tint = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline) }
                                     Spacer(modifier = Modifier.weight(1f))
-                                    IconButton(onClick = { expandedVerses = if (isExpanded) expandedVerses - vs else expandedVerses + vs; if (!isExpanded && !interlinearData.containsKey(vs)) interlinearData = interlinearData + (vs to bibleManager.getInterlinear(selectedBook!!.name, selectedChapter, vs)) }, modifier = Modifier.size(24.dp)) { Icon(if (isExpanded) Icons.Default.VisibilityOff else Icons.Default.Translate, "Interlinear", modifier = Modifier.size(16.dp)) }
+                                    IconButton(onClick = { expandedVerses = if (isExpanded) expandedVerses - vs else expandedVerses + vs; if (!isExpanded && !interlinearData.containsKey(vs)) selectedBook?.let { book -> interlinearData = interlinearData + (vs to bibleManager.getInterlinear(book.name, selectedChapter, vs)) } }, modifier = Modifier.size(24.dp)) { Icon(if (isExpanded) Icons.Default.VisibilityOff else Icons.Default.Translate, "Interlinear", modifier = Modifier.size(16.dp)) }
                                 }
                                 Text(text, fontSize = settings.englishFontSize.sp, fontWeight = if (isCurrent) FontWeight.Medium else FontWeight.Light, modifier = Modifier.background(if (isCurrent) MaterialTheme.colorScheme.primary.copy(0.15f) else if (hl != 0) Color(hl.toLong()).copy(alpha = 0.3f) else Color.Transparent, RoundedCornerShape(4.dp)))
                                 if (isExpanded) {
@@ -403,30 +392,33 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
         }
     }
 
-    if (showStudySheet && studyVerse != null) {
+    if (showStudySheet && studyVerse != null && selectedBook != null) {
+        val sv = requireNotNull(studyVerse)
+        val bk = requireNotNull(selectedBook)
         ModalBottomSheet(onDismissRequest = { showStudySheet = false }) {
             var newNoteText by remember { mutableStateOf("") }
-            val notes = bibleManager.getNotes(selectedBook!!.name, selectedChapter, studyVerse!!)
+            val notes = bibleManager.getNotes(bk.name, selectedChapter, sv)
             Column(modifier = Modifier.padding(24.dp).fillMaxWidth().verticalScroll(rememberScrollState())) {
-                Text("${selectedBook?.name} $selectedChapter:$studyVerse", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                Text("${bk.name} $selectedChapter:$sv", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
                 Spacer(modifier = Modifier.height(16.dp)); Text("Highlight Color", style = MaterialTheme.typography.labelLarge)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     listOf(0xFFFF9E6A, 0xFF9ECE6A, 0xFF7AA2F7, 0xFFBB9AF7, 0).forEach { color -> 
-                        Box(modifier = Modifier.size(40.dp).background(if (color.toLong() == 0L) Color.Transparent else Color(color.toLong()), CircleShape).border(1.dp, MaterialTheme.colorScheme.outline, CircleShape).clickable { bibleManager.setHighlight(selectedBook!!.name, selectedChapter, studyVerse!!, color.toInt()); highlights = bibleManager.getHighlights(selectedBook!!.name, selectedChapter) }) { if (color.toLong() == 0L) Icon(Icons.Default.Close, null, modifier = Modifier.align(Alignment.Center)) } 
+                        Box(modifier = Modifier.size(40.dp).background(if (color.toLong() == 0L) Color.Transparent else Color(color.toLong()), CircleShape).border(1.dp, MaterialTheme.colorScheme.outline, CircleShape).clickable { bibleManager.setHighlight(bk.name, selectedChapter, sv, color.toInt()); highlights = bibleManager.getHighlights(bk.name, selectedChapter) }) { if (color.toLong() == 0L) Icon(Icons.Default.Close, null, modifier = Modifier.align(Alignment.Center)) } 
                     }
                 }
                 Spacer(modifier = Modifier.height(24.dp)); Text("Study Notes", style = MaterialTheme.typography.labelLarge)
                 notes.forEach { note -> Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) { Text(note.content, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium) } }
                 OutlinedTextField(newNoteText, { newNoteText = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Enter insight...") })
-                Button(onClick = { if (newNoteText.isNotEmpty()) { bibleManager.saveNote(selectedBook!!.name, selectedChapter, studyVerse!!, newNoteText); newNoteText = "" } }, modifier = Modifier.align(Alignment.End).padding(top = 8.dp)) { Text("Save Note") }
+                Button(onClick = { if (newNoteText.isNotEmpty()) { bibleManager.saveNote(bk.name, selectedChapter, sv, newNoteText); newNoteText = "" } }, modifier = Modifier.align(Alignment.End).padding(top = 8.dp)) { Text("Save Note") }
                 Spacer(modifier = Modifier.height(40.dp))
             }
         }
     }
 
     if (showLexiconSheet && lexiconWord != null) {
+        val word = requireNotNull(lexiconWord)
         com.bytecats.metanoia.ui.components.bible.LexiconSheet(
-            word = lexiconWord!!,
+            word = word,
             detail = com.bytecats.metanoia.models.LexiconEntry(lexiconDetail.first, lexiconDetail.second),
             onDismiss = { showLexiconSheet = false; lexiconDetail = Pair("", "Loading...") },
             onSpeak = { viewModel.speak(it) },
@@ -435,7 +427,7 @@ fun BibleScreen(viewModel: MainViewModel, onNavigateToSettings: () -> Unit = {})
     }
 
     if (modalBook != null) {
-        val targetBook = modalBook!!
+        val targetBook = requireNotNull(modalBook)
         var isDownloadingBook by remember { mutableStateOf(false) }
         var downloadStatusText by remember { mutableStateOf("") }
 

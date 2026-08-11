@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
+import android.util.Log
 import java.io.File
 
 /**
@@ -51,7 +52,7 @@ class ScratchpadCache(private val context: Context) {
             file.writeText(html)
         } catch (e: Exception) {
             // Cache writes shouldn't fail the app
-            e.printStackTrace()
+            Log.e("ScratchpadCache", "Failed to cache HTML", e)
         }
     }
 

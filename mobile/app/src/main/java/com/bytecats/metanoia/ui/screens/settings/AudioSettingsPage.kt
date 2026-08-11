@@ -16,7 +16,6 @@ import com.bytecats.metanoia.settings.SettingsManager
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioSettingsPage(navController: NavController, settings: SettingsManager) {
-    var exp by remember { mutableStateOf(settings.useExperimentalTTS) }
     var talkTap by remember { mutableStateOf(settings.speakDefinitionsOnTap) }
     var voice by remember { mutableStateOf(settings.selectedVoice) }
 
@@ -63,15 +62,10 @@ fun AudioSettingsPage(navController: NavController, settings: SettingsManager) {
 
             Text("TTS Engine", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Text(
-                "Native = Qwen3-TTS neural (recommended, offline)\nGateway = Remote gateway (deprecated)\nSystem = Android built-in (offline, basic)",
+                "Native = Qwen3-TTS neural (recommended, offline)\nGateway = Remote gateway (deprecated, unused)",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline
             )
-
-            SettingToggle("Experimental Voice Clone", "Use Qwen3-TTS neural cloning engine", exp) {
-                exp = it
-                settings.useExperimentalTTS = it
-            }
 
             OutlinedTextField(
                 value = voice,

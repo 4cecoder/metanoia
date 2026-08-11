@@ -6,6 +6,12 @@ import com.bytecats.metanoia.models.*
 
 class VerseDao(private val openDb: () -> SQLiteDatabase) {
 
+    private val allowedTables = setOf("favorites", "lexicon", "interlinear", "highlights", "notes", "verses")
+
+    private fun validateTableName(tableName: String) {
+        require(tableName in allowedTables) { "Invalid table name: $tableName" }
+    }
+
     fun getChapter(book: String, chapter: Int): List<Verse> {
         val db = openDb()
         val cursor = db.rawQuery(
@@ -108,6 +114,7 @@ class VerseDao(private val openDb: () -> SQLiteDatabase) {
 
     fun getTableRows(tableName: String, limit: Int): List<Map<String, String>> {
         val list = mutableListOf<Map<String, String>>()
+        validateTableName(tableName)
         val db = openDb()
         try {
             val cursor = db.rawQuery("SELECT * FROM $tableName LIMIT $limit", null)
@@ -127,6 +134,7 @@ class VerseDao(private val openDb: () -> SQLiteDatabase) {
     }
 
     fun clearTable(tableName: String) {
+        validateTableName(tableName)
         val db = openDb(); db.execSQL("DELETE FROM $tableName"); db.execSQL("VACUUM"); db.close()
     }
 

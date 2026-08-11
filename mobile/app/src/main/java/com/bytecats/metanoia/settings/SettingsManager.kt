@@ -78,16 +78,6 @@ class SettingsManager(context: Context) {
         set(value) = prefs.edit().putBoolean("use_gateway_bible", value).apply()
 
     // --- Audio & TPU ---
-    /** Legacy setting - now delegates to useNativeTTS for backward compatibility */
-    @Deprecated("Use useNativeTTS instead", level = DeprecationLevel.WARNING)
-    var useExperimentalTTS: Boolean
-        get() = useNativeTTS
-        set(value) {
-            useNativeTTS = value
-            // Also update the legacy setting for any code that still reads it directly
-            prefs.edit().putBoolean("use_experimental_tts", value).apply()
-        }
-
     var tpuEnabled: Boolean
         get() = prefs.getBoolean("tpu_enabled", true)
         set(value) = prefs.edit().putBoolean("tpu_enabled", value).apply()

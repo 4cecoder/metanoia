@@ -34,7 +34,7 @@ import java.io.File
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun VoiceLabScreen(navController: NavController, viewModel: MainViewModel) {
-    var text by remember { mutableStateOf("Metanoia: Neural synthesis check.") }
+    var text by remember { mutableStateOf("") }
     var selectedVoiceKey by remember { mutableStateOf(viewModel.settingsManager.selectedVoice) }
     var showCreateSheet by remember { mutableStateOf(false) }
     
