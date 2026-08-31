@@ -137,6 +137,12 @@ check_child_id.zig
 # never to be added as files or a gitlink. Same rationale as vendor/.
 tools/reference/
 
+# Site build outputs — derived from site/src/** + site/vendor/ui-kit via
+# `bun --cwd site run build` → site/out (3.1M) + Next.js cache. Not in git.
+site/.next/
+site/out/
+site/tsconfig.tsbuildinfo
+
 # aikit/examples/tommy_test.zig's reference clip — small (703KB), needed
 # for `zig build run-example` to actually run, same reasoning as the main
 # repo's data/*.wav exceptions above.
