@@ -11,3 +11,15 @@ html { scroll-behavior: smooth; }
 
 /* For the deep-link code blocks that need horizontal scroll like Fedora. */
 pre { overflow-x: auto; }
+
+/* Learned from original Tokyo Night portal (index.html:11-25):
+   --bg-primary #0f1117, --accent #7aa2f7, liquid-glass blur:20px
+   Preserved as opt-in theme: <html data-theme="tokyo">. Astryx stays default. */
+html[data-theme="tokyo"] {
+  --background: #0f1117;
+  --foreground: #a9b1d6;
+  --muted: #161922;
+  --muted-foreground: #787c99;
+  --accent: #7aa2f7;
+  --border: rgba(186, 187, 208, 0.1);
+}
