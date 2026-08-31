@@ -38,44 +38,54 @@ function CopyButton({ text }: { text: string }) {
 export default function Home() {
   return (
     <div className="space-y-16">
-      {/* Hero — Septuagint-first framing (inverse Logos). */}
-      <section className="space-y-6 py-6">
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="secondary">LXX + GNT as primary roots</Badge>
-          <Badge variant="outline">Masoretic as comparison — buried, not deleted</Badge>
-          <Badge>Zig + GTK4 · Kotlin · Swift</Badge>
-        </div>
-        <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
-          Study the Bible the disciples read.
-        </h1>
-        <p className="max-w-2xl text-pretty text-lg text-muted-foreground">
-          Metanoia is Septuagint-first by default — Brenton&apos;s LXX English (LXXE) + Greek
-          interlinear (LXX/Apostolic) paired with the Greek New Testament (GNT). Hebrew
-          Masoretic stays available as a comparison text, tucked in <em>Advanced — Bible Tradition</em>{" "}
-          (<code className="rounded bg-muted px-1 py-0.5">src/models/config.zig:86-96</code>) — the
-          inverse of Logos, which buries LXX under MT.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <Button asChild>
-            <Link href="/onboarding">Onboard in 5 min</Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/history">Why LXX first? — timeline</Link>
-          </Button>
-          <Button variant="ghost" asChild>
-            <a href="https://github.com/4cecoder/metanoia" target="_blank" rel="noreferrer">
-              <Github className="mr-2 size-4" /> View source
-            </a>
-          </Button>
-        </div>
-        <div className="rounded-lg border bg-card p-3 text-sm">
-          <div className="font-medium">One-liner for new devs (Fedora-style `npm run setup`)</div>
-          <pre className="mt-2 overflow-auto rounded bg-muted p-3 text-xs">
-            {`brew install gtk4 pango cairo glib sqlite3   # macOS — or apt/dnf on Linux
+      {/* Hero — Septuagint-first framing (inverse Logos). Tokyo Night primary dark (index.html:11-40): radial gradients + liquid-glass. */}
+      <section className="relative overflow-hidden rounded-2xl border bg-card/40 p-6 sm:p-8 space-y-6 tokyo-hero-bg">
+        <div aria-hidden className="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full bg-[#7aa2f7]/10 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-32 -left-24 h-[22rem] w-[22rem] rounded-full bg-[#9ece6a]/[0.06] blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-muted/10" />
+        <div className="relative space-y-6">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="secondary">LXX + GNT as primary roots</Badge>
+            <Badge variant="outline">Masoretic as comparison — buried, not deleted</Badge>
+            <Badge>Zig + GTK4 · Kotlin · Swift</Badge>
+          </div>
+          <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
+            Study the Bible the disciples read.
+          </h1>
+          <p className="max-w-2xl text-pretty text-lg text-muted-foreground">
+            Metanoia is Septuagint-first by default — Brenton&apos;s LXX English (LXXE) + Greek
+            interlinear (LXX/Apostolic) paired with the Greek New Testament (GNT). Hebrew
+            Masoretic stays available as a comparison text, tucked in <em>Advanced — Bible Tradition</em>{" "}
+            (<code className="rounded bg-muted px-1 py-0.5">src/models/config.zig:86-96</code>) — the
+            inverse of Logos, which buries LXX under MT.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild>
+              <Link href="/onboarding">Onboard in 5 min</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/history">Why LXX first? — timeline</Link>
+            </Button>
+            <Button variant="ghost" asChild>
+              <a href="https://github.com/4cecoder/metanoia" target="_blank" rel="noreferrer">
+                <Github className="mr-2 size-4" /> View source
+              </a>
+            </Button>
+          </div>
+          <div className="liquid-glass rounded-xl p-4 text-sm">
+            <div className="font-medium">One-liner for new devs (Fedora-style `npm run setup`)</div>
+            <pre className="mt-2 overflow-auto rounded-lg bg-muted/70 p-3 text-xs backdrop-blur">
+              {`brew install gtk4 pango cairo glib sqlite3   # macOS — or apt/dnf on Linux
 # Zig: use master nightly from ziglang.org/download (Homebrew zig is too old — see docs/GEMINI.md)
 git clone https://github.com/4cecoder/metanoia && cd metanoia
 zig build run`}
-          </pre>
+            </pre>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Theme: <code>Neutral</code> ↔ <code>Tokyo Night</code> via header toggle — Tokyo uses{" "}
+              <code>#0f1117</code> + <code>#7aa2f7</code> + <code>backdrop-blur:20px</code> from{" "}
+              <code>index.html:11-25</code> as primary dark (<code>site/src/app/globals.css:12</code>).
+            </p>
+          </div>
         </div>
       </section>
 
@@ -87,7 +97,7 @@ zig build run`}
           reference lives on its own page so the homepage stays clean.
         </p>
         <div className="grid gap-4 md:grid-cols-3">
-          <Card>
+          <Card className="backdrop-blur supports-[backdrop-filter]:bg-card/70">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Link2 className="size-4" /> HTTPS
@@ -98,7 +108,7 @@ zig build run`}
               <pre className="rounded bg-muted p-2 text-xs">https://metanoia.bytecats.codes/bible/John/3/16</pre>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="backdrop-blur supports-[backdrop-filter]:bg-card/70">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Hash className="size-4" /> metanoia://
@@ -109,7 +119,7 @@ zig build run`}
               <pre className="rounded bg-muted p-2 text-xs">metanoia://bible/John/3/16</pre>
             </CardContent>
           </Card>
-          <Card className="flex flex-col justify-between">
+          <Card className="flex flex-col justify-between backdrop-blur supports-[backdrop-filter]:bg-card/70">
             <CardHeader>
               <CardTitle className="text-base">See all patterns →</CardTitle>
               <CardDescription>Abbreviations, ADB, testing</CardDescription>

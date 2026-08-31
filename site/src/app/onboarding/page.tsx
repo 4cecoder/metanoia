@@ -66,7 +66,7 @@ zig build run         # desktop
       </div>
 
       <PageNav
-        prev={{ href: "/learn/english", label: "Back: English rendering" }}
+        prev={{ href: "/learn/corpus", label: "Back: Corpus principles" }}
         next={{ href: "/docs/architecture", label: "Next: Docs — Architecture" }}
       />
     </div>

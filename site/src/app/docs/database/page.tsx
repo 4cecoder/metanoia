@@ -122,7 +122,7 @@ export default function DatabasePage() {
         for NKJV→WEB rationale.
       </p>
 
-      <PageNav prev={{ href: "/docs/architecture", label: "Back: Architecture" }} next={{ href: "/docs/api", label: "Next: Deep Links" }} />
+      <PageNav prev={{ href: "/docs/architecture", label: "Back: Architecture" }} next={{ href: "/docs/voice", label: "Next: TTS + Whisper" }} />
     </div>
   );
 }

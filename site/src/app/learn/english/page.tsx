@@ -15,7 +15,7 @@ export default function EnglishPage() {
       <header className="space-y-3">
         <Badge>Learn · English</Badge>
         <h1 className="text-3xl font-semibold tracking-tight">English that matches the Greek</h1>
-        <p className="text-muted-foreground">
+        <p className="max-w-2xl text-muted-foreground">
           You liked NKJV — so do we for Masoretic precision. But NKJV&apos;s Old Testament is
           translated from the Masoretic Text (MT), not the Septuagint. If roots are LXX+GNT,
           the English you read in the OT should be from LXX too. Roger&apos;s FedoraBible taught us how to
@@ -47,55 +47,115 @@ export default function EnglishPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Primary — LXX English (from Greek)</CardTitle>
-            <CardDescription>What you read when <code>ot_source=lxx</code> (default)</CardDescription>
+            <CardTitle className="text-sm flex items-center gap-2">
+              Primary — LXX English (from Greek) <Badge>Primary</Badge>
+            </CardTitle>
+            <CardDescription>
+              What you read when <code>ot_source=lxx</code> (default) ·{" "}
+              <code>manifest.primacy=&apos;primary&apos;</code>
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <div className="rounded bg-muted p-2 text-xs">
-              <span className="font-semibold">Brenton 1851</span> — USFM via eBible.org
-              <span className="text-muted-foreground"> (eng-Brenton_usfm.zip)</span>
-              <br />
-              <span className="text-muted-foreground">
-                Public domain · 27,058 verses · 39 books, Daniel = Theodotion. Import:{" "}
-                <code>tools/bible/import_brenton_septuagint.py</code> →{" "}
-                <code>verses.lxxe.db</code> (<code>verses.version=&apos;LXXE&apos;</code>, primary, ~5.2 MB)
-              </span>
+            <div className="rounded bg-muted p-2 text-xs space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">Brenton 1851</span>{" "}
+                <Badge variant="secondary" className="text-[10px]">
+                  LXXE
+                </Badge>{" "}
+                <Badge className="text-[10px]">primary</Badge>
+              </div>
+              <div className="text-muted-foreground">
+                USFM via eBible.org <span className="font-mono">(eng-Brenton_usfm.zip)</span> · Public domain
+                · 27,058 verses · 39 books, Daniel = Theodotion
+              </div>
+              <div className="text-muted-foreground">
+                Import: <code>tools/bible/import_brenton_septuagint.py</code> →{" "}
+                <code>data/db/verses.lxxe.db</code> (<code>verses.version=&apos;LXXE&apos;</code>, ~5.2 MB)
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <span className="font-semibold">LXXM</span>{" "}
+                <Badge variant="secondary" className="text-[10px]">
+                  LXXM
+                </Badge>{" "}
+                <Badge variant="outline" className="text-[10px]">
+                  optional
+                </Badge>{" "}
+                <span className="text-muted-foreground">modernized Brenton</span>
+              </div>
+              <div className="text-muted-foreground">
+                Deterministic post-process <code>thou→you, hath→has, doth→does, shalt→shall</code> — no
+                re-scrape: <code>tools/bible/modernize_brenton.py</code> →{" "}
+                <code>verses.lxxm.db</code> (<code>version=&apos;LXXM&apos;</code>, still PD)
+              </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Archaic thee/thou, but faithful to LXX Vorlage. License: PD (Brenton 1851) — see{" "}
-              <code>docs/DB_SHARDING.md</code> + <code>docs/FEDORA_AUDIT.md §9</code>. Next: a
-              deterministic modernizer <code>thou→you, hath→has</code> as{" "}
-              <code>verses.lxxm.db</code> — still PD.
+              Archaic <em>thee/thou</em> is faithful to LXX Vorlage — <code>LXXM</code> keeps the same
+              scholarship without the Elizabethan pronouns. License: PD (Brenton 1851) — see{" "}
+              <code>docs/DB_SHARDING.md</code> + <code>docs/FEDORA_AUDIT.md §9</code>.
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Comparison — MT English (from Hebrew)</CardTitle>
-            <CardDescription>Buried, PD, opt-in only</CardDescription>
+            <CardTitle className="text-sm flex items-center gap-2">
+              Comparison — MT English (from Hebrew){" "}
+              <Badge variant="outline">comparison · buried</Badge>
+            </CardTitle>
+            <CardDescription>
+              PD only · opt-in via <code>manifest.bundle=false</code> —{" "}
+              <code>primacy: comparison/optional/buried</code>
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <div className="rounded bg-muted p-2 text-xs space-y-1">
-              <div>
-                <span className="font-semibold">WEB</span> — World English Bible — PD (ebible.org,
-                modern ASV 1901 base)
+            <div className="rounded bg-muted p-2 text-xs space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="font-semibold">WEB</span> — World English Bible — PD (ebible.org,
+                  modern ASV 1901 base) · <span className="font-mono">31k vv</span>
+                </div>
+                <Badge variant="outline" className="text-[10px] shrink-0">
+                  comparison
+                </Badge>
               </div>
-              <div>
-                <span className="font-semibold">KJV</span> (1769) — PD in US, Crown in UK — 31,102
-                verses via <code>aruljohn/Bible-kjv</code>
+              <div className="text-muted-foreground">
+                Replaces NKJV as the PD MT-English. Import: <code>tools/bible/import_web.py</code> (
+                <code>eng-web_usfm.zip</code> USFM, same shape as Brenton + Fedora&apos;s{" "}
+                <code>import-translation.js</code> JSON fallback) →{" "}
+                <code>verses.web.db</code> (<code>version=&apos;WEB&apos;</code>)
               </div>
-              <div>
-                <span className="font-semibold">YLT</span> (Young&apos;s Literal, 1862) — PD,
-                hyper-literal fringe
+              <div className="flex items-start justify-between gap-2 pt-1 border-t border-border/50">
+                <div>
+                  <span className="font-semibold">KJV</span> (1769) — PD in US, Crown in UK — 31,102 vv
+                  via <code>aruljohn/Bible-kjv</code>
+                </div>
+                <Badge variant="outline" className="text-[10px] shrink-0">
+                  optional
+                </Badge>
+              </div>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="font-semibold">YLT</span> (1862) — PD, hyper-literal fringe
+                </div>
+                <Badge variant="outline" className="text-[10px] shrink-0">
+                  optional
+                </Badge>
+              </div>
+              <div className="flex items-start justify-between gap-2 border-t border-amber-200 pt-1">
+                <div className="text-amber-900 dark:text-amber-200">
+                  <span className="font-semibold">NKJV</span> — Thomas Nelson, 1982 — 31,102 vv
+                </div>
+                <Badge variant="outline" className="text-[10px] border-amber-300 shrink-0">
+                  buried → removed
+                </Badge>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              All three PD English ship via Fedora&apos;s <code>scripts/import-translation.js</code>{" "}
-              shape (one JSON per book) → <code>verses.web.db</code> /{" "}
-              <code>verses.kjv.db</code> shards — <code>primacy: comparison/optional</code>,{" "}
-              <code>bundle:false</code> or on-demand. Same predicate as{" "}
-              <code>tools/bible/split_db.py:46</code> <code>verses.version=&apos;WEB&apos;</code>.
-              NKJV shard becomes <code>bundle:false</code> then removed.
+              PD English ships via Fedora&apos;s <code>scripts/import-translation.js</code> per-book JSON
+              shape (one JSON per book) — or directly from USFM — →{" "}
+              <code>verses.web.db</code> / <code>verses.kjv.db</code> shards —{" "}
+              <code>primacy: comparison/optional</code>, <code>bundle:false</code>. Same predicate as{" "}
+              <code>tools/bible/split_db.py:46</code> <code>verses.version=&apos;WEB&apos;</code>. NKJV shard
+              becomes <code>bundle:false</code> then removed.
             </p>
           </CardContent>
         </Card>
@@ -175,7 +235,7 @@ export default function EnglishPage() {
 
       <PageNav
         prev={{ href: "/learn/canon", label: "Back: Canon" }}
-        next={{ href: "/onboarding", label: "Next: Build — onboarding" }}
+        next={{ href: "/learn/corpus", label: "Next: Corpus principles" }}
       />
     </div>
   );

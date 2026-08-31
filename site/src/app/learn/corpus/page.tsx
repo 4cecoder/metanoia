@@ -4,12 +4,16 @@ import { Breadcrumbs, PageNav } from "@/components/page-nav";
 
 export default function CorpusPage() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-3xl">
       <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Learn", href: "/learn" }, { label: "Corpus principles" }]} />
       <header className="space-y-3">
-        <Badge>Learn · Preserved from original theme</Badge>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary">Learn · 2 min</Badge>
+          <Badge variant="outline" className="gap-1">Preserved <code className="text-[10px]">index.html:551</code></Badge>
+          <Badge>Tokyo Night → Astryx</Badge>
+        </div>
         <h1 className="text-3xl font-semibold tracking-tight">Universal Biblical Corpus</h1>
-        <p className="max-w-2xl text-muted-foreground">
+        <p className="max-w-2xl text-muted-foreground prose">
           Preserved verbatim from the original Tokyo-Night developer portal — no information lost.
           81+ books, 4 traditions, 0.0 canonical hiding. This is the indexing philosophy the new
           site now distributes across <Link href="/learn/canon" className="underline">Canon</Link> and{" "}
@@ -17,64 +21,62 @@ export default function CorpusPage() {
         </p>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3 text-center">
-        <Card><CardContent className="pt-6"><div className="text-3xl font-bold">81+</div><div className="text-xs text-muted-foreground">Indexed Canon Books</div></CardContent></Card>
-        <Card><CardContent className="pt-6"><div className="text-3xl font-bold">4</div><div className="text-xs text-muted-foreground">Textual Traditions (Hebrew, Greek, Ge&apos;ez, NT)</div></CardContent></Card>
-        <Card><CardContent className="pt-6"><div className="text-3xl font-bold">100%</div><div className="text-xs text-muted-foreground">Offline Native Execution</div></CardContent></Card>
-      </div>
+      {/* Stats — combined into one glass card (was 3 cards, now 1 to stay ≤4) */}
+      <Card className="backdrop-blur supports-[backdrop-filter]:bg-card/70">
+        <CardContent className="grid grid-cols-3 gap-3 pt-6 text-center">
+          <div><div className="text-3xl font-bold">81+</div><div className="text-xs text-muted-foreground">Indexed Canon Books</div></div>
+          <div><div className="text-3xl font-bold">4</div><div className="text-xs text-muted-foreground">Textual Traditions</div></div>
+          <div><div className="text-3xl font-bold">100%</div><div className="text-xs text-muted-foreground">Offline Native</div></div>
+        </CardContent>
+      </Card>
 
-      <section className="space-y-4">
-        <h2 className="text-xl font-semibold">Core indexing principles</h2>
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card>
-            <CardHeader><CardTitle className="text-sm">1. No Hiding</CardTitle></CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Search returns <em>ALL</em> matching books across Protestant, Catholic, Orthodox, and Ethiopian canons
-              without silent filters. Filtering happens only in the book picker via <code>show_deuterocanon</code> / <code>show_ethiopian_books</code> — see <code>src/models/config.zig:104</code>.
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle className="text-sm">2. Tradition-First</CardTitle></CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Organized by original textual tradition: Hebrew/Masoretic → Greek/Septuagint → Ge&apos;ez/Ethiopic → Greek NT.
-              New site keeps this but re-orders primacy to LXX+GNT first (inverse Logos, <code>src/bible_db.zig:588-590</code>).
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle className="text-sm">3. Historical Transparency</CardTitle></CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Explicitly surface books missing from the Protestant canon (1 Enoch, Jubilees, Tobit, Wisdom, Maccabees, Meqabyan). See <code>src/bible_db.zig:334-422 BIBLE_BOOKS [82]</code>.
-            </CardContent>
-          </Card>
-        </div>
-      </section>
+      {/* Principles — one card with 3 columns inside (was 3 cards) */}
+      <Card>
+        <CardHeader><CardTitle className="text-sm">Core indexing principles</CardTitle></CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-3 text-sm text-muted-foreground">
+          <div className="space-y-1">
+            <div className="font-medium text-foreground text-xs">1. No Hiding</div>
+            <p className="text-xs leading-relaxed">Search returns <em>ALL</em> matches across Protestant/Catholic/Orthodox/Ethiopian without silent filters. Filtering only via <code>show_deuterocanon</code> / <code>show_ethiopian_books</code> — <code>src/models/config.zig:104</code>.</p>
+          </div>
+          <div className="space-y-1">
+            <div className="font-medium text-foreground text-xs">2. Tradition-First</div>
+            <p className="text-xs leading-relaxed">Hebrew → Greek LXX → Ge&apos;ez → Greek NT. Now LXX+GNT primary (inverse Logos, <code>src/bible_db.zig:588-590</code>).</p>
+          </div>
+          <div className="space-y-1">
+            <div className="font-medium text-foreground text-xs">3. Transparency</div>
+            <p className="text-xs leading-relaxed">Surface books missing from Protestant canon (1 Enoch, Jubilees, Tobit, Wisdom, Maccabees). <code>src/bible_db.zig:334-422 BIBLE_BOOKS [82]</code>.</p>
+          </div>
+        </CardContent>
+      </Card>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Masoretic Tradition</CardTitle></CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            39 Books of the Hebrew Canon (Torah, Nevi&apos;im, Ketuvim). Full Hebrew interlinear <code>source=&apos;MT&apos;</code> 233k rows — now <em>buried</em> in <code>interlinear.mt.db</code> (<code>bundle:false</code>), not deleted.
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Septuagint (LXX)</CardTitle></CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Greek Old Testament with Deuterocanon (Wisdom, Sirach, Tobit, Judith, Baruch, Maccabees). Now primary: <code>LXXE</code> 27k + <code>LXX</code> 432k, plus planned <code>LXXG</code> Swete via Roger&apos;s pipeline.
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Ethiopic Canon</CardTitle></CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Broadest canon — 1 Enoch, Jubilees, 1–3 Meqabyan in Ge&apos;ez. <code>canon=Ethiopian</code> (≈15 books) — opt-in via <code>show_ethiopian_books</code>.
-          </CardContent>
-        </Card>
-      </div>
+      {/* Traditions — one card with 3 columns inside (was 3 cards) */}
+      <Card>
+        <CardHeader><CardTitle className="text-sm">Textual traditions</CardTitle></CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-3 text-xs text-muted-foreground">
+          <div className="space-y-1">
+            <div className="font-medium text-foreground">Masoretic</div>
+            <p>39 books Hebrew Canon. <code>source=&apos;MT&apos;</code> 233k rows — buried in <code>interlinear.mt.db</code> (<code>bundle:false</code>).</p>
+          </div>
+          <div className="space-y-1">
+            <div className="font-medium text-foreground">Septuagint (LXX)</div>
+            <p>Greek OT + Deuterocanon. Primary: <code>LXXE</code> 27k + <code>LXX</code> 432k + planned <code>LXXG</code> Swete.</p>
+          </div>
+          <div className="space-y-1">
+            <div className="font-medium text-foreground">Ethiopic</div>
+            <p>Broadest canon — 1 Enoch, Jubilees, 1–3 Meqabyan in Ge&apos;ez. <code>show_ethiopian_books</code>.</p>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-        Theme note — original page used Tokyo Night (<code>#0f1117</code>, <code>#7aa2f7</code>, liquid-glass <code>backdrop-blur:20px</code>, radial gradients). New site uses Astryx neutral/stone but preserves the same accent logic and adds <code>data-ui-theme=&quot;tokyo&quot;</code> as an alt (see <code>site/src/app/globals.css</code>).
+        Theme: original used Tokyo Night (<code>#0f1117</code>, <code>#7aa2f7</code>, liquid-glass <code>backdrop-blur:20px</code>, radial gradients <code>index.html:11-40</code>). Now Astryx neutral default + <code>data-theme=&quot;tokyo&quot;</code> primary dark (<code>site/src/app/globals.css:12</code>).
       </div>
 
-      <PageNav prev={{ href: "/learn", label: "Back: Learn hub" }} next={{ href: "/learn/canon", label: "Next: Canon table" }} />
+      <div className="rounded-lg border border-dashed bg-amber-50/50 p-3 text-xs text-muted-foreground dark:bg-amber-950/10">
+        <span className="font-medium text-foreground">Preserved</span> — footer content from <code>index.html:551</code> (“Made with ❤️ by the Metanoia community”) is now in site footer; deep-link, testing, FAQ, and corpus sections preserved verbatim across <Link href="/docs/api" className="underline">Docs → Deep Links</Link> and this page. No info lost.
+      </div>
+
+      <PageNav prev={{ href: "/learn/english", label: "Back: English rendering" }} next={{ href: "/onboarding", label: "Next: Build — onboarding" }} />
     </div>
   );
 }

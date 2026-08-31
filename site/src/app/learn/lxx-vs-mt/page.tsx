@@ -15,7 +15,7 @@ export default function LxxVsMt() {
       <header className="space-y-3">
         <Badge variant="secondary">Learn · 2 min</Badge>
         <h1 className="text-3xl font-semibold tracking-tight">LXX vs Masoretic — not a rivalry</h1>
-        <p className="text-muted-foreground">
+        <p className="max-w-2xl text-muted-foreground">
           Both preserve the same story through different channels. The question is which channel the
           New Testament authors were actually reading.
         </p>

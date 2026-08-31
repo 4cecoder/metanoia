@@ -12,14 +12,87 @@ html { scroll-behavior: smooth; }
 /* For the deep-link code blocks that need horizontal scroll like Fedora. */
 pre { overflow-x: auto; }
 
-/* Learned from original Tokyo Night portal (index.html:11-25):
-   --bg-primary #0f1117, --accent #7aa2f7, liquid-glass blur:20px
-   Preserved as opt-in theme: <html data-theme="tokyo">. Astryx stays default. */
-html[data-theme="tokyo"] {
+/* ---------------------------------------------------------------------------
+ * Tokyo Night — primary dark variant (index.html:11-40)
+ * Learned from original portal: --bg-primary #0f1117, --accent #7aa2f7,
+ * liquid-glass rgba(26,27,38,0.7) blur:20px, radial gradients top+bottom.
+ * Astryx neutral stays default light; tokyo is the intentional dark.
+ * Toggle via <html data-theme|data-ui-theme="tokyo"> — see site-header.
+ * ------------------------------------------------------------------------- */
+html[data-theme="tokyo"],
+html[data-ui-theme="tokyo"] {
+  color-scheme: dark;
+  /* shadcn semantic overrides (fallback for non-astryx surfaces) */
   --background: #0f1117;
   --foreground: #a9b1d6;
   --muted: #161922;
   --muted-foreground: #787c99;
   --accent: #7aa2f7;
   --border: rgba(186, 187, 208, 0.1);
+  /* Astryx token overrides — makes ui-kit components render Tokyo without JS theme engine */
+  --astryx-color-background-body: #0f1117;
+  --astryx-color-background-surface: #161922;
+  --astryx-color-background-card: #1a1b26;
+  --astryx-color-background-popover: #161922;
+  --astryx-color-background-muted: #161922;
+  --astryx-color-accent: #7aa2f7;
+  --astryx-color-accent-muted: rgba(122, 162, 247, 0.12);
+  --astryx-color-on-accent: #0f1117;
+  --astryx-color-text-primary: #a9b1d6;
+  --astryx-color-text-secondary: #787c99;
+  --astryx-color-text-disabled: #565f89;
+  --astryx-color-border: rgba(186, 187, 208, 0.1);
+  --astryx-color-border-emphasized: rgba(186, 187, 208, 0.18);
+  --astryx-color-success: #9ece6a;
+  --astryx-color-on-success: #0f1117;
+  --astryx-color-error: #f7768e;
+  --astryx-color-on-error: #0f1117;
+  --astryx-color-warning: #e0af68;
+  --astryx-color-on-warning: #0f1117;
+}
+
+/* Tokyo body radial gradients (index.html:38-40) — visible on html[data-theme=tokyo] */
+html[data-theme="tokyo"] body,
+html[data-ui-theme="tokyo"] body {
+  background-color: #0f1117;
+  background-image:
+    radial-gradient(ellipse at top, rgba(122, 162, 247, 0.1) 0%, transparent 50%),
+    radial-gradient(ellipse at bottom, rgba(158, 206, 255, 0.05) 0%, transparent 50%);
+  background-attachment: fixed;
+}
+
+/* Liquid glass — from index.html:43-49 .liquid-glass */
+.liquid-glass {
+  background: rgba(26, 27, 38, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(186, 187, 208, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  border-radius: 16px;
+}
+/* Subtle fallback in neutral: glass reads as soft blurred card, not invisible */
+html[data-theme="neutral"] .liquid-glass,
+html[data-ui-theme="neutral"] .liquid-glass {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(0, 0, 0, 0.06);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="neutral"] .liquid-glass,
+  html[data-ui-theme="neutral"] .liquid-glass {
+    background: rgba(26, 27, 38, 0.55);
+    border-color: rgba(186, 187, 208, 0.08);
+  }
+}
+/* Hero radial wash — always present (task: visible on homepage hero), stronger in tokyo */
+.tokyo-hero-bg {
+  background-image:
+    radial-gradient(ellipse at top, rgba(122, 162, 247, 0.07) 0%, transparent 55%),
+    radial-gradient(ellipse at bottom right, rgba(158, 206, 107, 0.04) 0%, transparent 45%);
+}
+html[data-theme="tokyo"] .tokyo-hero-bg,
+html[data-ui-theme="tokyo"] .tokyo-hero-bg {
+  background-image:
+    radial-gradient(ellipse at top, rgba(122, 162, 247, 0.14) 0%, transparent 50%),
+    radial-gradient(ellipse at bottom, rgba(158, 206, 255, 0.07) 0%, transparent 50%);
 }

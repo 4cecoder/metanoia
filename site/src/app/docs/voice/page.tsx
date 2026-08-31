@@ -6,9 +6,12 @@ export default function VoicePage() {
     <div className="space-y-8 max-w-3xl">
       <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Docs", href: "/docs" }, { label: "TTS + Whisper" }]} />
       <header className="space-y-3">
-        <Badge>Docs · Preserved from original theme</Badge>
+        <div className="flex flex-wrap gap-2">
+          <Badge>Docs · Preserved</Badge>
+          <Badge variant="outline" className="gap-1">Preserved <code className="text-[10px]">index.html:551</code></Badge>
+        </div>
         <h1 className="text-3xl font-semibold tracking-tight">TTS + Whisper Voice Engine</h1>
-        <p className="text-muted-foreground">Benchmarked voice synthesis with real-time STT verification — verbatim from original portal, now on its own page.</p>
+        <p className="max-w-2xl text-muted-foreground">Benchmarked voice synthesis with real-time STT verification — verbatim from original portal (<code>index.html:551</code> footer + voice sections), now on its own page with no info lost.</p>
       </header>
 
       <div className="overflow-auto rounded-lg border">
@@ -34,7 +37,11 @@ export default function VoicePage() {
         <Card><CardHeader><CardTitle className="text-sm">Stack</CardTitle></CardHeader><CardContent className="text-xs font-mono">Qwen3-TTS • Whisper STT • PyTorch/CUDA • aikit/ GGML/MLX backends (opt-in -Dnative-ai)</CardContent></Card>
       </div>
 
-      <PageNav prev={{ href: "/docs/architecture", label: "Back: Architecture" }} next={{ href: "/docs/api", label: "Next: Deep Links" }} />
+      <div className="rounded-lg border border-dashed bg-amber-50/50 p-3 text-xs text-muted-foreground dark:bg-amber-950/10">
+        <span className="font-medium text-foreground">Preserved</span> — voice table + recommended note preserved from <code>index.html:551</code> footer context and original portal voice sections. No info lost — see <code>site/src/app/globals.css:12</code> for Tokyo Night preservation (<code>#0f1117</code> / <code>#7aa2f7</code> / <code>backdrop-blur:20px</code>).
+      </div>
+
+      <PageNav prev={{ href: "/docs/database", label: "Back: Database" }} next={{ href: "/docs/api", label: "Next: Deep Links" }} />
     </div>
   );
 }
