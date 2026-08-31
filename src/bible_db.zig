@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub const sqlite3 = anyopaque;
 pub const sqlite3_stmt = anyopaque;
@@ -66,6 +67,65 @@ fn bindText(stmt: *sqlite3_stmt, idx: i32, val: []const u8) void {
     _ = sqlite3_bind_text(stmt, idx, val.ptr, @intCast(val.len), SQLITE_TRANSIENT);
 }
 
+/// The absolute path to the personal-data database (bookmarks, notes,
+/// highlights, lexical favorites, vocab list) — deliberately OUTSIDE the
+/// app's own directory/bundle, so it survives a rebuild/reinstall that
+/// wholesale-replaces the content database (data/bible.db). Caller owns the
+/// returned slice.
+///
+///   macOS:            $HOME/Library/Application Support/Metanoia/library.db
+///   Linux/other:       $XDG_DATA_HOME/metanoia/library.db, or
+///                       $HOME/.local/share/metanoia/library.db if XDG_DATA_HOME unset
+///
+/// Falls back to the bundle-relative "data/library.db" (the old, unsafe
+/// location, kept only so the app still runs somewhere) if $HOME can't be
+/// read — better than crashing on a misconfigured environment.
+pub fn userDataDbPath(allocator: std.mem.Allocator) ![:0]const u8 {
+    // Raw libc getenv — same approach native_scraper.zig already uses
+    // (METANOIA_LIVE_SCRAPER_TEST) rather than std.process's newer/heavier
+    // Environ API, which this Zig-nightly's std.process no longer exposes
+    // as a simple getEnvVarOwned().
+    if (builtin.os.tag == .macos) {
+        const home = std.c.getenv("HOME") orelse
+            return try std.fmt.allocPrintSentinel(allocator, "data/library.db", .{}, 0);
+        return try std.fmt.allocPrintSentinel(allocator, "{s}/Library/Application Support/Metanoia/library.db", .{std.mem.span(home)}, 0);
+    }
+
+    if (std.c.getenv("XDG_DATA_HOME")) |xdg| {
+        return try std.fmt.allocPrintSentinel(allocator, "{s}/metanoia/library.db", .{std.mem.span(xdg)}, 0);
+    }
+
+    const home = std.c.getenv("HOME") orelse
+        return try std.fmt.allocPrintSentinel(allocator, "data/library.db", .{}, 0);
+    return try std.fmt.allocPrintSentinel(allocator, "{s}/.local/share/metanoia/library.db", .{std.mem.span(home)}, 0);
+}
+
+/// Best-effort `mkdir -p` of `path`'s parent directory. Silently does
+/// nothing on failure (e.g. permissions) — the subsequent ATTACH DATABASE /
+/// sqlite3_open will just fail visibly instead, which is an acceptable
+/// degradation for a directory-creation step that should essentially never
+/// fail in practice.
+pub fn ensureParentDirExists(io: std.Io, path: []const u8) void {
+    const dir = std.fs.path.dirname(path) orelse return;
+    std.Io.Dir.cwd().createDirPath(io, dir) catch {};
+}
+
+/// Attaches `path` (see userDataDbPath()) to `db` as schema `lib`, so
+/// init_db()'s `lib.<table>` statements below — and every existing
+/// unqualified query elsewhere in this file (INSERT INTO notes, SELECT ...
+/// FROM highlights, etc.) — resolve against the separate personal-data
+/// file instead of the content database. Must be called before init_db().
+pub fn attachLibraryDb(db: *sqlite3, path: [:0]const u8) void {
+    lockDb();
+    defer unlockDb();
+    const sql = "ATTACH DATABASE ? AS lib";
+    var stmt: ?*sqlite3_stmt = null;
+    if (sqlite3_prepare_v2(db, sql, -1, @ptrCast(&stmt), null) != SQLITE_OK) return;
+    defer _ = sqlite3_finalize(stmt.?);
+    bindText(stmt.?, 1, path);
+    _ = sqlite3_step(stmt.?);
+}
+
 pub fn init_db(db: *sqlite3) !void {
     lockDb();
     defer unlockDb();
@@ -75,20 +135,38 @@ pub fn init_db(db: *sqlite3) !void {
     // just fails and the read functions below fall through to their "not
     // found" default), which is exactly the kind of silent gap that made the
     // original-language caching bug hard to notice.
+    // highlights/lexical_favorites/notes are personal, volatile user data —
+    // deliberately created in the attached `lib` schema (a separate file,
+    // data/library.db in production — see userDataDbPath()/attachLibraryDb()
+    // below), not in this content database. Content gets wholesale-replaced
+    // on every app rebuild/update (packaging/build-macos.sh copies
+    // data/bible.db straight into the .app bundle); mixing personal data
+    // into that file would silently destroy it on every update. Callers
+    // must ATTACH a `lib` schema (attachLibraryDb() in production,
+    // ATTACH DATABASE ':memory:' AS lib for tests — see openTestDb()) before
+    // calling init_db, or these three CREATE TABLE statements fail.
     const queries = [_][*:0]const u8{
-        "CREATE TABLE IF NOT EXISTS highlights (book TEXT, chapter INTEGER, verse INTEGER, color TEXT, PRIMARY KEY(book, chapter, verse))",
-        "CREATE TABLE IF NOT EXISTS lexical_favorites (strongs TEXT PRIMARY KEY, lemma TEXT, definition TEXT)",
-        "CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY AUTOINCREMENT, book TEXT, chapter INTEGER, verse INTEGER, content TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+        "CREATE TABLE IF NOT EXISTS lib.highlights (book TEXT, chapter INTEGER, verse INTEGER, color TEXT, PRIMARY KEY(book, chapter, verse))",
+        "CREATE TABLE IF NOT EXISTS lib.lexical_favorites (strongs TEXT PRIMARY KEY, lemma TEXT, definition TEXT)",
+        "CREATE TABLE IF NOT EXISTS lib.notes (id INTEGER PRIMARY KEY AUTOINCREMENT, book TEXT, chapter INTEGER, verse INTEGER, content TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
         "CREATE TABLE IF NOT EXISTS book_metadata (book TEXT PRIMARY KEY, author TEXT, date TEXT, audience TEXT, context TEXT)",
         "CREATE TABLE IF NOT EXISTS chapter_summaries (book TEXT, chapter INTEGER, summary TEXT, PRIMARY KEY(book, chapter))",
         "CREATE TABLE IF NOT EXISTS verses (id INTEGER PRIMARY KEY, book TEXT, chapter INTEGER, verse INTEGER, text TEXT, version TEXT, footnotes TEXT)",
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_verse_lookup ON verses (book, chapter, verse, version)",
         "CREATE TABLE IF NOT EXISTS cross_references (id INTEGER PRIMARY KEY, from_book TEXT, from_chapter INTEGER, from_verse INTEGER, to_book TEXT, to_chapter INTEGER, to_verse INTEGER)",
         "CREATE INDEX IF NOT EXISTS idx_xref_lookup ON cross_references (from_book, from_chapter, from_verse)",
-        "CREATE TABLE IF NOT EXISTS interlinear (id INTEGER PRIMARY KEY, book TEXT, chapter INTEGER, verse INTEGER, word_index INTEGER, original_text TEXT, translation TEXT, strongs TEXT, morphology TEXT)",
+        // `source` distinguishes which underlying text a row came from --
+        // 'MT' (Masoretic Hebrew), 'LXX' (Septuagint Greek, Apostolic Bible
+        // Polyglot), 'GNT' (New Testament Greek) -- so the same (book,
+        // chapter, verse, word_index) can hold rows from more than one
+        // source without INSERT OR REPLACE clobbering the others. See
+        // tools/bible/migrate_add_interlinear_source.py for the migration
+        // that backfilled this for the shipped data/bible.db.
+        "CREATE TABLE IF NOT EXISTS interlinear (id INTEGER PRIMARY KEY, book TEXT, chapter INTEGER, verse INTEGER, word_index INTEGER, original_text TEXT, translation TEXT, strongs TEXT, morphology TEXT, source TEXT NOT NULL DEFAULT '')",
         "CREATE INDEX IF NOT EXISTS idx_interlinear_lookup ON interlinear (book, chapter, verse)",
         "CREATE INDEX IF NOT EXISTS idx_interlinear_strongs ON interlinear (strongs)",
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_interlinear_unique ON interlinear (book, chapter, verse, word_index)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_interlinear_unique ON interlinear (book, chapter, verse, word_index, source)",
+        "CREATE INDEX IF NOT EXISTS idx_interlinear_source ON interlinear (book, chapter, verse, source)",
         "CREATE TABLE IF NOT EXISTS lexicon (strongs TEXT PRIMARY KEY, language TEXT, lemma TEXT, transliteration TEXT, definition TEXT, usage TEXT)",
         "CREATE INDEX IF NOT EXISTS idx_lexicon_lang ON lexicon (language)",
     };
@@ -238,94 +316,122 @@ pub fn get_book_metadata(allocator: std.mem.Allocator, db: *sqlite3, book: []con
 }
 
 pub const Testament = enum { Old, New, EthiopiaExpanded };
-pub const BibleBook = struct { name: [*:0]const u8, chapters: i32, testament: Testament };
+
+/// Which Bible tradition a book was added at, ordered from narrowest to
+/// widest canon: Protestant (66-book baseline, present in every
+/// tradition) < Deuterocanon (the Catholic/Orthodox additions -- Tobit,
+/// Judith, Wisdom, Sirach, Baruch, 1-2 Maccabees) < Ethiopian (the
+/// Ethiopian Orthodox Tewahedo Church's further additions -- Enoch,
+/// Jubilees, the Meqabyan books, Tegsas, and the church-order/NT-adjacent
+/// EthiopiaExpanded-testament books). Since each tier's canon is a strict
+/// superset of the narrower ones in this app's model, "show tradition X"
+/// is just "show every book whose canon tier <= X" (see
+/// Config.bible_tradition / main.zig's book-list filtering).
+pub const Canon = enum(u8) { Protestant = 0, Deuterocanon = 1, Ethiopian = 2 };
+
+pub const BibleBook = struct { name: [*:0]const u8, chapters: i32, testament: Testament, canon: Canon };
 
 pub const BIBLE_BOOKS = [_]BibleBook{
-    .{ .name = "Genesis", .chapters = 50, .testament = .Old },
-    .{ .name = "Exodus", .chapters = 40, .testament = .Old },
-    .{ .name = "Leviticus", .chapters = 27, .testament = .Old },
-    .{ .name = "Numbers", .chapters = 36, .testament = .Old },
-    .{ .name = "Deuteronomy", .chapters = 34, .testament = .Old },
-    .{ .name = "Joshua", .chapters = 24, .testament = .Old },
-    .{ .name = "Judges", .chapters = 21, .testament = .Old },
-    .{ .name = "Ruth", .chapters = 4, .testament = .Old },
-    .{ .name = "1Samuel", .chapters = 31, .testament = .Old },
-    .{ .name = "2Samuel", .chapters = 24, .testament = .Old },
-    .{ .name = "1Kings", .chapters = 22, .testament = .Old },
-    .{ .name = "2Kings", .chapters = 25, .testament = .Old },
-    .{ .name = "1Chronicles", .chapters = 29, .testament = .Old },
-    .{ .name = "2Chronicles", .chapters = 36, .testament = .Old },
-    .{ .name = "Ezra", .chapters = 10, .testament = .Old },
-    .{ .name = "Nehemiah", .chapters = 13, .testament = .Old },
-    .{ .name = "Tobit", .chapters = 14, .testament = .Old },
-    .{ .name = "Judith", .chapters = 16, .testament = .Old },
-    .{ .name = "Esther", .chapters = 10, .testament = .Old },
-    .{ .name = "1Meqabyan", .chapters = 36, .testament = .Old },
-    .{ .name = "2Meqabyan", .chapters = 21, .testament = .Old },
-    .{ .name = "3Meqabyan", .chapters = 15, .testament = .Old },
-    .{ .name = "Job", .chapters = 42, .testament = .Old },
-    .{ .name = "Psalms", .chapters = 150, .testament = .Old },
-    .{ .name = "Proverbs", .chapters = 31, .testament = .Old },
-    .{ .name = "Tegsas", .chapters = 31, .testament = .Old },
-    .{ .name = "Wisdom", .chapters = 19, .testament = .Old },
-    .{ .name = "Ecclesiastes", .chapters = 12, .testament = .Old },
-    .{ .name = "SongofSolomon", .chapters = 8, .testament = .Old },
-    .{ .name = "Sirach", .chapters = 51, .testament = .Old },
-    .{ .name = "Isaiah", .chapters = 66, .testament = .Old },
-    .{ .name = "Jeremiah", .chapters = 52, .testament = .Old },
-    .{ .name = "Lamentations", .chapters = 5, .testament = .Old },
-    .{ .name = "Ezekiel", .chapters = 48, .testament = .Old },
-    .{ .name = "Daniel", .chapters = 12, .testament = .Old },
-    .{ .name = "Hosea", .chapters = 14, .testament = .Old },
-    .{ .name = "Amos", .chapters = 9, .testament = .Old },
-    .{ .name = "Micah", .chapters = 7, .testament = .Old },
-    .{ .name = "Joel", .chapters = 3, .testament = .Old },
-    .{ .name = "Obadiah", .chapters = 1, .testament = .Old },
-    .{ .name = "Jonah", .chapters = 4, .testament = .Old },
-    .{ .name = "Nahum", .chapters = 3, .testament = .Old },
-    .{ .name = "Habakkuk", .chapters = 3, .testament = .Old },
-    .{ .name = "Zephaniah", .chapters = 3, .testament = .Old },
-    .{ .name = "Haggai", .chapters = 2, .testament = .Old },
-    .{ .name = "Zechariah", .chapters = 14, .testament = .Old },
-    .{ .name = "Malachi", .chapters = 4, .testament = .Old },
-    .{ .name = "Enoch", .chapters = 108, .testament = .Old },
-    .{ .name = "Jubilees", .chapters = 50, .testament = .Old },
-    .{ .name = "Matthew", .chapters = 28, .testament = .New },
-    .{ .name = "Mark", .chapters = 16, .testament = .New },
-    .{ .name = "Luke", .chapters = 24, .testament = .New },
-    .{ .name = "John", .chapters = 21, .testament = .New },
-    .{ .name = "Acts", .chapters = 28, .testament = .New },
-    .{ .name = "Romans", .chapters = 16, .testament = .New },
-    .{ .name = "1Corinthians", .chapters = 16, .testament = .New },
-    .{ .name = "2Corinthians", .chapters = 13, .testament = .New },
-    .{ .name = "Galatians", .chapters = 6, .testament = .New },
-    .{ .name = "Ephesians", .chapters = 6, .testament = .New },
-    .{ .name = "Philippians", .chapters = 4, .testament = .New },
-    .{ .name = "Colossians", .chapters = 4, .testament = .New },
-    .{ .name = "1Thessalonians", .chapters = 5, .testament = .New },
-    .{ .name = "2Thessalonians", .chapters = 3, .testament = .New },
-    .{ .name = "1Timothy", .chapters = 6, .testament = .New },
-    .{ .name = "2Timothy", .chapters = 4, .testament = .New },
-    .{ .name = "Titus", .chapters = 3, .testament = .New },
-    .{ .name = "Philemon", .chapters = 1, .testament = .New },
-    .{ .name = "Hebrews", .chapters = 13, .testament = .New },
-    .{ .name = "1Peter", .chapters = 5, .testament = .New },
-    .{ .name = "2Peter", .chapters = 3, .testament = .New },
-    .{ .name = "1John", .chapters = 5, .testament = .New },
-    .{ .name = "2John", .chapters = 1, .testament = .New },
-    .{ .name = "3John", .chapters = 1, .testament = .New },
-    .{ .name = "James", .chapters = 5, .testament = .New },
-    .{ .name = "Jude", .chapters = 1, .testament = .New },
-    .{ .name = "Revelation", .chapters = 22, .testament = .New },
-    .{ .name = "SirateTsion", .chapters = 1, .testament = .EthiopiaExpanded },
-    .{ .name = "Tizaz", .chapters = 1, .testament = .EthiopiaExpanded },
-    .{ .name = "Gitsiw", .chapters = 1, .testament = .EthiopiaExpanded },
-    .{ .name = "Abtilis", .chapters = 1, .testament = .EthiopiaExpanded },
-    .{ .name = "1Dominos", .chapters = 1, .testament = .EthiopiaExpanded },
-    .{ .name = "2Dominos", .chapters = 1, .testament = .EthiopiaExpanded },
-    .{ .name = "Qalementos", .chapters = 1, .testament = .EthiopiaExpanded },
-    .{ .name = "Didasqalia", .chapters = 1, .testament = .EthiopiaExpanded },
+    .{ .name = "Genesis", .chapters = 50, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Exodus", .chapters = 40, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Leviticus", .chapters = 27, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Numbers", .chapters = 36, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Deuteronomy", .chapters = 34, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Joshua", .chapters = 24, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Judges", .chapters = 21, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Ruth", .chapters = 4, .testament = .Old, .canon = .Protestant },
+    .{ .name = "1Samuel", .chapters = 31, .testament = .Old, .canon = .Protestant },
+    .{ .name = "2Samuel", .chapters = 24, .testament = .Old, .canon = .Protestant },
+    .{ .name = "1Kings", .chapters = 22, .testament = .Old, .canon = .Protestant },
+    .{ .name = "2Kings", .chapters = 25, .testament = .Old, .canon = .Protestant },
+    .{ .name = "1Chronicles", .chapters = 29, .testament = .Old, .canon = .Protestant },
+    .{ .name = "2Chronicles", .chapters = 36, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Ezra", .chapters = 10, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Nehemiah", .chapters = 13, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Tobit", .chapters = 14, .testament = .Old, .canon = .Deuterocanon },
+    .{ .name = "Judith", .chapters = 16, .testament = .Old, .canon = .Deuterocanon },
+    .{ .name = "Esther", .chapters = 10, .testament = .Old, .canon = .Protestant },
+    .{ .name = "1Maccabees", .chapters = 16, .testament = .Old, .canon = .Deuterocanon },
+    .{ .name = "2Maccabees", .chapters = 15, .testament = .Old, .canon = .Deuterocanon },
+    .{ .name = "1Meqabyan", .chapters = 36, .testament = .Old, .canon = .Ethiopian },
+    .{ .name = "2Meqabyan", .chapters = 21, .testament = .Old, .canon = .Ethiopian },
+    .{ .name = "3Meqabyan", .chapters = 15, .testament = .Old, .canon = .Ethiopian },
+    .{ .name = "Job", .chapters = 42, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Psalms", .chapters = 150, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Proverbs", .chapters = 31, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Tegsas", .chapters = 31, .testament = .Old, .canon = .Ethiopian },
+    .{ .name = "Wisdom", .chapters = 19, .testament = .Old, .canon = .Deuterocanon },
+    .{ .name = "Ecclesiastes", .chapters = 12, .testament = .Old, .canon = .Protestant },
+    .{ .name = "SongofSolomon", .chapters = 8, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Sirach", .chapters = 51, .testament = .Old, .canon = .Deuterocanon },
+    .{ .name = "Isaiah", .chapters = 66, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Jeremiah", .chapters = 52, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Lamentations", .chapters = 5, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Baruch", .chapters = 5, .testament = .Old, .canon = .Deuterocanon },
+    .{ .name = "Ezekiel", .chapters = 48, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Daniel", .chapters = 12, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Hosea", .chapters = 14, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Amos", .chapters = 9, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Micah", .chapters = 7, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Joel", .chapters = 3, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Obadiah", .chapters = 1, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Jonah", .chapters = 4, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Nahum", .chapters = 3, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Habakkuk", .chapters = 3, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Zephaniah", .chapters = 3, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Haggai", .chapters = 2, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Zechariah", .chapters = 14, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Malachi", .chapters = 4, .testament = .Old, .canon = .Protestant },
+    .{ .name = "Enoch", .chapters = 108, .testament = .Old, .canon = .Ethiopian },
+    .{ .name = "Jubilees", .chapters = 50, .testament = .Old, .canon = .Ethiopian },
+    .{ .name = "Matthew", .chapters = 28, .testament = .New, .canon = .Protestant },
+    .{ .name = "Mark", .chapters = 16, .testament = .New, .canon = .Protestant },
+    .{ .name = "Luke", .chapters = 24, .testament = .New, .canon = .Protestant },
+    .{ .name = "John", .chapters = 21, .testament = .New, .canon = .Protestant },
+    .{ .name = "Acts", .chapters = 28, .testament = .New, .canon = .Protestant },
+    .{ .name = "Romans", .chapters = 16, .testament = .New, .canon = .Protestant },
+    .{ .name = "1Corinthians", .chapters = 16, .testament = .New, .canon = .Protestant },
+    .{ .name = "2Corinthians", .chapters = 13, .testament = .New, .canon = .Protestant },
+    .{ .name = "Galatians", .chapters = 6, .testament = .New, .canon = .Protestant },
+    .{ .name = "Ephesians", .chapters = 6, .testament = .New, .canon = .Protestant },
+    .{ .name = "Philippians", .chapters = 4, .testament = .New, .canon = .Protestant },
+    .{ .name = "Colossians", .chapters = 4, .testament = .New, .canon = .Protestant },
+    .{ .name = "1Thessalonians", .chapters = 5, .testament = .New, .canon = .Protestant },
+    .{ .name = "2Thessalonians", .chapters = 3, .testament = .New, .canon = .Protestant },
+    .{ .name = "1Timothy", .chapters = 6, .testament = .New, .canon = .Protestant },
+    .{ .name = "2Timothy", .chapters = 4, .testament = .New, .canon = .Protestant },
+    .{ .name = "Titus", .chapters = 3, .testament = .New, .canon = .Protestant },
+    .{ .name = "Philemon", .chapters = 1, .testament = .New, .canon = .Protestant },
+    .{ .name = "Hebrews", .chapters = 13, .testament = .New, .canon = .Protestant },
+    .{ .name = "1Peter", .chapters = 5, .testament = .New, .canon = .Protestant },
+    .{ .name = "2Peter", .chapters = 3, .testament = .New, .canon = .Protestant },
+    .{ .name = "1John", .chapters = 5, .testament = .New, .canon = .Protestant },
+    .{ .name = "2John", .chapters = 1, .testament = .New, .canon = .Protestant },
+    .{ .name = "3John", .chapters = 1, .testament = .New, .canon = .Protestant },
+    .{ .name = "James", .chapters = 5, .testament = .New, .canon = .Protestant },
+    .{ .name = "Jude", .chapters = 1, .testament = .New, .canon = .Protestant },
+    .{ .name = "Revelation", .chapters = 22, .testament = .New, .canon = .Protestant },
+    .{ .name = "SirateTsion", .chapters = 1, .testament = .EthiopiaExpanded, .canon = .Ethiopian },
+    .{ .name = "Tizaz", .chapters = 1, .testament = .EthiopiaExpanded, .canon = .Ethiopian },
+    .{ .name = "Gitsiw", .chapters = 1, .testament = .EthiopiaExpanded, .canon = .Ethiopian },
+    .{ .name = "Abtilis", .chapters = 1, .testament = .EthiopiaExpanded, .canon = .Ethiopian },
+    .{ .name = "1Dominos", .chapters = 1, .testament = .EthiopiaExpanded, .canon = .Ethiopian },
+    .{ .name = "2Dominos", .chapters = 1, .testament = .EthiopiaExpanded, .canon = .Ethiopian },
+    .{ .name = "Qalementos", .chapters = 1, .testament = .EthiopiaExpanded, .canon = .Ethiopian },
+    .{ .name = "Didasqalia", .chapters = 1, .testament = .EthiopiaExpanded, .canon = .Ethiopian },
 };
+
+/// Looks up `book`'s testament in BIBLE_BOOKS. Used to pick which
+/// `interlinear.source` ('MT'/'LXX' for Old, 'GNT' for New/EthiopiaExpanded)
+/// a chapter should read by default. Defaults to `.New` for an unrecognized
+/// book name, matching tools/bible/interlinear_scraper.py's
+/// language_prefix() (unknown books default to Greek).
+pub fn testamentOf(book: []const u8) Testament {
+    for (BIBLE_BOOKS) |b| {
+        if (std.mem.eql(u8, std.mem.span(b.name), book)) return b.testament;
+    }
+    return .New;
+}
 
 pub const BIBLE_ABBREVIATIONS = [_]struct { abbr: []const u8, full: []const u8 }{
     .{ .abbr = "gen", .full = "Genesis" }, .{ .abbr = "ex", .full = "Exodus" }, .{ .abbr = "lev", .full = "Leviticus" },
@@ -402,7 +508,11 @@ test "BIBLE_BOOKS testament data matches tools/bible_books.json" {
     // import Zig source. If the two ever drift, original-language caching
     // silently mislabels or skips books (this test exists because that
     // already happened: "Song of Solomon" vs "SongofSolomon", plus every
-    // deuterocanonical/Ethiopian OT book was missing entirely).
+    // deuterocanonical/Ethiopian OT book was missing entirely). Also
+    // carries `canon` (Protestant/Deuterocanon/Ethiopian -- see the Canon
+    // doc comment above) for the same reason: main.zig's tradition-based
+    // book-list filtering needs it, and Python has no way to read it back
+    // out of the Zig array.
     var threaded_io = std.Io.Threaded.init(std.testing.allocator, .{});
     defer threaded_io.deinit();
     const io = threaded_io.io();
@@ -410,7 +520,7 @@ test "BIBLE_BOOKS testament data matches tools/bible_books.json" {
     const contents = try std.Io.Dir.cwd().readFileAlloc(io, "tools/bible_books.json", std.testing.allocator, std.Io.Limit.limited(1024 * 1024));
     defer std.testing.allocator.free(contents);
 
-    const Entry = struct { name: []const u8, testament: Testament };
+    const Entry = struct { name: []const u8, testament: Testament, canon: Canon };
     const parsed = try std.json.parseFromSlice([]const Entry, std.testing.allocator, contents, .{});
     defer parsed.deinit();
 
@@ -418,6 +528,7 @@ test "BIBLE_BOOKS testament data matches tools/bible_books.json" {
     for (BIBLE_BOOKS, parsed.value) |book, entry| {
         try std.testing.expectEqualStrings(std.mem.span(book.name), entry.name);
         try std.testing.expectEqual(book.testament, entry.testament);
+        try std.testing.expectEqual(book.canon, entry.canon);
     }
 }
 
@@ -470,10 +581,20 @@ pub fn get_verse_lexicon_context(allocator: std.mem.Allocator, db: *sqlite3, boo
     var context = std.ArrayListUnmanaged(u8).empty;
     errdefer context.deinit(allocator);
 
-    const sql = try std.fmt.allocPrintSentinel(allocator, 
+    // A verse may now have rows from more than one source (MT/LXX/GNT --
+    // see idx_interlinear_source); picking a single source here (rather
+    // than every row for the verse) keeps word_index a coherent sequence
+    // instead of interleaving two independent 0..n runs. 'GNT' < 'LXX' <
+    // 'MT' alphabetically, which conveniently also matches the desired
+    // preference (NT verses only ever have GNT; OT verses prefer LXX over
+    // MT when both are cached).
+    const sql = try std.fmt.allocPrintSentinel(allocator,
         "SELECT original_text, translation, lemma, definition, usage, morphology FROM interlinear " ++
         "LEFT JOIN lexicon ON interlinear.strongs = lexicon.strongs " ++
-        "WHERE book='{s}' AND chapter={d} AND verse={d} ORDER BY word_index ASC", 
+        "WHERE book='{s}' AND chapter={d} AND verse={d} AND source = (" ++
+        "  SELECT source FROM interlinear i2 WHERE i2.book=interlinear.book AND i2.chapter=interlinear.chapter " ++
+        "  AND i2.verse=interlinear.verse ORDER BY source LIMIT 1" ++
+        ") ORDER BY word_index ASC",
         .{ book, chapter, verse }, 0);
     defer allocator.free(sql);
 
@@ -531,10 +652,10 @@ pub fn get_cross_references(allocator: std.mem.Allocator, db: *sqlite3, book: []
 // tools/lexicon_scraper.py use (INSERT OR REPLACE, same column order), so a
 // native-Zig scrape and a Python scrape produce identical rows.
 
-pub fn insert_interlinear_word(db: *sqlite3, book: []const u8, chapter: i32, verse: i32, word_index: i32, original_text: []const u8, translation: []const u8, strongs: []const u8, morphology: []const u8) void {
+pub fn insert_interlinear_word(db: *sqlite3, book: []const u8, chapter: i32, verse: i32, word_index: i32, original_text: []const u8, translation: []const u8, strongs: []const u8, morphology: []const u8, source: []const u8) void {
     lockDb();
     defer unlockDb();
-    const sql = "INSERT OR REPLACE INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs, morphology) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    const sql = "INSERT OR REPLACE INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs, morphology, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
     var stmt: ?*sqlite3_stmt = null;
     if (sqlite3_prepare_v2(db, sql, -1, @ptrCast(&stmt), null) != SQLITE_OK) return;
     defer _ = sqlite3_finalize(stmt.?);
@@ -546,6 +667,7 @@ pub fn insert_interlinear_word(db: *sqlite3, book: []const u8, chapter: i32, ver
     bindText(stmt.?, 6, translation);
     bindText(stmt.?, 7, strongs);
     bindText(stmt.?, 8, morphology);
+    bindText(stmt.?, 9, source);
     _ = sqlite3_step(stmt.?);
 }
 
@@ -620,6 +742,11 @@ fn openTestDb() *sqlite3 {
     var db: ?*sqlite3 = null;
     const rc = sqlite3_open(":memory:", @ptrCast(&db));
     std.debug.assert(rc == SQLITE_OK);
+    // init_db()'s lib.<table> statements need a `lib` schema attached first
+    // (production attaches the real data/library.db via attachLibraryDb();
+    // tests just need the tables to exist somewhere, so an in-memory one
+    // does fine).
+    attachLibraryDb(db.?, ":memory:");
     init_db(db.?) catch unreachable;
     return db.?;
 }
@@ -773,7 +900,7 @@ test "get_verse_lexicon_context: this is what llm_engine checks to decide whethe
         try std.testing.expectEqual(@as(usize, 0), ctx.len);
     }
 
-    const interlinear_sql = "INSERT INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs, morphology) VALUES ('John', 3, 16, 0, '\u{3fc}\u{3b3}\u{3ac}\u{3c0}\u{3b7}\u{3c3}\u{3b5}\u{3bd}', 'loved', 'G25', 'V-AAI-3S')";
+    const interlinear_sql = "INSERT INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs, morphology, source) VALUES ('John', 3, 16, 0, '\u{3fc}\u{3b3}\u{3ac}\u{3c0}\u{3b7}\u{3c3}\u{3b5}\u{3bd}', 'loved', 'G25', 'V-AAI-3S', 'GNT')";
     {
         var stmt: ?*sqlite3_stmt = null;
         try std.testing.expectEqual(SQLITE_OK, sqlite3_prepare_v2(db, interlinear_sql, -1, @ptrCast(&stmt), null));
@@ -812,7 +939,7 @@ test "insert_interlinear_word / insert_lexicon_entry: parameterized binds round-
     // A translation gloss with an apostrophe would corrupt a string-interpolated
     // INSERT (like every other write helper in this file uses); the bound
     // version added for the scraper must not have that problem.
-    insert_interlinear_word(db, "Genesis", 1, 27, 3, "בְּצֶ֥לֶם", "God's own image", "H6754", "N-msc");
+    insert_interlinear_word(db, "Genesis", 1, 27, 3, "בְּצֶ֥לֶם", "God's own image", "H6754", "N-msc", "MT");
     insert_lexicon_entry(db, "H6754", "hebrew", "צֶ֫לֶם", "tselem", "Adam's likeness, an image", "");
 
     const ctx = try get_verse_lexicon_context(std.testing.allocator, db, "Genesis", 1, 27);
@@ -825,7 +952,7 @@ test "insert_interlinear_word / insert_lexicon_entry: parameterized binds round-
 
     // INSERT OR REPLACE: re-inserting the same (book, chapter, verse, word_index)
     // updates in place rather than duplicating the row.
-    insert_interlinear_word(db, "Genesis", 1, 27, 3, "בְּצֶ֥לֶם", "in the image of", "H6754", "N-msc");
+    insert_interlinear_word(db, "Genesis", 1, 27, 3, "בְּצֶ֥לֶם", "in the image of", "H6754", "N-msc", "MT");
     const ctx2 = try get_verse_lexicon_context(std.testing.allocator, db, "Genesis", 1, 27);
     defer std.testing.allocator.free(ctx2);
     try std.testing.expect(std.mem.indexOf(u8, ctx2, "in the image of") != null);
@@ -836,11 +963,11 @@ test "distinct_interlinear_strongs: unscoped vs scoped to one book/chapter" {
     const db = openTestDb();
     defer _ = sqlite3_close(db);
 
-    insert_interlinear_word(db, "Genesis", 1, 1, 0, "orig1", "In", "H7225", "");
-    insert_interlinear_word(db, "Genesis", 1, 1, 1, "orig2", "beginning", "H7225", ""); // duplicate strongs, same chapter
-    insert_interlinear_word(db, "Genesis", 2, 1, 0, "orig3", "thus", "H3541", "");
-    insert_interlinear_word(db, "John", 3, 16, 0, "orig4", "For", "G1063", "");
-    insert_interlinear_word(db, "John", 3, 16, 1, "orig5", ".", "", ""); // empty strongs excluded
+    insert_interlinear_word(db, "Genesis", 1, 1, 0, "orig1", "In", "H7225", "", "MT");
+    insert_interlinear_word(db, "Genesis", 1, 1, 1, "orig2", "beginning", "H7225", "", "MT"); // duplicate strongs, same chapter
+    insert_interlinear_word(db, "Genesis", 2, 1, 0, "orig3", "thus", "H3541", "", "MT");
+    insert_interlinear_word(db, "John", 3, 16, 0, "orig4", "For", "G1063", "", "GNT");
+    insert_interlinear_word(db, "John", 3, 16, 1, "orig5", ".", "", "", "GNT"); // empty strongs excluded
 
     {
         const all = try distinct_interlinear_strongs(std.testing.allocator, db, null, null);
@@ -970,19 +1097,20 @@ test "concurrent writers on a shared connection don't corrupt or drop data" {
 // checks the real content isn't truncated/corrupted — a regression here
 // means the shipped Bible text itself broke, not just a code path.
 
-// BIBLE_BOOKS entries known to have NO verse text in data/bible.db today —
-// BibleHub-sourced content only covers the standard 66-book Protestant
-// canon; these deuterocanonical/Ethiopian-canon books are listed (and
-// selectable in the book picker) but have never had verse text sourced for
-// them. This is a known content gap (see docs/MAINTENANCE.md), not a bug —
-// listed explicitly here so if one of these gets real content in the
-// future, this test starts telling you to remove it from the list instead
-// of silently gaining unasserted coverage.
+// BIBLE_BOOKS entries known to have NO verse text in data/bible.db today.
+// The standard 66-book Protestant canon (NKJV) and the Catholic/Orthodox
+// deuterocanon (Tobit, Judith, Wisdom, Sirach, Baruch, 1-2 Maccabees —
+// Brenton's English Septuagint, see tools/bible/import_brenton_septuagint.py)
+// are covered; the Ethiopian Orthodox Tewahedo Church's further-still
+// additions are not — no source has been found/scraped for them yet. This
+// is a known content gap (see docs/MAINTENANCE.md), not a bug — listed
+// explicitly here so if one of these gets real content in the future, this
+// test starts telling you to remove it from the list instead of silently
+// gaining unasserted coverage.
 const books_with_no_verse_text = [_][]const u8{
-    "Tobit",     "Judith",       "1Meqabyan",  "2Meqabyan", "3Meqabyan",
-    "Tegsas",    "Wisdom",       "Sirach",     "Enoch",     "Jubilees",
-    "SirateTsion", "Tizaz",      "Gitsiw",     "Abtilis",
-    "1Dominos",  "2Dominos",     "Qalementos", "Didasqalia",
+    "1Meqabyan", "2Meqabyan", "3Meqabyan", "Tegsas", "Enoch", "Jubilees",
+    "SirateTsion", "Tizaz",   "Gitsiw",    "Abtilis",
+    "1Dominos",  "2Dominos",  "Qalementos", "Didasqalia",
 };
 
 fn hasKnownGap(name: []const u8) bool {

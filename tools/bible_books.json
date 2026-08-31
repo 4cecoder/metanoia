@@ -1,338 +1,437 @@
 [
   {
     "name": "Genesis",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Exodus",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Leviticus",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Numbers",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Deuteronomy",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Joshua",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Judges",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Ruth",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "1Samuel",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "2Samuel",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "1Kings",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "2Kings",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "1Chronicles",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "2Chronicles",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Ezra",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Nehemiah",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Tobit",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Deuterocanon"
   },
   {
     "name": "Judith",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Deuterocanon"
   },
   {
     "name": "Esther",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
+  },
+  {
+    "name": "1Maccabees",
+    "testament": "Old",
+    "canon": "Deuterocanon"
+  },
+  {
+    "name": "2Maccabees",
+    "testament": "Old",
+    "canon": "Deuterocanon"
   },
   {
     "name": "1Meqabyan",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Ethiopian"
   },
   {
     "name": "2Meqabyan",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Ethiopian"
   },
   {
     "name": "3Meqabyan",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Ethiopian"
   },
   {
     "name": "Job",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Psalms",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Proverbs",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Tegsas",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Ethiopian"
   },
   {
     "name": "Wisdom",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Deuterocanon"
   },
   {
     "name": "Ecclesiastes",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "SongofSolomon",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Sirach",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Deuterocanon"
   },
   {
     "name": "Isaiah",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Jeremiah",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Lamentations",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
+  },
+  {
+    "name": "Baruch",
+    "testament": "Old",
+    "canon": "Deuterocanon"
   },
   {
     "name": "Ezekiel",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Daniel",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Hosea",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Amos",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Micah",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Joel",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Obadiah",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Jonah",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Nahum",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Habakkuk",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Zephaniah",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Haggai",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Zechariah",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Malachi",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Protestant"
   },
   {
     "name": "Enoch",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Ethiopian"
   },
   {
     "name": "Jubilees",
-    "testament": "Old"
+    "testament": "Old",
+    "canon": "Ethiopian"
   },
   {
     "name": "Matthew",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "Mark",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "Luke",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "John",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "Acts",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "Romans",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "1Corinthians",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "2Corinthians",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "Galatians",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "Ephesians",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "Philippians",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "Colossians",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "1Thessalonians",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "2Thessalonians",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "1Timothy",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "2Timothy",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "Titus",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "Philemon",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "Hebrews",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "1Peter",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "2Peter",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "1John",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "2John",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "3John",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "James",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "Jude",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "Revelation",
-    "testament": "New"
+    "testament": "New",
+    "canon": "Protestant"
   },
   {
     "name": "SirateTsion",
-    "testament": "EthiopiaExpanded"
+    "testament": "EthiopiaExpanded",
+    "canon": "Ethiopian"
   },
   {
     "name": "Tizaz",
-    "testament": "EthiopiaExpanded"
+    "testament": "EthiopiaExpanded",
+    "canon": "Ethiopian"
   },
   {
     "name": "Gitsiw",
-    "testament": "EthiopiaExpanded"
+    "testament": "EthiopiaExpanded",
+    "canon": "Ethiopian"
   },
   {
     "name": "Abtilis",
-    "testament": "EthiopiaExpanded"
+    "testament": "EthiopiaExpanded",
+    "canon": "Ethiopian"
   },
   {
     "name": "1Dominos",
-    "testament": "EthiopiaExpanded"
+    "testament": "EthiopiaExpanded",
+    "canon": "Ethiopian"
   },
   {
     "name": "2Dominos",
-    "testament": "EthiopiaExpanded"
+    "testament": "EthiopiaExpanded",
+    "canon": "Ethiopian"
   },
   {
     "name": "Qalementos",
-    "testament": "EthiopiaExpanded"
+    "testament": "EthiopiaExpanded",
+    "canon": "Ethiopian"
   },
   {
     "name": "Didasqalia",
-    "testament": "EthiopiaExpanded"
+    "testament": "EthiopiaExpanded",
+    "canon": "Ethiopian"
   }
 ]

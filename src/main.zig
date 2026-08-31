@@ -396,7 +396,33 @@ fn load_chapter_into_study(book: []const u8, chapter: i32, start_verse: i32) voi
 
     if (state.tts_engine) |e| e.stop();
 
-    const sql = std.fmt.allocPrintSentinel(allocator, "SELECT verse, text FROM verses WHERE book='{s}' AND chapter={d} ORDER BY verse ASC", .{ book, chapter }, 0) catch return;
+    // Old Testament chapters read from the Septuagint (Greek, alongside the
+    // GNT New Testament interlinear) by default, or the Hebrew Masoretic
+    // Text if the user opted into that under Settings. New Testament (and
+    // the Ethiopian-canon expansion books) only ever have a GNT interlinear.
+    const use_masoretic = std.mem.eql(u8, state.config.ot_source, "masoretic");
+    const preferred_source: []const u8 = if (bible.testamentOf(book) == .Old)
+        (if (use_masoretic) "MT" else "LXX")
+    else
+        "GNT";
+
+    // The English reading pane follows the same LXX/Masoretic choice as the
+    // interlinear: Brenton's Septuagint English (version 'LXXE') pairs with
+    // the Septuagint interlinear, NKJV (translated from the Masoretic Text)
+    // pairs with the Masoretic interlinear. `verses` has both versions for
+    // the standard 39 OT books but only ever one for the deuterocanon
+    // (LXXE only) or New Testament (NKJV only) -- fall back to whichever
+    // IS cached rather than showing nothing, same pattern as the
+    // interlinear source fallback above.
+    const preferred_version: []const u8 = if (bible.testamentOf(book) == .Old and !use_masoretic) "LXXE" else "NKJV";
+
+    const sql = std.fmt.allocPrintSentinel(allocator,
+        "SELECT verse, text FROM verses WHERE book='{s}' AND chapter={d} " ++
+        "AND version = (" ++
+        "  SELECT version FROM verses v2 WHERE v2.book=verses.book AND v2.chapter=verses.chapter " ++
+        "  ORDER BY (version != '{s}'), version LIMIT 1" ++
+        ") ORDER BY verse ASC",
+        .{ book, chapter, preferred_version }, 0) catch return;
     defer allocator.free(sql);
     var stmt: ?*bible.sqlite3_stmt = null;
     if (bible.sqlite3_prepare_v2(state.db.?, sql, -1, @ptrCast(&stmt), null) == SQLITE_OK) {
@@ -472,7 +498,16 @@ fn load_chapter_into_study(book: []const u8, chapter: i32, start_verse: i32) voi
 
             const flow = gtk.gtk_flow_box_new();
             gtk.gtk_flow_box_set_selection_mode(@ptrCast(flow), 0);
-            const strongs_sql = std.fmt.allocPrintSentinel(allocator, "SELECT strongs FROM interlinear WHERE book='{s}' AND chapter={d} AND verse={d} LIMIT 1", .{ book, chapter, verse_num }, 0) catch continue;
+            // Prefer `preferred_source` (LXX or Masoretic per Settings, for
+            // OT books; always GNT for NT) for this verse, but fall back to
+            // whatever source IS cached if the preferred one isn't (e.g.
+            // LXX not yet scraped for a given chapter, or a book the
+            // Apostolic Bible Polyglot doesn't cover) -- see
+            // idx_interlinear_source / bible_db.zig's testamentOf.
+            const strongs_sql = std.fmt.allocPrintSentinel(allocator,
+                "SELECT strongs FROM interlinear WHERE book='{s}' AND chapter={d} AND verse={d} " ++
+                "ORDER BY (source != '{s}'), source LIMIT 1",
+                .{ book, chapter, verse_num, preferred_source }, 0) catch continue;
             defer allocator.free(strongs_sql);
             var s_stmt: ?*bible.sqlite3_stmt = null;
             if (bible.sqlite3_prepare_v2(state.db.?, strongs_sql, -1, @ptrCast(&s_stmt), null) == SQLITE_OK) {
@@ -484,7 +519,13 @@ fn load_chapter_into_study(book: []const u8, chapter: i32, start_verse: i32) voi
             }
             gtk.gtk_box_append(state.study_right_view, flow);
             var i_stmt: ?*bible.sqlite3_stmt = null;
-            const i_sql = std.fmt.allocPrintSentinel(allocator, "SELECT original_text, strongs, translation FROM interlinear WHERE book='{s}' AND chapter={d} AND verse={d} ORDER BY word_index ASC", .{ book, chapter, verse_num }, 0) catch continue;
+            const i_sql = std.fmt.allocPrintSentinel(allocator,
+                "SELECT original_text, strongs, translation FROM interlinear WHERE book='{s}' AND chapter={d} AND verse={d} " ++
+                "AND source = (" ++
+                "  SELECT source FROM interlinear i2 WHERE i2.book=interlinear.book AND i2.chapter=interlinear.chapter " ++
+                "  AND i2.verse=interlinear.verse ORDER BY (source != '{s}'), source LIMIT 1" ++
+                ") ORDER BY word_index ASC",
+                .{ book, chapter, verse_num, preferred_source }, 0) catch continue;
             defer allocator.free(i_sql);
             if (bible.sqlite3_prepare_v2(state.db.?, i_sql, -1, @ptrCast(&i_stmt), null) == SQLITE_OK) {
                 var found = false;
@@ -1063,6 +1104,13 @@ fn onSettingsSaveKit(field_values: []const kit.components.SettingsFieldValue) vo
             state.config.tts_timeout_ms = std.fmt.parseInt(u32, val, 10) catch state.config.tts_timeout_ms;
         } else if (std.mem.eql(u8, key, "Network Retry Count")) {
             state.config.tts_retry_count = @intCast(std.fmt.parseInt(u8, val, 10) catch @as(u8, @intCast(state.config.tts_retry_count)));
+        } else if (std.mem.eql(u8, key, "Use Hebrew Masoretic Text")) {
+            const use_masoretic = std.mem.eql(u8, val, "true");
+            state.config.ot_source = state.allocator.dupe(u8, if (use_masoretic) "masoretic" else "lxx") catch state.config.ot_source;
+        } else if (std.mem.eql(u8, key, "Show Catholic / Orthodox deuterocanon books")) {
+            state.config.show_deuterocanon = std.mem.eql(u8, val, "true");
+        } else if (std.mem.eql(u8, key, "Show Ethiopian Orthodox Tewahedo additional books")) {
+            state.config.show_ethiopian_books = std.mem.eql(u8, val, "true");
         }
     }
     state.config.save(state.io);
@@ -1138,6 +1186,29 @@ fn onSettingsBtnClicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void
             .fields = &.{
                 .{ .label = "Connection Timeout (ms)", .initial_value = timeout_str },
                 .{ .label = "Network Retry Count", .initial_value = retry_str },
+            },
+        },
+        .{
+            .title = "Advanced — Bible Tradition",
+            .icon = "📜",
+            .icon_color = "#f7768e",
+            .description = "By default, the Old Testament reads from the Greek Septuagint (LXX) with Brenton's English translation — the text quoted throughout the New Testament — paired with the Greek New Testament interlinear, for a consistent Greek reading experience.",
+            .checkboxes = &.{
+                .{
+                    .label = "Use Hebrew Masoretic Text",
+                    .description = "Show the Hebrew Masoretic interlinear and NKJV (translated from the Masoretic) for the Old Testament instead of the Septuagint. The New Testament always stays Greek.",
+                    .initial_value = std.mem.eql(u8, state.config.ot_source, "masoretic"),
+                },
+                .{
+                    .label = "Show Catholic / Orthodox deuterocanon books",
+                    .description = "Tobit, Judith, Wisdom, Sirach, Baruch, 1-2 Maccabees, in the book picker.",
+                    .initial_value = state.config.show_deuterocanon,
+                },
+                .{
+                    .label = "Show Ethiopian Orthodox Tewahedo additional books",
+                    .description = "Enoch, Jubilees, the Meqabyan books, Tegsas, and the church-order books, in the book picker.",
+                    .initial_value = state.config.show_ethiopian_books,
+                },
             },
         },
     };
@@ -1362,10 +1433,18 @@ fn onScrollChanged(adj: ?*anyopaque, user_data: gpointer) callconv(.c) void {
 fn on_passage_btn_clicked(btn: ?*GtkButton, user_data: gpointer) callconv(.c) void {
     _ = btn; _ = user_data;
     nav_picker.reset(0);
-    // Build books level from BIBLE_BOOKS
+    // Build books level from BIBLE_BOOKS, narrowed to the traditions
+    // enabled in Settings (Protestant baseline always shown; deuterocanon/
+    // Ethiopian additions are opt-out — see Config.show_deuterocanon /
+    // show_ethiopian_books).
     var books = std.ArrayListUnmanaged(kit.components.PickerItem).empty;
-    for (BIBLE_BOOKS, 0..) |book, i| {
-        _ = i;
+    for (BIBLE_BOOKS) |book| {
+        const include = switch (book.canon) {
+            .Protestant => true,
+            .Deuterocanon => state.config.show_deuterocanon,
+            .Ethiopian => state.config.show_ethiopian_books,
+        };
+        if (!include) continue;
         books.append(std.heap.page_allocator, .{ .label = book.name, .enabled = true }) catch {};
     }
     nav_picker.addLevel(.{ .title = "<b>Select Book</b>", .items = books.toOwnedSlice(std.heap.page_allocator) catch return });
@@ -1409,6 +1488,17 @@ pub fn main() !void {
         return;
     }
     defer _ = bible.sqlite3_close(state.db.?);
+
+    // Personal data (bookmarks/notes/highlights) lives in a separate file
+    // outside the app bundle, so rebuilding/reinstalling the app (which
+    // wholesale-replaces data/bible.db) never touches it. See
+    // bible_db.zig's userDataDbPath()/attachLibraryDb() doc comments.
+    const library_path = bible.userDataDbPath(state.allocator) catch
+        (std.fmt.allocPrintSentinel(state.allocator, "data/library.db", .{}, 0) catch @panic("OOM"));
+    defer state.allocator.free(library_path);
+    bible.ensureParentDirExists(state.io, library_path);
+    bible.attachLibraryDb(state.db.?, library_path);
+
     bible.init_db(state.db.?) catch |err| {
         std.debug.print("Failed to initialize database: {any}\n", .{err});
     };

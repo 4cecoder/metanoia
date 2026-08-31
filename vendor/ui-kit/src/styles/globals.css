@@ -1,0 +1,344 @@
+/**
+ * @bytecats/ui-kit — theme stylesheet
+ *
+ * Compiled by `bun run build:css` (Tailwind v4 CLI) into dist/styles.css.
+ * Consumers import the single compiled file:
+ *
+ *   import "@bytecats/ui-kit/styles.css";
+ *
+ * WHERE THE PIECES COME FROM
+ * ---------------------------------------------------------------------------
+ * - Component structure/behavior/utility classes: shadcn/ui (MIT) — this file
+ *   pulls in shadcn's own base Tailwind layer (custom variants like
+ *   data-open/data-checked, keyframes, small utilities the generated
+ *   src/components/ui/*.tsx files rely on).
+ * - Color / radius / font-family / spacing VALUES: Meta's Astryx design
+ *   system (github.com/facebook/astryx, MIT, Meta Platforms Inc.), sourced
+ *   from the real published `@astryxdesign/theme-neutral` and
+ *   `@astryxdesign/theme-stone` npm packages — NOT the astryx React/StyleX
+ *   runtime itself. Every raw `--astryx-*` value below was copied verbatim
+ *   from the package's own generated `dist/theme.css`, obtained via:
+ *
+ *     npm pack @astryxdesign/theme-neutral@0.1.7
+ *     npm pack @astryxdesign/theme-stone@0.1.7
+ *     npm pack @astryxdesign/core@0.1.7
+ *
+ *   then extracting the tarball and reading dist/theme.css / dist/astryx.css
+ *   directly — not taken from docs or blog summaries.
+ *
+ * We do NOT install the `astryx` package or run StyleX at runtime — that
+ * would mean two live CSS engines in one library. Astryx contributes tokens
+ * only, delivered as plain CSS custom properties feeding Tailwind's v4
+ * `@theme` layer, exactly like shadcn/ui itself expects.
+ */
+
+@import "tailwindcss";
+@import "shadcn/tailwind.css";
+@import "tw-animate-css";
+
+/* ---------------------------------------------------------------------------
+ * Tailwind theme mapping
+ *
+ * shadcn's generated components (button.tsx, card.tsx, dialog.tsx, ...)
+ * reference semantic Tailwind color utilities: bg-background, text-foreground,
+ * bg-primary, border-input, ring-ring, rounded-md, shadow-md, etc.
+ *
+ * `@theme inline` is how Tailwind v4 turns a CSS custom property into a
+ * utility-generating design token. We point shadcn's expected names at the
+ * raw `--astryx-*` tokens declared further down (per active theme), so every
+ * shadcn utility class resolves to a verified Astryx value.
+ * ------------------------------------------------------------------------- */
+@theme inline {
+  /* Fonts — @astryxdesign/theme-neutral@0.1.7 / theme-stone@0.1.7, src/*Theme.ts font-family-* */
+  --font-sans: var(--astryx-font-family-body);
+  --font-heading: var(--astryx-font-family-heading);
+  --font-mono: var(--astryx-font-family-code);
+
+  /* Core surface/text colors */
+  --color-background: var(--astryx-color-background-body);
+  --color-foreground: var(--astryx-color-text-primary);
+  --color-card: var(--astryx-color-background-card);
+  --color-card-foreground: var(--astryx-color-text-primary);
+  --color-popover: var(--astryx-color-background-popover);
+  --color-popover-foreground: var(--astryx-color-text-primary);
+
+  /* Primary = Astryx's "accent" (ink) token — the color Astryx itself uses
+     for its primary button/interactive-emphasis surfaces. */
+  --color-primary: var(--astryx-color-accent);
+  --color-primary-foreground: var(--astryx-color-on-accent);
+
+  --color-secondary: var(--astryx-color-background-muted);
+  --color-secondary-foreground: var(--astryx-color-text-primary);
+  --color-muted: var(--astryx-color-background-muted);
+  --color-muted-foreground: var(--astryx-color-text-secondary);
+
+  /* accent = shadcn's subtle hover/active surface (menu items, ghost-button
+     hover, etc.) — mapped to Astryx's own "accent-muted" token, which Astryx
+     uses for exactly that purpose. */
+  --color-accent: var(--astryx-color-accent-muted);
+  --color-accent-foreground: var(--astryx-color-text-primary);
+
+  --color-destructive: var(--astryx-color-error);
+  --color-destructive-foreground: var(--astryx-color-on-error);
+
+  --color-border: var(--astryx-color-border);
+  --color-input: var(--astryx-color-border-emphasized);
+  --color-ring: var(--astryx-color-accent);
+
+  /* Status colors, exposed as bonus utilities (bg-success, text-warning, ...)
+     for consumers building alerts/badges beyond the curated set. */
+  --color-success: var(--astryx-color-success);
+  --color-success-foreground: var(--astryx-color-on-success);
+  --color-warning: var(--astryx-color-warning);
+  --color-warning-foreground: var(--astryx-color-on-warning);
+
+  /* Radius — base unit is Astryx's "element" radius (the size Astryx uses
+     for buttons/inputs); shadcn's sm/md/lg/xl/2xl/3xl/4xl are derived from
+     it the same way shadcn's own default theme derives them. */
+  --radius: var(--astryx-radius-element);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  /* Astryx's own container/page radius steps, exposed as-is for layout
+     shells (cards vs. full pages) that want a bigger radius than --radius. */
+  --radius-container: var(--astryx-radius-container);
+  --radius-page: var(--astryx-radius-page);
+
+  /* Shadows — Astryx's three-step elevation scale mapped onto the shadow-sm
+     / shadow-md / shadow-lg utilities shadcn's popover/dialog/select/dropdown
+     components already use. */
+  --shadow-sm: var(--astryx-shadow-low);
+  --shadow-md: var(--astryx-shadow-med);
+  --shadow-lg: var(--astryx-shadow-high);
+
+  /*
+   * Astryx's compact type scale below Tailwind's default `text-xs` is
+   * exposed as opt-in extra utilities (text-2xs / text-3xs / text-4xs).
+   *
+   * DELIBERATE DEVIATION: we do NOT remap Tailwind's standard
+   * text-xs…text-9xl scale to Astryx's own --font-size-* values. Astryx's
+   * scale is tuned for a 14px base (its --font-size-base = 0.875rem) and
+   * shadcn's generated component internals (button/input heights, icon
+   * sizing, padding) were authored against Tailwind's *default* type scale.
+   * Overriding the standard scale would silently resize every shadcn
+   * primitive and could break the pixel-tuned control heights. Consumers
+   * who want Astryx's exact display/heading scale for their own content can
+   * still reach the raw tokens directly, e.g. `text-[length:var(--astryx-font-size-5xl)]`.
+   */
+  --text-2xs: var(--astryx-font-size-2xs);
+  --text-3xs: var(--astryx-font-size-3xs);
+  --text-4xs: var(--astryx-font-size-4xs);
+}
+
+/* ---------------------------------------------------------------------------
+ * Astryx Neutral theme — DEFAULT
+ * Source: @astryxdesign/theme-neutral@0.1.7 (MIT, Meta Platforms Inc.)
+ *   "Restrained warm grays. Minimal and quiet, so the content stays the focus."
+ * Verified via `npm pack @astryxdesign/theme-neutral@0.1.7`, reading the
+ * package's own dist/theme.css `:scope { ... }` block directly (not docs).
+ * Values are copied verbatim, including Astryx's `light-dark(light, dark)`
+ * pairs, which is also how we get automatic dark mode below with zero JS.
+ * ------------------------------------------------------------------------- */
+:root,
+[data-ui-theme="neutral"] {
+  color-scheme: light dark;
+
+  --astryx-font-family-body: Figtree, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --astryx-font-family-heading: Figtree, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --astryx-font-family-code: ui-monospace, "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --astryx-font-size-4xs: 0.375rem;
+  --astryx-font-size-3xs: 0.4375rem;
+  --astryx-font-size-2xs: 0.5rem;
+
+  --astryx-color-background-body: light-dark(#f1f1f1, #1b1b1b);
+  --astryx-color-background-surface: light-dark(#ffffff, #262626);
+  --astryx-color-background-card: light-dark(#ffffff, #1b1b1b);
+  --astryx-color-background-popover: light-dark(#ffffff, #1b1b1b);
+  --astryx-color-background-muted: light-dark(#f1f1f1, #1b1b1b);
+
+  --astryx-color-accent: light-dark(#262626, #ebebeb);
+  --astryx-color-accent-muted: light-dark(#f1f1f1, #262626);
+  --astryx-color-on-accent: light-dark(#ffffff, #171717);
+
+  --astryx-color-text-primary: light-dark(#171717, #fafafa);
+  --astryx-color-text-secondary: light-dark(#737373, #a3a3a3);
+  --astryx-color-text-disabled: light-dark(#a3a3a3, #525252);
+
+  --astryx-color-success: light-dark(#007004, #9fe59b);
+  --astryx-color-on-success: light-dark(#ffffff, #171717);
+  --astryx-color-error: light-dark(#a50c25, #ffc6c1);
+  --astryx-color-on-error: light-dark(#ffffff, #171717);
+  --astryx-color-warning: light-dark(#745b00, #fdcf4f);
+  --astryx-color-on-warning: #171717;
+
+  --astryx-color-border: light-dark(#ebebeb, #ffffff1a);
+  --astryx-color-border-emphasized: light-dark(#d4d4d4, #525252);
+  --astryx-color-skeleton: light-dark(#ebebeb, #525252);
+
+  --astryx-radius-none: 0.25rem;
+  --astryx-radius-inner: 0.375rem;
+  --astryx-radius-element: 0.625rem;
+  --astryx-radius-container: 0.75rem;
+  --astryx-radius-page: 1.75rem;
+  --astryx-radius-full: 9999px;
+
+  --astryx-shadow-low: 0 2px 4px light-dark(oklch(0 0 0 / 5%), oklch(0 0 0 / 25%)), 0 4px 8px light-dark(oklch(0 0 0 / 10%), oklch(0 0 0 / 40%)), inset 0 0 0 1px light-dark(transparent, oklch(1 0 0 / 8%));
+  --astryx-shadow-med: 0 2px 4px light-dark(oklch(0 0 0 / 5%), oklch(0 0 0 / 35%)), 0 4px 12px light-dark(oklch(0 0 0 / 10%), oklch(0 0 0 / 50%)), inset 0 0 0 1px light-dark(transparent, oklch(1 0 0 / 12%));
+  --astryx-shadow-high: 0 4px 6px light-dark(oklch(0 0 0 / 10%), oklch(0 0 0 / 50%)), 0 12px 24px light-dark(oklch(0 0 0 / 15%), oklch(0 0 0 / 70%)), inset 0 0 0 1px light-dark(transparent, oklch(1 0 0 / 15%));
+
+  /* Spacing scale — verified equal to Tailwind v4's own default 4px base
+     unit (--spacing: 0.25rem), confirmed against @astryxdesign/core@0.1.7
+     dist/astryx.css: --spacing-1:4px, --spacing-2:8px, --spacing-3:12px, ...
+     i.e. astryx's spacing-N === Tailwind's default spacing(N). No override
+     needed — Tailwind's default `--spacing: 0.25rem` already matches. */
+}
+
+/* ---------------------------------------------------------------------------
+ * Astryx Stone theme — secondary option
+ * Source: @astryxdesign/theme-stone@0.1.7 (MIT, Meta Platforms Inc.)
+ *   "Warm stone and slate, earthy and understated, with just enough
+ *   character to feel handcrafted."
+ * Verified the same way as Neutral above (npm pack + read dist/theme.css).
+ * Opt in with <html data-ui-theme="stone"> (or on any wrapper element).
+ * ------------------------------------------------------------------------- */
+[data-ui-theme="stone"] {
+  color-scheme: light dark;
+
+  --astryx-font-family-body: Figtree, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --astryx-font-family-heading: Montserrat, "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --astryx-font-family-code: "JetBrains Mono", "SF Mono", Monaco, Consolas, monospace;
+
+  --astryx-font-size-4xs: 0.3125rem;
+  --astryx-font-size-3xs: 0.375rem;
+  --astryx-font-size-2xs: 0.4375rem;
+
+  --astryx-color-background-body: light-dark(#f3f3f5, #111015);
+  --astryx-color-background-surface: light-dark(#ffffff, #1b1b1f);
+  --astryx-color-background-card: light-dark(#ffffff, #242325);
+  --astryx-color-background-popover: light-dark(#ffffff, #25252a);
+  --astryx-color-background-muted: light-dark(#e2e2e8, #3b3b3f);
+
+  --astryx-color-accent: light-dark(#25252a, #f3f3f5);
+  --astryx-color-accent-muted: light-dark(#25252a14, #f3f3f520);
+  --astryx-color-on-accent: light-dark(#ffffff, #25252a);
+
+  --astryx-color-text-primary: light-dark(#25252a, #f3f3f5);
+  --astryx-color-text-secondary: light-dark(#83838a, #9d9da3);
+  --astryx-color-text-disabled: light-dark(#d7d7da, #5e5e61);
+
+  --astryx-color-success: light-dark(#374c36, #b4cdb2);
+  --astryx-color-on-success: light-dark(#374c36, #d0e9ce);
+  --astryx-color-error: light-dark(#58413e, #dcc0bc);
+  --astryx-color-on-error: light-dark(#58413e, #f9dcd7);
+  --astryx-color-warning: light-dark(#524622, #d7c59c);
+  --astryx-color-on-warning: light-dark(#524622, #f4e1b7);
+
+  --astryx-color-border: light-dark(#e2e2e8, #f3f3f51a);
+  --astryx-color-border-emphasized: light-dark(#83838a, #5e5e61);
+  --astryx-color-skeleton: light-dark(#d4d4da, #5e5e64);
+
+  --astryx-radius-none: 0.125rem;
+  --astryx-radius-inner: 0.25rem;
+  --astryx-radius-element: 0.5rem;
+  --astryx-radius-container: 0.75rem;
+  --astryx-radius-page: 1.5rem;
+  --astryx-radius-full: 9999px;
+
+  --astryx-shadow-low: 0 2px 4px #28282a0d, 0 4px 8px #28282a1a;
+  --astryx-shadow-med: 0 2px 4px #28282a0d, 0 4px 12px #28282a1a;
+  --astryx-shadow-high: 0 4px 6px #28282a1a, 0 12px 24px #28282a26;
+}
+
+/* ---------------------------------------------------------------------------
+ * Base layer — mirrors shadcn/ui's own default base layer.
+ *
+ * NOTE: unlike Astryx's own reset (which restyles bare <h1>-<h6> globally),
+ * we deliberately do NOT auto-style raw heading elements. This is a shared
+ * library dropped into many separate app repos — silently reskinning every
+ * <h1> on the page is exactly the kind of global side effect a shared kit
+ * should avoid. Use the provided components/utilities instead.
+ *
+ * Dark mode: no `.dark` class and no JS toggle required. Every color above
+ * uses `light-dark()`, and Tailwind v4's `dark:` variant defaults to
+ * `@media (prefers-color-scheme: dark)` unless overridden — we don't
+ * override it, so both the CSS variables and any `dark:` utility classes
+ * shadcn's components use stay in sync, driven purely by the OS/browser
+ * color-scheme preference.
+ * ------------------------------------------------------------------------- */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Magic UI keyframes — github.com/magicuidesign/magicui (MIT)
+ *
+ * Copied verbatim from each component's own registry entry (the `cssVars`/
+ * `css` blocks in apps/www/public/r/<component>.json), fetched directly from
+ * the real registry rather than reconstructed:
+ *   https://raw.githubusercontent.com/magicuidesign/magicui/main/apps/www/public/r/marquee.json
+ *   https://raw.githubusercontent.com/magicuidesign/magicui/main/apps/www/public/r/shimmer-button.json
+ *
+ * Tailwind v4's `@theme` block is how custom `--animate-*` utilities (used
+ * as `animate-marquee` etc. in marquee.tsx / shimmer-button.tsx) get wired
+ * to their `@keyframes`.
+ * ------------------------------------------------------------------------- */
+@theme {
+  --animate-marquee: marquee var(--duration) infinite linear;
+  --animate-marquee-vertical: marquee-vertical var(--duration) linear infinite;
+  --animate-shimmer-slide: shimmer-slide var(--speed) ease-in-out infinite alternate;
+  --animate-spin-around: spin-around calc(var(--speed) * 2) infinite linear;
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-100% - var(--gap)));
+  }
+}
+
+@keyframes marquee-vertical {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(calc(-100% - var(--gap)));
+  }
+}
+
+@keyframes shimmer-slide {
+  to {
+    transform: translate(calc(100cqw - 100%), 0);
+  }
+}
+
+@keyframes spin-around {
+  0% {
+    transform: translateZ(0) rotate(0deg);
+  }
+  15%,
+  35% {
+    transform: translateZ(0) rotate(90deg);
+  }
+  65%,
+  85% {
+    transform: translateZ(0) rotate(270deg);
+  }
+  100% {
+    transform: translateZ(0) rotate(360deg);
+  }
+}

@@ -17,6 +17,7 @@ fun ReaderSettingsPage(navController: NavController, settings: SettingsManager) 
     var ancSize by remember { mutableStateOf(settings.ancientFontSize.toFloat()) }
     var showEthiopian by remember { mutableStateOf(settings.showEthiopianCanon) }
     var showApocrypha by remember { mutableStateOf(settings.showApocrypha) }
+    var useMasoretic by remember { mutableStateOf(settings.otTextTradition == "masoretic") }
     Scaffold(topBar = {
         TopAppBar(
             title = { Text("READER STYLES") },
@@ -48,6 +49,16 @@ fun ReaderSettingsPage(navController: NavController, settings: SettingsManager) 
             ) {
                 showApocrypha = it
                 settings.showApocrypha = it
+            }
+            HorizontalDivider()
+            Text("ADVANCED — BIBLE TRADITION")
+            SettingToggle(
+                "Use Hebrew Masoretic Text",
+                "By default the Old Testament reads from the Greek Septuagint (LXX) — the text quoted throughout the New Testament — paired with the Greek New Testament interlinear. Enable this to switch to the Hebrew Masoretic Text and NKJV instead. The New Testament always stays Greek.",
+                useMasoretic
+            ) {
+                useMasoretic = it
+                settings.otTextTradition = if (it) "masoretic" else "septuagint"
             }
         }
     }

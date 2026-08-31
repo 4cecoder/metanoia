@@ -250,6 +250,13 @@ pub extern fn gtk_button_new_with_label(label: [*:0]const u8) ?*GtkWidget;
 pub extern fn gtk_button_set_label(button: ?*GtkButton, label: [*:0]const u8) void;
 pub extern fn gtk_button_set_child(button: ?*anyopaque, child: ?*GtkWidget) void;
 
+// ──────────────── CheckButton ────────────────
+
+pub extern fn gtk_check_button_new() ?*GtkWidget;
+pub extern fn gtk_check_button_set_label(check_button: ?*anyopaque, label: [*:0]const u8) void;
+pub extern fn gtk_check_button_set_active(check_button: ?*anyopaque, setting: bool) void;
+pub extern fn gtk_check_button_get_active(check_button: ?*anyopaque) bool;
+
 // ──────────────── Notebook ────────────────
 
 pub extern fn gtk_notebook_new() ?*GtkWidget;

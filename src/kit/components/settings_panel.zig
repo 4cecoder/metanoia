@@ -17,12 +17,24 @@ pub const SettingsField = struct {
     width: i32 = -1,
 };
 
+/// A single checkbox row: label + optional helper description, rendered
+/// as a GtkCheckButton. Reported back through the same string-valued
+/// `SettingsFieldValue` list `onSave` already receives (value is "true" or
+/// "false"), so callers don't need a second callback shape just to read
+/// one boolean.
+pub const SettingsCheckbox = struct {
+    label: [*:0]const u8,
+    description: ?[*:0]const u8 = null,
+    initial_value: bool = false,
+};
+
 pub const SettingsSection = struct {
     title: [*:0]const u8,
     icon: [*:0]const u8,
     description: ?[*:0]const u8 = null,
     icon_color: ?[*:0]const u8 = null,
     fields: []const SettingsField = &.{},
+    checkboxes: []const SettingsCheckbox = &.{},
     /// Escape hatch for sections that need more than label+entry rows (e.g.
     /// a status label + action button). Rendered as-is after the header/
     /// description and before `fields`. Keeps this component decoupled from
@@ -53,6 +65,7 @@ pub const SettingsPanel = struct {
     callbacks: SettingsCallbacks,
     sections: []const SettingsSection,
     entry_widgets: std.ArrayListUnmanaged(?*ffi.GtkWidget),
+    checkbox_widgets: std.ArrayListUnmanaged(?*ffi.GtkWidget),
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -69,6 +82,7 @@ pub const SettingsPanel = struct {
             .callbacks = callbacks,
             .sections = sections,
             .entry_widgets = .empty,
+            .checkbox_widgets = .empty,
         };
 
         applyStyles();
@@ -86,6 +100,7 @@ pub const SettingsPanel = struct {
             fn callback(_: ?*anyopaque, data: ffi.gpointer) callconv(.c) void {
                 const panel: *SettingsPanel = @ptrCast(@alignCast(data));
                 panel.entry_widgets.deinit(panel.allocator);
+                panel.checkbox_widgets.deinit(panel.allocator);
                 panel.allocator.destroy(panel);
             }
         };
@@ -156,6 +171,7 @@ pub const SettingsPanel = struct {
 
     pub fn deinit(self: *SettingsPanel) void {
         self.entry_widgets.deinit(self.allocator);
+        self.checkbox_widgets.deinit(self.allocator);
         self.allocator.destroy(self);
     }
 
@@ -224,12 +240,32 @@ pub const SettingsPanel = struct {
             self.entry_widgets.append(self.allocator, entry) catch {};
         }
 
+        // Checkboxes
+        for (section.checkboxes) |checkbox| {
+            const row = ffi.gtk_box_new(ffi.GTK_ORIENTATION_VERTICAL, 2);
+            ffi.gtk_box_append(@ptrCast(sec_box), row);
+
+            const check = ffi.gtk_check_button_new();
+            ffi.gtk_check_button_set_label(check, checkbox.label);
+            ffi.gtk_check_button_set_active(check, checkbox.initial_value);
+            ffi.gtk_box_append(@ptrCast(row), check);
+
+            if (checkbox.description) |desc| {
+                const desc_lbl = ffi.gtk_label_new(desc);
+                ffi.gtk_widget_add_css_class(desc_lbl, "text-dim");
+                ffi.gtk_label_set_xalign(desc_lbl, 0.0);
+                ffi.gtk_box_append(@ptrCast(row), desc_lbl);
+            }
+            self.checkbox_widgets.append(self.allocator, check) catch {};
+        }
+
         return sec_box;
     }
 
     fn gatherValues(self: *SettingsPanel) []const SettingsFieldValue {
         var values = std.ArrayListUnmanaged(SettingsFieldValue).empty;
         var field_idx: usize = 0;
+        var checkbox_idx: usize = 0;
         for (self.sections) |section| {
             for (section.fields) |field| {
                 if (field_idx < self.entry_widgets.items.len) {
@@ -239,6 +275,15 @@ pub const SettingsPanel = struct {
                     }
                 }
                 field_idx += 1;
+            }
+            for (section.checkboxes) |checkbox| {
+                if (checkbox_idx < self.checkbox_widgets.items.len) {
+                    if (self.checkbox_widgets.items[checkbox_idx]) |check| {
+                        const active = ffi.gtk_check_button_get_active(check);
+                        values.append(self.allocator, .{ .label = checkbox.label, .value = if (active) "true" else "false" }) catch {};
+                    }
+                }
+                checkbox_idx += 1;
             }
         }
         return values.toOwnedSlice(self.allocator) catch &.{};

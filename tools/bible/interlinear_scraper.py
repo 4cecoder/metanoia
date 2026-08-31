@@ -28,12 +28,35 @@ def language_prefix(book, testament_map):
     return "H" if testament_map.get(book) == "Old" else "G"
 
 
-def scrape_interlinear(book, chapter):
-    prefix = language_prefix(book, load_testament_map())
+def scrape_interlinear(book, chapter, *, url_template=None, source=None, lang_prefix=None):
+    """Scrape one chapter's interlinear table into the `interlinear` table.
 
+    `lang_prefix` overrides the testament-derived H/G Strong's prefix --
+    needed for the Septuagint (Apostolic Bible Polyglot), whose Old
+    Testament pages carry Greek text and Greek Strong's numbers despite the
+    book being "Old" testament. `source` tags which text this chapter came
+    from ('MT' Masoretic Hebrew / 'LXX' Septuagint Greek / 'GNT' New
+    Testament Greek) so the same (book, chapter, verse, word_index) can
+    hold rows from more than one source without INSERT OR REPLACE
+    clobbering the others (see idx_interlinear_unique). Defaults preserve
+    the original MT/GNT-only behavior for existing callers.
+    """
+    prefix = lang_prefix if lang_prefix is not None else language_prefix(book, load_testament_map())
+    if source is None:
+        source = "MT" if prefix == "H" else "GNT"
+    if url_template is None:
+        url_template = "https://biblehub.com/interlinear/{book}/{chapter}.htm"
+
+    # BibleHub's URL slugs put an underscore after a leading ordinal digit
+    # for numbered books ("1_corinthians", "2_kings", "3_john", ...) but
+    # nowhere else -- "1corinthians" 404s. Verified against the live site
+    # for every numbered book in BIBLE_BOOKS (1-3 Samuel/Kings/Chronicles/
+    # Corinthians/Thessalonians/Timothy/Peter/John).
     book_url = book.lower().replace(" ", "")
-    url = f"https://biblehub.com/interlinear/{book_url}/{chapter}.htm"
-    print(f"Scraping: {url} (Prefix: {prefix})")
+    if book_url[:1].isdigit():
+        book_url = book_url[0] + "_" + book_url[1:]
+    url = url_template.format(book=book_url, chapter=chapter)
+    print(f"Scraping: {url} (Prefix: {prefix}, Source: {source})")
 
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
@@ -56,7 +79,14 @@ def scrape_interlinear(book, chapter):
         # Verse Detection
         v_span = table.find("span", class_=["reftop3", "reftop"])
         if v_span:
-            v_txt = "".join(filter(str.isdigit, v_span.get_text()))
+            # Standard interlinear pages render a bare verse number
+            # ("1", "2", ...); the Apostolic Bible Polyglot (Septuagint)
+            # pages render "chapter:verse" ("1:1", "1:10", ...) -- take
+            # only the part after the last colon, else digit-concatenation
+            # mangles multi-digit verses (e.g. "1:10" -> "110").
+            ref_text = v_span.get_text().strip()
+            verse_part = ref_text.rsplit(":", 1)[-1]
+            v_txt = "".join(filter(str.isdigit, verse_part))
             if v_txt:
                 new_v = int(v_txt)
                 if new_v != current_verse:
@@ -92,8 +122,8 @@ def scrape_interlinear(book, chapter):
 
             # Use verse_word_index instead of global words_processed
             cursor.execute(
-                "INSERT OR REPLACE INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs, morphology) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (book, chapter, current_verse, verse_word_index, text, trans, strongs, morph)
+                "INSERT OR REPLACE INTO interlinear (book, chapter, verse, word_index, original_text, translation, strongs, morphology, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (book, chapter, current_verse, verse_word_index, text, trans, strongs, morph, source)
             )
             verse_word_index += 1
 

@@ -316,8 +316,12 @@ pub fn languagePrefix(allocator: std.mem.Allocator, io: std.Io, book: []const u8
     const contents = try std.Io.Dir.cwd().readFileAlloc(io, "tools/bible_books.json", allocator, std.Io.Limit.limited(1024 * 1024));
     defer allocator.free(contents);
 
+    // tools/bible_books.json also carries a `canon` field (see
+    // bible_db.zig's Canon doc comment) this function doesn't need --
+    // ignore_unknown_fields so adding fields to the JSON for other
+    // consumers doesn't break this parse.
     const Entry = struct { name: []const u8, testament: bible.Testament };
-    const parsed = try std.json.parseFromSlice([]const Entry, allocator, contents, .{});
+    const parsed = try std.json.parseFromSlice([]const Entry, allocator, contents, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
 
     for (parsed.value) |entry| {
@@ -722,8 +726,14 @@ pub fn scrapeInterlinear(io: std.Io, allocator: std.mem.Allocator, db: *bible.sq
     const words = try parseInterlinearHtml(allocator, resp.body, prefix);
     defer freeWords(allocator, words);
 
+    // This always hits the standard (non-apostolic) interlinear template,
+    // so the language prefix fully determines the source: Hebrew pages are
+    // Masoretic OT, Greek pages are New Testament. The Septuagint (LXX) is
+    // only scraped via tools/bible/cache_lxx_interlinear.py's Python path
+    // today (a different URL template — see interlinear_scraper.py).
+    const source: []const u8 = if (prefix == 'H') "MT" else "GNT";
     for (words) |w| {
-        bible.insert_interlinear_word(db, book, chapter, w.verse, w.word_index, w.original_text, w.translation, w.strongs, w.morphology);
+        bible.insert_interlinear_word(db, book, chapter, w.verse, w.word_index, w.original_text, w.translation, w.strongs, w.morphology, source);
     }
 }
 
@@ -1086,7 +1096,7 @@ test "scrapeInterlinear-shaped round trip: parsed fixture rows land in the inter
     defer freeWords(std.testing.allocator, words);
 
     for (words) |w| {
-        bible.insert_interlinear_word(db.?, "Philemon", 1, w.verse, w.word_index, w.original_text, w.translation, w.strongs, w.morphology);
+        bible.insert_interlinear_word(db.?, "Philemon", 1, w.verse, w.word_index, w.original_text, w.translation, w.strongs, w.morphology, "GNT");
     }
 
     const ctx = try bible.get_verse_lexicon_context(std.testing.allocator, db.?, "Philemon", 1, 1);

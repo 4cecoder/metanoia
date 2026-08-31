@@ -17,8 +17,7 @@ NT_BOOKS = {
 def cache_nt():
     print("Starting full New Testament Interlinear Cache...")
     for book, chapters in NT_BOOKS.items():
-        print(f"
->>> {book} <<<")
+        print(f"\n>>> {book} <<<")
         for chapter in range(1, chapters + 1):
             try:
                 scrape_interlinear(book, chapter)

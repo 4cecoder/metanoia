@@ -1,0 +1,38 @@
+# dependencies (bun install)
+node_modules
+
+# output
+out
+*.tgz
+
+# NOTE: dist/ is intentionally NOT ignored and IS committed. This package
+# isn't published to npm -- README instructs `bun add github:4cecoder/ui-kit`,
+# a git-based install with no build step, so the compiled output must already
+# be in the repo for consumers to get anything usable.
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store

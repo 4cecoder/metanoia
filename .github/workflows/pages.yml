@@ -10,6 +10,11 @@ permissions:
   pages: write
   id-token: write
 
+# Prevent concurrent deploys.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -18,10 +23,39 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install site deps
+        working-directory: site
+        run: bun install
+
+      - name: Build site (Next.js static export)
+        working-directory: site
+        env:
+          PAGES_BASE_PATH: /metanoia
+        run: bun run build
+
+      # Static export already copies site/public/* → site/out/*
+      # including .nojekyll and .well-known/assetlinks.json. Verify:
+      - name: Verify export
+        run: |
+          ls -lah site/out | head -n 50
+          echo "--- .nojekyll ---"
+          ls -l site/out/.nojekyll && echo "ok: .nojekyll present" || (echo "missing .nojekyll" && exit 1)
+          echo "--- .well-known ---"
+          ls -l site/out/.well-known/assetlinks.json && cat site/out/.well-known/assetlinks.json
+          echo "--- out index ---"
+          ls -l site/out/index.html | head -n 5
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .  # Serve entire repo root — includes .well-known/assetlinks.json
+          path: site/out
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

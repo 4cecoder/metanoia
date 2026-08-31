@@ -290,6 +290,23 @@ live rather than just inferred from `data/bible.db`'s existing rows.
   for books that can never succeed. A future improvement: cache a
   "no source available" sentinel for these so we stop re-fetching, and say
   so in the UI instead of leaving it looking like a still-loading state.
+  **Partially resolved 2026-08-25**: confirmed BibleHub *does* cover the
+  Catholic/Orthodox deuterocanon (Tobit, Judith, Wisdom, Sirach, Baruch,
+  1-2 Maccabees — the latter two newly added to `BIBLE_BOOKS`) via two
+  sources it wasn't obvious carried them: the Apostolic Bible Polyglot
+  Septuagint interlinear (`biblehub.com/interlinear/apostolic/`, Greek —
+  see `tools/bible/cache_lxx_interlinear.py`) and eBible.org's full offline
+  Brenton's Septuagint English translation archive (not BibleHub —
+  `tools/bible/import_brenton_septuagint.py`, version `'LXXE'` in
+  `versions`, resolving the "if a second translation is ever added" note
+  above). Only the Ethiopian-canon-exclusive books (Enoch, Jubilees,
+  Meqabyan, Tegsas, the church-order books) remain a real content gap —
+  neither source covers those. `interlinear.source` ('MT'/'LXX'/'GNT', see
+  `tools/bible/migrate_add_interlinear_source.py`) and `verses.version`
+  now being part of the unique key is what makes two texts coexist for the
+  same verse without one silently overwriting the other via `INSERT OR
+  REPLACE` — that was a real, if latent, bug before this session (a second
+  translation for an already-covered book would have clobbered the first).
 - **`lexicon_scraper.py`'s backfill is whole-database, not chapter-scoped**,
   with a hardcoded `time.sleep(1.0)` per new Strong's number. On a large
   fresh DB this can look "stuck" rather than broken. A chapter/verse-scoped

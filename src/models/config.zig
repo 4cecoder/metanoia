@@ -32,6 +32,20 @@ test "Config.parseJson loads llm_backend: native from JSON" {
     try std.testing.expectEqualStrings("native", cfg.llm_backend);
 }
 
+test "Config.parseJson defaults ot_source to lxx when key is absent" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const cfg = Config.parseJson(arena.allocator(), "{}");
+    try std.testing.expectEqualStrings("lxx", cfg.ot_source);
+}
+
+test "Config.parseJson loads ot_source: masoretic from JSON" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const cfg = Config.parseJson(arena.allocator(), "{\"ot_source\": \"masoretic\"}");
+    try std.testing.expectEqualStrings("masoretic", cfg.ot_source);
+}
+
 pub const Config = struct {
     english_font_size: i32 = 24,
     interlinear_font_size: i32 = 26,
@@ -69,6 +83,30 @@ pub const Config = struct {
     /// users without this key see no behavior change.
     llm_backend: []const u8 = "",
 
+    /// Which Old Testament interlinear text the reader shows: "lxx"
+    /// (default — Septuagint Greek, Apostolic Bible Polyglot, read
+    /// alongside the Greek New Testament interlinear for a single-language
+    /// Greek OT+NT reading experience) or "masoretic" (Hebrew, the
+    /// original OT interlinear source before the Septuagint was added).
+    /// Surfaced as an opt-in checkbox under Settings rather than the main
+    /// UI. New Testament chapters always use the GNT interlinear regardless
+    /// of this setting. If the selected source has no cached data for a
+    /// given OT chapter, the reader falls back to whichever source *is*
+    /// cached (see main.zig's load_chapter_into_study).
+    ot_source: []const u8 = "",
+
+    /// Whether the book picker (Passage nav) shows the Catholic/Orthodox
+    /// deuterocanon (Tobit, Judith, Wisdom, Sirach, Baruch, 1-2 Maccabees —
+    /// see bible_db.zig's Canon.Deuterocanon) and the Ethiopian Orthodox
+    /// Tewahedo Church's further additions (Enoch, Jubilees, Meqabyan,
+    /// Tegsas, the church-order books — Canon.Ethiopian) on top of the
+    /// 66-book Protestant baseline, which is always shown. Both default to
+    /// true (unfiltered, matching this app's original book list) — these
+    /// are a narrowing filter for users who want a cleaner tradition-
+    /// specific list, not an opt-in reveal.
+    show_deuterocanon: bool = true,
+    show_ethiopian_books: bool = true,
+
     fn loadString(allocator: std.mem.Allocator, src: []const u8) []const u8 {
         return allocator.dupe(u8, src) catch @panic("OOM");
     }
@@ -101,6 +139,7 @@ pub const Config = struct {
             const llm_server_url = "http://127.0.0.1:11434";
             const tts_backend = "remote";
             const llm_backend = "remote";
+            const ot_source = "lxx";
         };
         var self = Config{
             .selected_voice = loadString(allocator, defaults.selected_voice),
@@ -111,6 +150,7 @@ pub const Config = struct {
             .llm_server_url = loadString(allocator, defaults.llm_server_url),
             .tts_backend = loadString(allocator, defaults.tts_backend),
             .llm_backend = loadString(allocator, defaults.llm_backend),
+            .ot_source = loadString(allocator, defaults.ot_source),
         };
 
         const parsed = std.json.parseFromSliceLeaky(std.json.Value, allocator, content, .{}) catch return self;
@@ -161,6 +201,8 @@ pub const Config = struct {
         if (parsed.object.get("tts_retry_count")) |v| self.tts_retry_count = @intCast(v.integer);
         if (parsed.object.get("show_sidebar")) |v| self.show_sidebar = v.bool;
         if (parsed.object.get("parallel_view")) |v| self.parallel_view = v.bool;
+        if (parsed.object.get("show_deuterocanon")) |v| self.show_deuterocanon = v.bool;
+        if (parsed.object.get("show_ethiopian_books")) |v| self.show_ethiopian_books = v.bool;
         if (parsed.object.get("tts_backend")) |v| {
             allocator.free(self.tts_backend);
             self.tts_backend = loadString(allocator, v.string);
@@ -168,6 +210,10 @@ pub const Config = struct {
         if (parsed.object.get("llm_backend")) |v| {
             allocator.free(self.llm_backend);
             self.llm_backend = loadString(allocator, v.string);
+        }
+        if (parsed.object.get("ot_source")) |v| {
+            allocator.free(self.ot_source);
+            self.ot_source = loadString(allocator, v.string);
         }
 
         return self;
@@ -181,6 +227,7 @@ pub const Config = struct {
         allocator.free(self.tts_server_url);
         allocator.free(self.llm_server_url);
         allocator.free(self.tts_backend);
+        allocator.free(self.ot_source);
         allocator.free(self.llm_backend);
     }
 

@@ -6,17 +6,34 @@ import com.bytecats.metanoia.models.*
 
 class VerseDao(private val openDb: () -> SQLiteDatabase) {
 
-    private val allowedTables = setOf("favorites", "lexicon", "interlinear", "highlights", "notes", "verses")
+    // Content-DB tables only -- favorites/highlights/notes moved to the
+    // separate library DB (see BibleDatabase's LIBRARY_TABLES and its
+    // volatility-split doc comment).
+    private val allowedTables = setOf("lexicon", "interlinear", "verses")
 
     private fun validateTableName(tableName: String) {
         require(tableName in allowedTables) { "Invalid table name: $tableName" }
     }
 
-    fun getChapter(book: String, chapter: Int): List<Verse> {
+    /**
+     * `preferredVersion` ('NKJV'/'LXXE', see BibleDatabase's verses schema
+     * comment) picks which English translation to read when a verse has
+     * more than one cached, falling back to whichever version IS cached if
+     * the preferred one isn't (e.g. the deuterocanon only ever has 'LXXE',
+     * the New Testament only ever has 'NKJV') -- same fallback pattern as
+     * getInterlinear(). Null means "no preference, just pick one
+     * deterministically."
+     */
+    fun getChapter(book: String, chapter: Int, preferredVersion: String? = null): List<Verse> {
         val db = openDb()
+        val pref = preferredVersion ?: ""
         val cursor = db.rawQuery(
-            "SELECT verse, text FROM verses WHERE book = ? AND chapter = ? ORDER BY verse ASC",
-            arrayOf(book, chapter.toString())
+            "SELECT verse, text FROM verses WHERE book = ? AND chapter = ? " +
+                "AND version = (" +
+                "  SELECT version FROM verses v2 WHERE v2.book=verses.book AND v2.chapter=verses.chapter " +
+                "  ORDER BY (version != ?), version LIMIT 1" +
+                ") ORDER BY verse ASC",
+            arrayOf(book, chapter.toString(), pref)
         )
         val verses = mutableListOf<Verse>()
         while (cursor.moveToNext()) verses.add(Verse(cursor.getInt(0), cursor.getString(1)))
@@ -99,17 +116,13 @@ class VerseDao(private val openDb: () -> SQLiteDatabase) {
         val lGk = db.rawQuery("SELECT COUNT(*) FROM lexicon WHERE language = 'greek'", null).use {
             if (it.moveToFirst()) it.getInt(0) else 0
         }
-        val n = db.rawQuery("SELECT COUNT(*) FROM notes", null).use {
-            if (it.moveToFirst()) it.getInt(0) else 0
-        }
-        val h = db.rawQuery("SELECT COUNT(*) FROM highlights", null).use {
-            if (it.moveToFirst()) it.getInt(0) else 0
-        }
         val i = db.rawQuery("SELECT COUNT(*) FROM interlinear", null).use {
             if (it.moveToFirst()) it.getInt(0) else 0
         }
         db.close()
-        return LibraryStats(vOt, vNt, lHeb, lGk, n, h, i, 0.0)
+        // notesCount/highlightsCount live in the library DB, not here --
+        // BibleDatabase.getStats() fills those in after calling this.
+        return LibraryStats(vOt, vNt, lHeb, lGk, 0, 0, i, 0.0)
     }
 
     fun getTableRows(tableName: String, limit: Int): List<Map<String, String>> {
@@ -138,11 +151,13 @@ class VerseDao(private val openDb: () -> SQLiteDatabase) {
         val db = openDb(); db.execSQL("DELETE FROM $tableName"); db.execSQL("VACUUM"); db.close()
     }
 
-    fun factoryReset() {
+    /** Clears content tables only (verses/lexicon/interlinear). Personal
+     * data (highlights/notes/favorites, now in the library DB) is cleared
+     * separately by BibleDatabase.factoryReset(). */
+    fun clearContentTables() {
         val db = openDb()
         db.execSQL("DELETE FROM verses"); db.execSQL("DELETE FROM lexicon")
-        db.execSQL("DELETE FROM interlinear"); db.execSQL("DELETE FROM highlights")
-        db.execSQL("DELETE FROM notes"); db.execSQL("DELETE FROM favorites")
+        db.execSQL("DELETE FROM interlinear")
         db.execSQL("VACUUM"); db.close()
     }
 

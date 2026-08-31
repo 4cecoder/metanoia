@@ -120,6 +120,19 @@ class SettingsManager(context: Context) {
         get() = prefs.getBoolean("show_apocrypha", true)
         set(value) = prefs.edit().putBoolean("show_apocrypha", value).apply()
 
+    /** Which Old Testament text the reader shows: "septuagint" (default --
+     * Brenton's English Septuagint + the Greek LXX interlinear, paired with
+     * the Greek New Testament for a consistent Greek reading experience) or
+     * "masoretic" (NKJV + the Hebrew Masoretic interlinear -- the original
+     * OT text before Septuagint support was added). New Testament chapters
+     * always use NKJV/GNT regardless of this setting. Mirrors the desktop
+     * app's Config.ot_source (src/models/config.zig) exactly, including the
+     * "pure by default, dig into Settings for Masoretic" intent -- this is
+     * deliberately not surfaced in onboarding/the main reading UI. */
+    var otTextTradition: String
+        get() = prefs.getString("ot_text_tradition", "septuagint") ?: "septuagint"
+        set(value) = prefs.edit().putString("ot_text_tradition", value).apply()
+
     // --- Sync & Data ---
     var bibleGatewayVersion: String
         get() = prefs.getString("gateway_version", "NKJV") ?: "NKJV"

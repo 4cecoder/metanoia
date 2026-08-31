@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+/* ui-kit already ships Astryx tokens via @bytecats/ui-kit/styles.css.
+   This file is for site-specific layer on top — no duplicate token import. */
+
+/* Smooth scrolling for anchor nav (mirrors FedoraBible #help-grid scroll). */
+html { scroll-behavior: smooth; }
+
+/* Tighten prose max-width like septcheck/docs — content stays focus. */
+.prose { max-width: 70ch; }
+
+/* For the deep-link code blocks that need horizontal scroll like Fedora. */
+pre { overflow-x: auto; }
