@@ -27,6 +27,8 @@ const ggml = @import("../backend/ggml.zig");
 /// was built to support.
 pub const Qwen3TTS = struct {
     ctx: ?*ggml.QwenContext = null,
+    cached_ref_path: ?[]const u8 = null,
+    cached_voice_ref: ggml.QtVoiceRef = .{},
 
     pub fn init(model_path: []const u8, codec_path: []const u8) !Qwen3TTS {
         const model_z = try std.heap.page_allocator.dupeSentinel(u8, model_path, 0);
@@ -79,10 +81,27 @@ pub const Qwen3TTS = struct {
         defer if (ref_samples) |s| allocator.free(s);
 
         if (options.reference_audio_path) |ref_path| {
-            const wav = try loadMono16WavAsF32(io, allocator, ref_path);
-            ref_samples = wav;
-            params.ref_audio_24k = wav.ptr;
-            params.ref_n_samples = @intCast(wav.len);
+            // qwentts.cpp can retain the expensive reference latents
+            // (speaker embedding + RVQ codes) between syntheses.  Prefer
+            // that path so every verse/chunk does not re-run the codec
+            // encoder and ECAPA speaker encoder.
+            if (self.ensureVoiceReference(io, ref_path)) |cached| {
+                params.ref_spk_emb = cached.ref_spk_emb;
+                params.ref_spk_dim = cached.ref_spk_dim;
+                // The RVQ prefix is only legal when the caller also supplied
+                // the reference transcript (ICL mode B).  With audio but no
+                // transcript, retain the cached speaker embedding and let
+                // qwentts.cpp use its valid x-vector-only mode A.
+                if (options.reference_text != null) {
+                    params.ref_codes = cached.ref_codes;
+                    params.ref_T = cached.ref_T;
+                }
+            } else {
+                const wav = try loadMono16WavAsF32(io, allocator, ref_path);
+                ref_samples = wav;
+                params.ref_audio_24k = wav.ptr;
+                params.ref_n_samples = @intCast(wav.len);
+            }
 
             if (options.reference_text) |ref_text| {
                 const z = allocator.dupeSentinel(u8, ref_text, 0) catch return tts.SynthesizeError.OutOfMemory;
@@ -116,8 +135,47 @@ pub const Qwen3TTS = struct {
 
     fn deinitImpl(ptr: *anyopaque) void {
         const self: *Qwen3TTS = @ptrCast(@alignCast(ptr));
+        if (self.cached_ref_path != null) {
+            ggml.qt_voice_ref_free(&self.cached_voice_ref);
+            std.heap.page_allocator.free(self.cached_ref_path.?);
+            self.cached_ref_path = null;
+            self.cached_voice_ref = .{};
+        }
         ggml.qt_free(self.ctx);
         self.ctx = null;
+    }
+
+    /// Extracts and retains qwentts.cpp's ABI-v2 voice latents for one
+    /// reference clip.  The native synthesizer is currently serialized by
+    /// src/tts_client.zig, so replacing the one-entry cache when the selected
+    /// voice changes is race-free and keeps the resident memory bounded.
+    fn ensureVoiceReference(self: *Qwen3TTS, io: std.Io, ref_path: []const u8) ?*const ggml.QtVoiceRef {
+        if (self.cached_ref_path) |cached_path| {
+            if (std.mem.eql(u8, cached_path, ref_path)) {
+                return &self.cached_voice_ref;
+            }
+
+            ggml.qt_voice_ref_free(&self.cached_voice_ref);
+            std.heap.page_allocator.free(cached_path);
+            self.cached_ref_path = null;
+            self.cached_voice_ref = .{};
+        }
+
+        const samples = loadMono16WavAsF32(io, std.heap.page_allocator, ref_path) catch return null;
+        defer std.heap.page_allocator.free(samples);
+        if (samples.len == 0) return null;
+
+        var extracted: ggml.QtVoiceRef = .{};
+        const ctx = self.ctx orelse return null;
+        const status = ggml.qt_extract_voice_ref(ctx, samples.ptr, @intCast(samples.len), &extracted);
+        if (status != .ok) return null;
+
+        self.cached_ref_path = std.heap.page_allocator.dupe(u8, ref_path) catch {
+            ggml.qt_voice_ref_free(&extracted);
+            return null;
+        };
+        self.cached_voice_ref = extracted;
+        return &self.cached_voice_ref;
     }
 };
 

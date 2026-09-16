@@ -10,7 +10,7 @@ const tts_client = @import("tts_client.zig");
 // step rather than the default `test` step (which every contributor and
 // CI run pays for). Still degrades gracefully via SkipZigTest if run
 // somewhere the weights happen to be absent.
-test "generate_speech native backend produces real cloned-voice audio (tommy)" {
+test "generate_speech native backend produces real Jordan cloned-voice audio" {
     var threaded_io = std.Io.Threaded.init(std.testing.allocator, .{});
     defer threaded_io.deinit();
     const io = threaded_io.io();
@@ -42,7 +42,7 @@ test "generate_speech native backend produces real cloned-voice audio (tommy)" {
     const path = try tts_client.generate_speech(
         io,
         "Hello from the native backend end to end test.",
-        "tommy",
+        "jordan",
         1.0,
         "",
         "speedy",

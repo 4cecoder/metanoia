@@ -281,8 +281,11 @@ Pre-converted GGUF weights: https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF
 
 `src/tts_client.zig` already externalizes its TTS server URL via
 `data/config.json` (`tts_server_url`, defaulting to
-`http://127.0.0.1:8000`) — the plan is a new `tts_mode: "native" | "remote"`
-config field. `"remote"` keeps today's `curl`-to-`tts_server.py` path
-completely untouched; `"native"` calls into `aikit.models.qwen3_tts`
-in-process instead. Neither precludes the other — this is meant to make the
-networked path an explicit choice, not remove it.
+`http://127.0.0.1:8000`). The implementation uses a separate
+`tts_backend: "native" | "remote"` config field. `"remote"` keeps today's
+`curl`-to-`tts_server.py` path completely untouched; `"native"` calls into
+`aikit.models.qwen3_tts` in-process instead. Native Base-model cloning also
+retains the extracted speaker embedding and RVQ reference codes between
+requests, so consecutive verses do not re-encode the same reference clip.
+Neither backend precludes the other — the networked path remains an explicit
+fallback for platforms or models that are not local.

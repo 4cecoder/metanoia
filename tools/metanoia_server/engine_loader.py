@@ -19,7 +19,11 @@ def _load_mlx_engine(container: EngineContainer, voice_configs: dict) -> Optiona
     try:
         from mlx_engine import MLXEngine  # type: ignore[import-untyped]
         engine = MLXEngine()
-        engine.load_models()
+        # Keep the fast 0.6B Base model resident.  Gold/custom models are
+        # still lazy-loaded by MLXEngine when a request actually needs them;
+        # loading all three at startup needlessly consumes unified memory and
+        # competes with the model doing the first synthesis.
+        engine.load_models("speedy")
         container.mlx_engine = engine
         logger.info("MLXEngine loaded on Apple Silicon")
         return engine
@@ -48,6 +52,12 @@ def _load_torch_engine(container: EngineContainer, voice_configs: dict) -> Optio
 
 def _precompute_prompts(engine: object, voice_configs: dict):
     for name, cfg in voice_configs.items():
+        # Prompt precomputation is deliberately limited to the resident fast
+        # model.  A gold/custom voice will pay its one-time preparation cost on
+        # first use, instead of slowing every startup and evicting speedy
+        # weights from Apple's unified memory.
+        if cfg.get("mode", "speedy") != "speedy":
+            continue
         audio_path = cfg.get("audio")
         if audio_path and os.path.exists(audio_path):
             try:

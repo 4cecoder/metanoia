@@ -31,6 +31,7 @@ pub const TTSEngine = struct {
 
     pipeline_paths: [2000]?[]const u8 = @splat(null),
     pipeline_inflight: [2000]bool = @splat(false),
+    pipeline_failed: [2000]bool = @splat(false),
 
     pub fn init(allocator: std.mem.Allocator, io: std.Io) *TTSEngine {
         const self = allocator.create(TTSEngine) catch unreachable;
@@ -93,6 +94,54 @@ pub const TTSEngine = struct {
             start_idx: usize,
             config: TTSEngineConfig,
             callbacks: PlaybackCallbacks,
+            producer_thread: ?*anyopaque,
+            playback_index: std.atomic.Value(usize),
+
+            /// Generate ahead on a separate thread.  The previous lookahead
+            /// loop ran synchronously on the playback thread, so it waited
+            /// for four requests before starting audio and never overlapped
+            /// synthesis with playback.
+            fn produce(p: gpointer) callconv(.c) gpointer {
+                const t: *@This() = @ptrCast(@alignCast(p));
+                const e = t.engine;
+                var next_idx = t.start_idx;
+                const request_mode = if (t.config.mode.len > 0) t.config.mode else "speedy";
+
+                while (next_idx < t.verses.len and next_idx < e.pipeline_paths.len) {
+                    // Keep at most four verse files ahead of playback.
+                    while (!e.stop_requested.load(.acquire)) {
+                        const played_idx = t.playback_index.load(.acquire);
+                        if (next_idx >= played_idx and next_idx - played_idx < 4) break;
+                        gtk.g_usleep(10 * 1000);
+                    }
+                    if (e.stop_requested.load(.acquire)) break;
+
+                    e.mutex.lockUncancelable(e.io);
+                    const needs = e.pipeline_paths[next_idx] == null and !e.pipeline_inflight[next_idx];
+                    if (needs) e.pipeline_inflight[next_idx] = true;
+                    e.mutex.unlock(e.io);
+
+                    if (needs) {
+                        const path = tts.generate_speech(
+                            e.io,
+                            t.verses[next_idx],
+                            t.config.voice,
+                            t.config.speed,
+                            t.config.emotion,
+                            request_mode,
+                            false,
+                        ) catch null;
+                        e.mutex.lockUncancelable(e.io);
+                        e.pipeline_paths[next_idx] = path;
+                        e.pipeline_failed[next_idx] = path == null;
+                        e.pipeline_inflight[next_idx] = false;
+                        e.mutex.unlock(e.io);
+                        if (path == null) break;
+                    }
+                    next_idx += 1;
+                }
+                return null;
+            }
 
             fn run(p: gpointer) callconv(.c) gpointer {
                 const t: *@This() = @ptrCast(@alignCast(p));
@@ -104,60 +153,42 @@ pub const TTSEngine = struct {
                 e.stop_requested.store(false, .release);
 
                 defer {
+                    if (t.producer_thread) |th| {
+                        _ = gtk.g_thread_join(th);
+                        t.producer_thread = null;
+                    }
                     e.playing.store(false, .release);
                     t.callbacks.onPlayStateChanged(false);
                     e.cleanupPipeline();
                     allocator.destroy(t);
                 }
 
+                t.producer_thread = gtk.g_thread_new("tts_prod", &@This().produce, t);
+                if (t.producer_thread == null) return null;
+
                 var curr = t.start_idx;
 
                 while (true) {
                     if (e.stop_requested.load(.acquire)) break;
-                    if (curr >= t.verses.len) break;
+                    if (curr >= t.verses.len or curr >= e.pipeline_paths.len) break;
 
-                    // 1. Fill pipeline lookahead (4 verses ahead)
-
-                    var la: usize = 0;
-                    while (la < 4) : (la += 1) {
-                        const idx = curr + la;
-                        if (idx >= t.verses.len) break;
-
-                        e.mutex.lockUncancelable(e.io);
-                        const needs = e.pipeline_paths[idx] == null and !e.pipeline_inflight[idx];
-                        if (needs) e.pipeline_inflight[idx] = true;
-                        e.mutex.unlock(e.io);
-
-                        if (needs) {
-                            const path = tts.generate_speech(
-                                e.io,
-                                t.verses[idx],
-                                t.config.voice,
-                                t.config.speed,
-                                t.config.emotion,
-                                "speedy",
-                                false,
-                            ) catch null;
-                            e.mutex.lockUncancelable(e.io);
-                            if (idx < 2000) {
-                                e.pipeline_paths[idx] = path;
-                                e.pipeline_inflight[idx] = false;
-                            }
-                            e.mutex.unlock(e.io);
-                        }
-                    }
-
-                    // 2. Wait for current verse audio
+                    // Wait for the producer's current verse audio.
                     var audio_path: ?[]const u8 = null;
+                    var generation_failed = false;
                     while (true) {
                         if (e.stop_requested.load(.acquire)) break;
                         e.mutex.lockUncancelable(e.io);
                         audio_path = e.pipeline_paths[curr];
+                        generation_failed = e.pipeline_failed[curr];
                         e.mutex.unlock(e.io);
-                        if (audio_path != null) break;
+                        if (audio_path != null or generation_failed) break;
                         gtk.g_usleep(10 * 1000);
                     }
                     if (e.stop_requested.load(.acquire)) break;
+                    if (generation_failed) {
+                        t.callbacks.onStatusUpdate("TTS generation failed.");
+                        break;
+                    }
 
                     // 3. Highlight current verse
                     t.callbacks.onVerseHighlight(curr);
@@ -185,6 +216,7 @@ pub const TTSEngine = struct {
                     }
 
                     if (e.stop_requested.load(.acquire)) break;
+                    t.playback_index.store(curr + 1, .release);
                     curr += 1;
                 }
                 return null;
@@ -198,6 +230,8 @@ pub const TTSEngine = struct {
             .start_idx = start_idx,
             .config = config,
             .callbacks = callbacks,
+            .producer_thread = null,
+            .playback_index = std.atomic.Value(usize).init(start_idx),
         };
         self.task_thread = gtk.g_thread_new("tts_seq", &Task.run, task);
     }
@@ -350,5 +384,6 @@ pub const TTSEngine = struct {
             }
         }
         @memset(&self.pipeline_inflight, false);
+        @memset(&self.pipeline_failed, false);
     }
 };

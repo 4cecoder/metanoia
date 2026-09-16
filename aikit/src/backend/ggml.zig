@@ -55,6 +55,8 @@ pub const QtInitParams = extern struct {
     codec_path: ?[*:0]const u8 = null,
     use_fa: bool = true,
     clamp_fp16: bool = false,
+    max_batch: c_int = 1,
+    codec_chunk_sec: f32 = 24.0,
 };
 
 /// Mirrors `struct qt_voice_ref` — precomputed Base-model voice-clone
@@ -106,12 +108,10 @@ pub const QtTtsParams = extern struct {
 
     seed: i64 = -1,
     max_new_tokens: c_int = 2048,
-    do_sample: bool = true,
     temperature: f32 = 0.9,
     top_k: c_int = 50,
     top_p: f32 = 1.0,
     repetition_penalty: f32 = 1.05,
-    subtalker_do_sample: bool = true,
     subtalker_temperature: f32 = 0.9,
     subtalker_top_k: c_int = 50,
     subtalker_top_p: f32 = 1.0,
@@ -123,9 +123,6 @@ pub const QtTtsParams = extern struct {
 
     on_chunk: QtAudioChunkCb = null,
     on_chunk_user_data: ?*anyopaque = null,
-
-    codec_chunk_sec: f32 = 24.0,
-    codec_left_context_sec: f32 = 2.0,
 
     // ABI v2: pre-encoded voice reference latents.
     ref_spk_emb: ?[*]const f32 = null,
@@ -170,4 +167,20 @@ test "QtTtsParams default-constructs via zig defaults matching header docs" {
     try std.testing.expectEqual(@as(i64, -1), p.seed);
     try std.testing.expectEqual(@as(c_int, 2048), p.max_new_tokens);
     try std.testing.expectEqual(@as(f32, 0.9), p.temperature);
+}
+
+test "qwentts ABI structs match the public header layout" {
+    // These offsets are the LP64 C ABI used by qwentts.cpp on macOS/Linux.
+    // Keep this test beside the hand-written bindings: adding a convenience
+    // field to either extern struct silently corrupts every field after it.
+    try std.testing.expectEqual(@as(usize, 40), @sizeOf(QtInitParams));
+    try std.testing.expectEqual(@as(usize, 28), @offsetOf(QtInitParams, "max_batch"));
+    try std.testing.expectEqual(@as(usize, 32), @offsetOf(QtInitParams, "codec_chunk_sec"));
+
+    try std.testing.expectEqual(@as(usize, 32), @sizeOf(QtVoiceRef));
+    try std.testing.expectEqual(@as(usize, 16), @offsetOf(QtVoiceRef, "ref_codes"));
+
+    try std.testing.expectEqual(@as(usize, 176), @sizeOf(QtTtsParams));
+    try std.testing.expectEqual(@as(usize, 144), @offsetOf(QtTtsParams, "ref_spk_emb"));
+    try std.testing.expectEqual(@as(usize, 160), @offsetOf(QtTtsParams, "ref_codes"));
 }

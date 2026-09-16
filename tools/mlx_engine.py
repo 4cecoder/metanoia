@@ -1,4 +1,5 @@
 import os
+import threading
 import numpy as np
 import mlx.core as mx
 from mlx_audio.tts import load as load_tts_model
@@ -26,6 +27,11 @@ class MLXEngine:
             "custom": "models/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit"
         }
         self.prompt_cache = {} 
+        # Generation runs in the server's single GPU worker.  A thread-local
+        # context lets the model's reference encoders reuse a voice's cached
+        # conditioning without changing mlx-audio's public API.
+        self._prompt_context = threading.local()
+        self._fast_path_models = set()
         
     @property
     def sample_rate(self):
@@ -59,14 +65,73 @@ class MLXEngine:
             return
 
         print(f"Pre-computing {mode} prompt for {name}...")
+        self._install_prompt_fast_paths(model)
         # Ensure we are using the optimal sample rate
         ref_audio = load_audio(audio_path, sample_rate=model.sample_rate)
         mx.eval(ref_audio)
 
+        # Qwen3-TTS otherwise re-runs both the speech-tokenizer encoder and
+        # speaker encoder for every request.  Those tensors depend only on the
+        # reference clip, so evaluate them once and reuse them for every
+        # five-verse chunk from this voice.
+        ref_codes = None
+        speaker_embed = None
+        if getattr(model, "speech_tokenizer", None) is not None and model.speech_tokenizer.has_encoder:
+            encoded_audio = ref_audio
+            if encoded_audio.ndim == 1:
+                encoded_audio = encoded_audio[None, None, :]
+            elif encoded_audio.ndim == 2:
+                encoded_audio = encoded_audio[None, :]
+            ref_codes = model.speech_tokenizer.encode(encoded_audio)
+            mx.eval(ref_codes)
+
+        if getattr(model, "speaker_encoder", None) is not None:
+            speaker_embed = model.extract_speaker_embedding(ref_audio)
+            mx.eval(speaker_embed)
+
         self.prompt_cache[name] = {
             "ref_audio": ref_audio,
-            "ref_text": ref_text
+            "ref_text": ref_text,
+            "ref_codes": ref_codes,
+            "speaker_embed": speaker_embed,
         }
+
+    def _install_prompt_fast_paths(self, model):
+        """Teach mlx-audio's reference calls to use the active cached prompt.
+
+        This is intentionally a small compatibility shim around the installed
+        mlx-audio model.  If a future version changes either method, the
+        original implementation remains the fallback and voice generation
+        still works; it simply loses the conditioning cache until adapted.
+        """
+        model_id = id(model)
+        if model_id in self._fast_path_models:
+            return
+
+        speech_tokenizer = getattr(model, "speech_tokenizer", None)
+        if speech_tokenizer is not None and hasattr(speech_tokenizer, "encode"):
+            original_encode = speech_tokenizer.encode
+
+            def cached_encode(audio, *args, **kwargs):
+                prompt = getattr(self._prompt_context, "value", None)
+                if prompt is not None and prompt.get("ref_codes") is not None:
+                    return prompt["ref_codes"]
+                return original_encode(audio, *args, **kwargs)
+
+            speech_tokenizer.encode = cached_encode
+
+        original_extract = getattr(model, "extract_speaker_embedding", None)
+        if original_extract is not None:
+
+            def cached_extract(audio, sr=24000, *args, **kwargs):
+                prompt = getattr(self._prompt_context, "value", None)
+                if prompt is not None and prompt.get("speaker_embed") is not None:
+                    return prompt["speaker_embed"]
+                return original_extract(audio, sr=sr, *args, **kwargs)
+
+            model.extract_speaker_embedding = cached_extract
+
+        self._fast_path_models.add(model_id)
 
     def generate(
         self, 
@@ -86,6 +151,8 @@ class MLXEngine:
             self.load_models("speedy")
             model = self.models.get("speedy")
             if model is None: raise RuntimeError(f"MLX model {mode} could not be loaded")
+
+        self._install_prompt_fast_paths(model)
 
         # Check for cached prompt
         cached = self.prompt_cache.get(voice)
@@ -123,18 +190,22 @@ class MLXEngine:
         
         import time
         gen_start = time.time()
-        results = model.generate(**gen_kwargs)
-        
-        audio_chunks = []
-        sample_rate = model.sample_rate
-        
-        chunk_count = 0
-        for result in results:
-            audio_chunks.append(result.audio)
-            chunk_count += 1
-            if chunk_count % 20 == 0:
-                elapsed = time.time() - gen_start
-                print(f"  [MLX] Generated {chunk_count} segments... ({elapsed:.1f}s)")
+        self._prompt_context.value = cached
+        try:
+            results = model.generate(**gen_kwargs)
+
+            audio_chunks = []
+            sample_rate = model.sample_rate
+
+            chunk_count = 0
+            for result in results:
+                audio_chunks.append(result.audio)
+                chunk_count += 1
+                if chunk_count % 20 == 0:
+                    elapsed = time.time() - gen_start
+                    print(f"  [MLX] Generated {chunk_count} segments... ({elapsed:.1f}s)")
+        finally:
+            self._prompt_context.value = None
             
         if not audio_chunks:
             return None, None

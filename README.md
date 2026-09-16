@@ -36,6 +36,25 @@ brew install gtk4 pango cairo glib sqlite3
 zig build run
 ```
 
+### Faster local TTS on Apple Silicon
+
+The normal Python/MLX server remains the default. For the in-process Metal
+backend, build with the native flag and set `tts_backend` in `data/config.json`:
+
+```json
+{"tts_backend":"native"}
+```
+
+```bash
+zig build -Dnative-ai=true -Doptimize=ReleaseFast
+zig build run -Dnative-ai=true
+```
+
+Native mode uses the local GGUF files under `vendor/qwentts.cpp/models/` and
+does not need `uv run tools/tts_server.py`. The GGUF files are a separate
+runtime format from the existing MLX/SafeTensors checkpoints; switching back
+to the server is just removing `tts_backend` or setting it to `remote`.
+
 ## Linux
 
 Pick whichever fits your distro — same source, no distro-specific build needed:
