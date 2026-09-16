@@ -20,7 +20,7 @@
 //! per the "replicate exact behavior" brief, rather than silently fixing).
 
 const std = @import("std");
-const bible = @import("bible_db.zig");
+const bible = @import("core").bible;
 
 // ============================================================================
 // Tiny hand-rolled HTML scanner

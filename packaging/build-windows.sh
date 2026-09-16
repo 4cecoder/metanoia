@@ -22,9 +22,9 @@
 # Usage: bash packaging/build-windows.sh
 #   (optionally: DIST_ROOT=/some/other/path bash packaging/build-windows.sh)
 #
-# Prerequisite: `zig build` has already produced zig-out/bin/metanoia.exe
-# (this script does not build it — that stays a separate CI step, same
-# division of labor the CI job already had).
+# Prerequisite: `zig build` has already produced zig-out/bin/metanoia.exe.
+# This script builds the small scraper companion itself so the two binaries
+# stay separate in the package without changing the existing app build step.
 #
 # ── What this script could NOT verify (read before trusting it blindly) ──
 # There is no Windows/MSYS2 environment available in the sandbox this was
@@ -65,8 +65,13 @@ info "Using MSYS2 prefix: $MSYS_PREFIX"
 
 EXE_SRC="$ROOT/zig-out/bin/${EXE_NAME}"
 [ -f "$EXE_SRC" ] || fail "expected $EXE_SRC — run 'zig build' before this script"
+command -v zig >/dev/null 2>&1 || fail "zig not found on PATH"
+zig build scraper -Doptimize=ReleaseFast
+SCRAPER_SRC="$ROOT/zig-out/bin/metanoia-scraper.exe"
+[ -f "$SCRAPER_SRC" ] || fail "expected $SCRAPER_SRC after 'zig build scraper'"
 [ -f "$ROOT/data/bible.db" ] || fail "data/bible.db is missing (should be checked out from git, see .gitignore's exception)"
 [ -f "$ROOT/assets/metanoia.ico" ] || fail "assets/metanoia.ico missing"
+[ -f "$ROOT/tools/bible_books.json" ] || fail "tools/bible_books.json is missing"
 command -v ldd >/dev/null 2>&1 || fail "ldd not found — should be present in any MSYS2 shell"
 
 # Flat layout: metanoia.exe stays directly in $DIST_ROOT (NOT nested in a
@@ -95,9 +100,12 @@ rm -rf "$DIST_ROOT"
 mkdir -p "$DIST_ROOT"
 
 cp "$EXE_SRC" "$DIST_ROOT/"
+cp "$SCRAPER_SRC" "$DIST_ROOT/"
 cp "$ROOT/assets/metanoia.ico" "$DIST_ROOT/"
 cp -r "$ROOT/data" "$DIST_ROOT/data"
 cp -r "$ROOT/assets" "$DIST_ROOT/assets"
+mkdir -p "$DIST_ROOT/tools"
+cp "$ROOT/tools/bible_books.json" "$DIST_ROOT/tools/"
 [ -d "$ROOT/static" ] && cp -r "$ROOT/static" "$DIST_ROOT/static"
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -151,7 +159,7 @@ cp -r "$ROOT/assets" "$DIST_ROOT/assets"
 
 declare -A seen=()       # ldd'd files, keyed by absolute path
 declare -A to_bundle=()  # basename -> source path, MSYS2-provided only
-queue=("$EXE_SRC")
+queue=("$EXE_SRC" "$SCRAPER_SRC")
 
 # gdk-pixbuf-query-loaders.exe (see section 2 below — the NSIS installer
 # re-runs it post-install to fix a relocatable-path problem) gets shipped

@@ -1,6 +1,6 @@
 # Volatility Refactor — Libraries, Dependencies & Split Binaries
 
-**Status:** design — no behavior change yet; `.gitignore` fix for vendored `ui-kit` ships with this doc.
+**Status:** phase 1 landed — reader/core/services and scraper build boundaries are wired; native TTS worker remains design work. The `.gitignore` fix for vendored `ui-kit` ships with this doc.
 **Author:** volatility-refactor subagent — 2026-08-31
 **Context:** User goals: “look into code refactoring by libraries and by volatility and look into split binaries as well by volatility making updates, builds faster” + “you can vendor the ui-kit” (already vendored at `vendor/ui-kit` and `site/vendor/ui-kit`, site build passes via `file:./vendor/ui-kit`).
 

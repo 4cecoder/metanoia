@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const tts = @import("../tts_client.zig");
-const gtk = @import("../gtk.zig");
+const gtk = @import("core").gtk;
 
 const gpointer = gtk.gpointer;
 

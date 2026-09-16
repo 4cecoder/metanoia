@@ -1,5 +1,5 @@
 const std = @import("std");
-const gtk = @import("gtk.zig");
+const gtk = @import("core").gtk;
 // `aikit` (and everything native-backend-related below) is only importable
 // when the app was built with `-Dnative-ai=true` (see root build.zig) —
 // that flag exists so a default `zig build`/`zig build test` (CI included)

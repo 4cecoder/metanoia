@@ -5,6 +5,27 @@ This covers the packaging added in `packaging/*.sh` and
 pipeline at `.github/workflows/release.yml` — not covered here, not touched
 by any of this.
 
+## Volatility-split desktop payload
+
+The desktop build keeps the stable GTK reader and the volatile native scraper
+as separate executables:
+
+```text
+Metanoia.app/Contents/MacOS/metanoia
+Metanoia.app/Contents/MacOS/metanoia-scraper
+Metanoia.app/Contents/Resources/tools/bible_books.json
+```
+
+`zig build stable` installs only the reader. `zig build scraper` builds the
+companion independently, while `zig build app` (and the macOS release script)
+includes both. The reader looks for `METANOIA_SCRAPER_BIN` first, then the
+bundle/prefix/checkout locations; it never imports the scraper implementation.
+The companion uses the inherited bundle/prefix working directory to update
+`data/bible.db`, so live interlinear and lexicon behavior remains available
+after relocation. Native TTS remains a separate opt-in `aikit` build path; the
+TTS worker/IPC extraction is intentionally a later phase described in
+`docs/SPLIT_BINARY_ARCHITECTURE.md`.
+
 ## Cutting a release
 
 Push a tag matching `20*.*.*` (the existing convention, e.g.

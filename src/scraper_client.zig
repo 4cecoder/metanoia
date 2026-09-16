@@ -1,6 +1,5 @@
 const std = @import("std");
-const bible = @import("bible_db.zig");
-const native_scraper = @import("native_scraper.zig");
+const bible = @import("core").bible;
 
 /// Errors returned by scraper subprocesses beyond spawn/wait failures.
 pub const ScraperError = error{ScraperFailed};
@@ -22,23 +21,62 @@ pub fn scrape_verses(engine: std.Io, book: []const u8, chapter: i32) !void {
     try runScraperScript(engine, &.{ "uv", "run", "python", "tools/bible/scraper.py", book, ch_str });
 }
 
+/// Returns the companion scraper path used by the reader. The environment
+/// override makes development and recovery installs explicit; the remaining
+/// candidates cover the macOS app bundle, Linux prefix, and repo checkout.
+fn nativeScraperPath(engine: std.Io, allocator: std.mem.Allocator) ![]const u8 {
+    if (std.c.getenv("METANOIA_SCRAPER_BIN")) |path| {
+        return try allocator.dupe(u8, std.mem.span(path));
+    }
+
+    const candidates = .{
+        "../MacOS/metanoia-scraper",
+        "bin/metanoia-scraper",
+        "zig-out/bin/metanoia-scraper",
+        "metanoia-scraper",
+        "metanoia-scraper.exe",
+    };
+    inline for (candidates) |candidate| {
+        if (std.Io.Dir.cwd().access(engine, candidate, .{})) |_| {
+            return try allocator.dupe(u8, candidate);
+        } else |_| {}
+    }
+
+    // Let the OS search PATH as a final fallback. This is useful for a
+    // developer-installed companion and still gives the caller the same
+    // ScraperFailed result if no executable is available.
+    return try allocator.dupe(u8, "metanoia-scraper");
+}
+
+fn runNativeScraper(
+    engine: std.Io,
+    allocator: std.mem.Allocator,
+    operation: []const u8,
+    book: []const u8,
+    chapter: i32,
+) !void {
+    const executable = try nativeScraperPath(engine, allocator);
+    defer allocator.free(executable);
+    const chapter_text = try std.fmt.allocPrint(allocator, "{d}", .{chapter});
+    defer allocator.free(chapter_text);
+    try runScraperScript(engine, &.{ executable, operation, book, chapter_text });
+}
+
 /// Fetches original-language interlinear data for one chapter and caches it
-/// into `db`. Was a `uv run python tools/interlinear_scraper.py` subprocess
-/// call; now a native Zig implementation (see native_scraper.zig), which was
-/// verified to be a faithful behavioral port of that script (same URLs, same
-/// BibleHub CSS classes, same INSERT OR REPLACE shape, same retry/timeout
-/// semantics) before this swap -- see native_scraper.zig's tests and
-/// docstring for the porting notes.
+/// into `data/bible.db` through the separately-built `metanoia-scraper`
+/// companion. The reader never imports the scraper implementation.
 pub fn scrape_interlinear(engine: std.Io, allocator: std.mem.Allocator, db: *bible.sqlite3, book: []const u8, chapter: i32) !void {
-    try native_scraper.scrapeInterlinear(engine, allocator, db, book, chapter);
+    _ = db;
+    try runNativeScraper(engine, allocator, "interlinear", book, chapter);
 }
 
 /// Scopes the lexicon backfill to the Strong's numbers introduced by one
 /// book/chapter, instead of scanning the whole interlinear table (see
-/// tools/lexicon_scraper.py's cache_lexicon_from_db). Was a Python subprocess
-/// call; now native (see scrape_interlinear's doc comment above).
+/// tools/lexicon_scraper.py's cache_lexicon_from_db). The companion performs
+/// the same native implementation in its own process.
 pub fn scrape_lexicon(engine: std.Io, allocator: std.mem.Allocator, db: *bible.sqlite3, book: []const u8, chapter: i32) !void {
-    try native_scraper.scrapeLexicon(engine, allocator, db, book, chapter);
+    _ = db;
+    try runNativeScraper(engine, allocator, "lexicon", book, chapter);
 }
 
 test "runScraperScript succeeds on zero exit" {

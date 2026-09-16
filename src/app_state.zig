@@ -1,10 +1,11 @@
 const std = @import("std");
-const gtk = @import("gtk.zig");
-const bible = @import("bible_db.zig");
-const models = @import("models/config.zig");
+const core = @import("core");
+const gtk = core.gtk;
+const bible = core.bible;
+const models = core.config;
 const kit_sidebar = @import("kit").components.Sidebar;
 const kit_status_bar = @import("kit").components.StatusBar;
-const tts_engine = @import("services/tts_engine.zig");
+const tts_engine = @import("services").tts_engine;
 
 const GtkWindow = gtk.GtkWindow;
 const GtkWidget = gtk.GtkWidget;

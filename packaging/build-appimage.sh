@@ -151,7 +151,13 @@ else
   info "Building Metanoia (ReleaseFast) with $(zig version)..."
   zig build -Doptimize=ReleaseFast
 fi
+SCRAPER_SRC="$ROOT/zig-out/bin/metanoia-scraper"
+if [ ! -f "$SCRAPER_SRC" ]; then
+  info "Building the native scraper companion..."
+  zig build scraper -Doptimize=ReleaseFast
+fi
 [ -f "$BIN_SRC" ] || fail "expected binary at $BIN_SRC"
+[ -f "$SCRAPER_SRC" ] || fail "expected scraper companion at $SCRAPER_SRC"
 
 # ── 2. Fetch pinned tooling ──────────────────────────────────────
 mkdir -p "$TOOLS_DIR"
@@ -175,10 +181,14 @@ mkdir -p \
   "$APPDIR/usr/share/icons/hicolor/256x256/apps" \
   "$APPDIR/usr/share/icons/hicolor/scalable/apps" \
   "$APPDIR/usr/share/metanoia" \
+  "$APPDIR/usr/share/metanoia/bin" \
+  "$APPDIR/usr/share/metanoia/tools" \
   "$APPDIR/apprun-hooks"
 
 cp "$BIN_SRC" "$APPDIR/usr/bin/${APP_NAME}"
 chmod +x "$APPDIR/usr/bin/${APP_NAME}"
+cp "$SCRAPER_SRC" "$APPDIR/usr/share/metanoia/bin/metanoia-scraper"
+chmod +x "$APPDIR/usr/share/metanoia/bin/metanoia-scraper"
 
 # data/ and assets/ live under usr/share/metanoia/ (arbitrary but
 # conventional location for an app's own read-only payload inside an
@@ -187,6 +197,8 @@ chmod +x "$APPDIR/usr/bin/${APP_NAME}"
 # /opt/metanoia/{bin,data,assets}.
 cp -r "$ROOT/data" "$APPDIR/usr/share/metanoia/data"
 cp -r "$ROOT/assets" "$APPDIR/usr/share/metanoia/assets"
+[ -f "$ROOT/tools/bible_books.json" ] || fail "tools/bible_books.json is missing"
+cp "$ROOT/tools/bible_books.json" "$APPDIR/usr/share/metanoia/tools/"
 [ -d "$ROOT/static" ] && cp -r "$ROOT/static" "$APPDIR/usr/share/metanoia/static"
 
 # Same .desktop content as packaging/build-linux.sh's (no standalone

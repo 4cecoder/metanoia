@@ -60,9 +60,12 @@ command -v zig >/dev/null 2>&1 || fail "zig not found on PATH"
 
 info "Building Metanoia (ReleaseFast, $RAW_ARCH) with $(zig version)..."
 zig build -Doptimize=ReleaseFast
+zig build scraper -Doptimize=ReleaseFast
 
 BIN_SRC="$ROOT/zig-out/bin/${APP_NAME}"
+SCRAPER_SRC="$ROOT/zig-out/bin/metanoia-scraper"
 [ -f "$BIN_SRC" ] || fail "expected binary at $BIN_SRC"
+[ -f "$SCRAPER_SRC" ] || fail "expected scraper companion at $SCRAPER_SRC"
 
 # ── 1. Assemble the /opt/metanoia + launcher + .desktop layout ──
 rm -rf "$STAGE"
@@ -73,8 +76,12 @@ mkdir -p \
   "$PKGROOT/usr/share/icons/hicolor/scalable/apps"
 
 cp "$BIN_SRC" "$PKGROOT${PREFIX}/bin/${APP_NAME}"
+cp "$SCRAPER_SRC" "$PKGROOT${PREFIX}/bin/metanoia-scraper"
 cp -r "$ROOT/data" "$PKGROOT${PREFIX}/data"
 cp -r "$ROOT/assets" "$PKGROOT${PREFIX}/assets"
+[ -f "$ROOT/tools/bible_books.json" ] || fail "tools/bible_books.json is missing"
+mkdir -p "$PKGROOT${PREFIX}/tools"
+cp "$ROOT/tools/bible_books.json" "$PKGROOT${PREFIX}/tools/"
 [ -d "$ROOT/static" ] && cp -r "$ROOT/static" "$PKGROOT${PREFIX}/static"
 
 # Launcher: the app needs cwd == $PREFIX for its relative "data/bible.db" open.

@@ -36,6 +36,12 @@ brew install gtk4 pango cairo glib sqlite3
 zig build run
 ```
 
+The build graph is volatility-split: `zig build stable` builds only the
+reader, `zig build scraper` builds the native interlinear/lexicon companion,
+and `zig build app`/`zig build bundle-stable` packages both without linking
+the scraper into the reader. The companion is launched automatically when
+the reader needs live interlinear data.
+
 ### Faster local TTS on Apple Silicon
 
 The normal Python/MLX server remains the default. For the in-process Metal

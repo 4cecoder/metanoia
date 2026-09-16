@@ -1,10 +1,10 @@
-pub const gtk = @import("gtk.zig");
-pub const bible = @import("bible_db.zig");
+pub const core = @import("core");
+pub const gtk = core.gtk;
+pub const bible = core.bible;
 pub const tts = @import("tts_client.zig");
 pub const ollama = @import("ollama_client.zig");
 pub const llm_client = @import("llm_client.zig");
 pub const network_discovery = @import("services/network_discovery.zig");
-pub const native_scraper = @import("native_scraper.zig");
 pub const kit = @import("kit/root.zig");
 
 test {
@@ -13,5 +13,4 @@ test {
     _ = ollama;
     _ = llm_client;
     _ = network_discovery;
-    _ = native_scraper;
 }

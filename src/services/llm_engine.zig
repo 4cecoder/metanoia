@@ -1,7 +1,8 @@
 const std = @import("std");
-const gtk = @import("../gtk.zig");
+const core = @import("core");
+const gtk = core.gtk;
 const llm_client = @import("../llm_client.zig");
-const bible = @import("../bible_db.zig");
+const bible = core.bible;
 const scraper = @import("../scraper_client.zig");
 
 const gpointer = gtk.gpointer;

@@ -104,6 +104,20 @@ pub fn build(b: *std.Build) void {
         break :blk aikit_dep.module("aikit");
     } else null;
 
+    // Kit module — reusable, decoupled UI/UX component library.
+    const kit_mod = b.addModule("kit", .{
+        .root_source_file = b.path("src/kit/root.zig"),
+        .target = target,
+    });
+
+    // Core module — semi-stable reader foundations. Keep application state
+    // and network/model services out of this root so volatile changes do not
+    // become dependencies of the headless reader foundations.
+    const core_mod = b.addModule("core", .{
+        .root_source_file = b.path("src/core.zig"),
+        .target = target,
+    });
+
     // This creates a module, which represents a collection of source files alongside
     // some compilation options, such as optimization mode and linked system libraries.
     // Zig modules are the preferred way of making Zig code available to consumers.
@@ -119,6 +133,7 @@ pub fn build(b: *std.Build) void {
     // exist otherwise.
     var mod_imports = std.ArrayListUnmanaged(std.Build.Module.Import).empty;
     mod_imports.append(b.allocator, .{ .name = "build_options", .module = build_options_mod }) catch @panic("OOM");
+    mod_imports.append(b.allocator, .{ .name = "core", .module = core_mod }) catch @panic("OOM");
     if (aikit_mod) |am| mod_imports.append(b.allocator, .{ .name = "aikit", .module = am }) catch @panic("OOM");
 
     const mod = b.addModule("metanoia", .{
@@ -135,12 +150,6 @@ pub fn build(b: *std.Build) void {
         .imports = mod_imports.items,
     });
 
-    // Kit module — reusable, decoupled UI/UX component library.
-    const kit_mod = b.addModule("kit", .{
-        .root_source_file = b.path("src/kit/root.zig"),
-        .target = target,
-    });
-
     // `mod` re-exports bible_db.zig (see src/root.zig), whose tests exercise
     // real SQLite calls (in-memory db round trips) — it needs the same
     // sqlite3/libc link as the exe below so `zig build test` can actually
@@ -149,6 +158,21 @@ pub fn build(b: *std.Build) void {
     mod.linkSystemLibrary(mod_gtk_lib, .{});
     mod.linkSystemLibrary("sqlite3", .{});
     mod.link_libc = true;
+
+    // Service module — TTS/LLM/network/update adapters. It depends on the
+    // stable roots but is not imported by `core` or `kit`. The optional aikit
+    // edge exists only when native-ai is explicitly enabled.
+    var services_imports = std.ArrayListUnmanaged(std.Build.Module.Import).empty;
+    services_imports.append(b.allocator, .{ .name = "core", .module = core_mod }) catch @panic("OOM");
+    services_imports.append(b.allocator, .{ .name = "kit", .module = kit_mod }) catch @panic("OOM");
+    services_imports.append(b.allocator, .{ .name = "build_options", .module = build_options_mod }) catch @panic("OOM");
+    if (aikit_mod) |am| services_imports.append(b.allocator, .{ .name = "aikit", .module = am }) catch @panic("OOM");
+
+    const services_mod = b.addModule("services", .{
+        .root_source_file = b.path("src/services.zig"),
+        .target = target,
+        .imports = services_imports.items,
+    });
 
     // Here we define an executable. An executable needs to have a root module
     // which needs to expose a `main` function. While we could add a main function
@@ -166,13 +190,13 @@ pub fn build(b: *std.Build) void {
     //
     // If neither case applies to you, feel free to delete the declaration you
     // don't need and to put everything under a single module.
-    // src/main.zig also imports src/tts_client.zig directly (relative
-    // import, separate from the "metanoia" module above), so it needs its
-    // own "aikit"/"build_options" imports too — same conditional-inclusion
-    // reasoning as mod_imports above.
+    // The executable root is deliberately limited to app wiring plus named
+    // core/services/kit modules. Native scraper implementation is not an
+    // import here; the app talks to the separately-built companion binary.
     var exe_imports = std.ArrayListUnmanaged(std.Build.Module.Import).empty;
-    exe_imports.append(b.allocator, .{ .name = "metanoia", .module = mod }) catch @panic("OOM");
+    exe_imports.append(b.allocator, .{ .name = "core", .module = core_mod }) catch @panic("OOM");
     exe_imports.append(b.allocator, .{ .name = "kit", .module = kit_mod }) catch @panic("OOM");
+    exe_imports.append(b.allocator, .{ .name = "services", .module = services_mod }) catch @panic("OOM");
     exe_imports.append(b.allocator, .{ .name = "build_options", .module = build_options_mod }) catch @panic("OOM");
     if (aikit_mod) |am| exe_imports.append(b.allocator, .{ .name = "aikit", .module = am }) catch @panic("OOM");
 
@@ -302,6 +326,25 @@ pub fn build(b: *std.Build) void {
         exe.root_module.linkSystemLibrary("dnsapi", .{});
     }
 
+    // Volatile native scraper companion. It is not part of the default
+    // install step, so `zig build` remains the stable reader build. The app
+    // bundle step below opts into this artifact and places it beside the
+    // reader executable.
+    const scraper_exe = b.addExecutable(.{
+        .name = "metanoia-scraper",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/scraper_main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "core", .module = core_mod }},
+        }),
+    });
+    scraper_exe.root_module.linkSystemLibrary("sqlite3", .{});
+    scraper_exe.root_module.link_libc = true;
+    const scraper_install = b.addInstallArtifact(scraper_exe, .{});
+    const scraper_step = b.step("scraper", "Build the volatile native interlinear/lexicon scraper");
+    scraper_step.dependOn(&scraper_install.step);
+
     // macOS .app bundle (only on macOS)
     if (target.result.os.tag == .macos) {
         const app_step = b.step("app", "Create Metanoia.app bundle");
@@ -309,7 +352,11 @@ pub fn build(b: *std.Build) void {
             "/bin/bash", "scripts/create_app_bundle.sh",
         });
         create_app.step.dependOn(b.getInstallStep());
+        create_app.step.dependOn(&scraper_install.step);
         app_step.dependOn(&create_app.step);
+
+        const stable_bundle_step = b.step("bundle-stable", "Build the stable macOS reader bundle with its scraper companion");
+        stable_bundle_step.dependOn(&create_app.step);
     }
 
     // This declares intent for the executable to be installed into the
@@ -317,6 +364,12 @@ pub fn build(b: *std.Build) void {
     // step). By default the install prefix is `zig-out/` but can be overridden
     // by passing `--prefix` or `-p`.
     b.installArtifact(exe);
+
+    // Explicit alias used by the release/CI contract. It intentionally uses
+    // the caller's native-ai option; stable builds should pass
+    // `-Dnative-ai=false` (the default) and native inference remains opt-in.
+    const stable_step = b.step("stable", "Build the stable Metanoia reader executable");
+    stable_step.dependOn(b.getInstallStep());
 
     // This creates a top level step. Top level steps have a name and can be
     // invoked by name when running `zig build` (e.g. `zig build run`).
@@ -347,6 +400,35 @@ pub fn build(b: *std.Build) void {
         .root_module = mod,
     });
 
+    // Core and services have independent test roots, so Zig can cache and
+    // execute them independently when one volatility layer changes.
+    const core_tests = b.addTest(.{
+        .root_module = core_mod,
+    });
+    core_tests.root_module.linkSystemLibrary(mod_gtk_lib, .{});
+    core_tests.root_module.linkSystemLibrary("sqlite3", .{});
+    core_tests.root_module.link_libc = true;
+
+    const services_tests = b.addTest(.{
+        .root_module = services_mod,
+    });
+    services_tests.root_module.linkSystemLibrary(mod_gtk_lib, .{});
+    services_tests.root_module.linkSystemLibrary("sqlite3", .{});
+    services_tests.root_module.link_libc = true;
+
+    // Native scraper parser tests stay with the scraper graph and never pull
+    // GTK or the app/service roots into the stable executable.
+    const scraper_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/native_scraper.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "core", .module = core_mod }},
+        }),
+    });
+    scraper_tests.root_module.linkSystemLibrary("sqlite3", .{});
+    scraper_tests.root_module.link_libc = true;
+
     // Kit module tests.
     const kit_tests = b.addTest(.{
         .root_module = kit_mod,
@@ -363,6 +445,12 @@ pub fn build(b: *std.Build) void {
 
     // A run step that will run the test executable.
     const run_mod_tests = b.addRunArtifact(mod_tests);
+
+    const run_core_tests = b.addRunArtifact(core_tests);
+
+    const run_services_tests = b.addRunArtifact(services_tests);
+
+    const run_scraper_tests = b.addRunArtifact(scraper_tests);
 
     // Run kit tests.
     const run_kit_tests = b.addRunArtifact(kit_tests);
@@ -385,6 +473,9 @@ pub fn build(b: *std.Build) void {
     // make the two of them run in parallel.
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
+    test_step.dependOn(&run_core_tests.step);
+    test_step.dependOn(&run_services_tests.step);
+    test_step.dependOn(&run_scraper_tests.step);
     test_step.dependOn(&run_kit_tests.step);
     test_step.dependOn(&run_build_tests.step);
     test_step.dependOn(&run_exe_tests.step);
@@ -404,6 +495,7 @@ pub fn build(b: *std.Build) void {
     // contributors who do have the weights.
     if (native_ai) {
         var native_test_imports = std.ArrayListUnmanaged(std.Build.Module.Import).empty;
+        native_test_imports.append(b.allocator, .{ .name = "core", .module = core_mod }) catch @panic("OOM");
         native_test_imports.append(b.allocator, .{ .name = "aikit", .module = aikit_mod.? }) catch @panic("OOM");
         native_test_imports.append(b.allocator, .{ .name = "build_options", .module = build_options_mod }) catch @panic("OOM");
 
