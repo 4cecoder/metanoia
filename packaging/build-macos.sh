@@ -32,6 +32,7 @@ ARCH="$(uname -m)"                     # arm64 or x86_64
 TAG="${GITHUB_REF_NAME:-dev}"
 OUT_DIR="$ROOT/dist"
 TARBALL="$OUT_DIR/Metanoia-macos-${ARCH}.tar.gz"
+NATIVE_AI="${METANOIA_NATIVE_AI:-false}"
 
 # ── 0. Preconditions ────────────────────────────────────────────
 command -v zig >/dev/null 2>&1 || fail "zig not found on PATH"
@@ -39,8 +40,12 @@ command -v zig >/dev/null 2>&1 || fail "zig not found on PATH"
 [ -f "$ROOT/assets/Info.plist" ] || fail "assets/Info.plist missing"
 [ -f "$ROOT/assets/${APP_NAME}.icns" ] || fail "assets/${APP_NAME}.icns missing"
 
-info "Building Metanoia (ReleaseFast, $ARCH) with $(zig version)..."
-zig build app -Doptimize=ReleaseFast
+info "Building Metanoia (ReleaseFast, $ARCH, native-ai=$NATIVE_AI) with $(zig version)..."
+if [ "$NATIVE_AI" = "true" ]; then
+  zig build app -Dnative-ai=true -Doptimize=ReleaseFast
+else
+  zig build app -Dnative-ai=false -Doptimize=ReleaseFast
+fi
 
 APP_DIR="$ROOT/zig-out/${APP_NAME}.app"
 [ -d "$APP_DIR" ] || fail "expected $APP_DIR to exist after 'zig build app'"

@@ -12,14 +12,19 @@ Architecture and reference documentation for the Metanoia Bible study app.
 | [GEMINI.md](GEMINI.md) | `build-engineer` | Zig 0.16+ IO/stdlib migration cheatsheet |
 | [WINDOWS_SETUP.md](WINDOWS_SETUP.md) | `deployment-engineer` | MSYS2 + Zig + GTK4 Windows build instructions |
 | [PACKAGING.md](PACKAGING.md) | `deployment-engineer` | macOS/Linux/Android release packaging, Homebrew formula |
-| [SPLIT_BINARY_ARCHITECTURE.md](SPLIT_BINARY_ARCHITECTURE.md) | `volatility-architecture` | Stable reader, scraper, and future native TTS worker boundaries |
+| [SPLIT_BINARY_ARCHITECTURE.md](SPLIT_BINARY_ARCHITECTURE.md) | `volatility-architecture` | Stable reader, scraper, resident native TTS worker, and future boundaries |
 | [SPLIT_BINARY_PACKAGING.md](SPLIT_BINARY_PACKAGING.md) | `macos-packaging` | Next-bundle artifact layout, lookup, update, and rollback |
 | [SPLIT_BINARY_ACCEPTANCE.md](SPLIT_BINARY_ACCEPTANCE.md) | `build-acceptance` | Build, link, payload, and test invariants for the split |
+| [ROADMAP.md](ROADMAP.md) | `roadmap-architect` | Current milestones, Qwen status, performance, CI, and Zig-only migration |
 | [MAINTENANCE.md](MAINTENANCE.md) | — | Caching architecture, testing strategy, quick-wins backlog |
 | [ZIG_DISCOVERIES.md](ZIG_DISCOVERIES.md) | `llm-architect` | Zig versioning, memory management, GTK FFI gotchas |
 | [AGENTS.md](AGENTS.md) | `task-distributor` | Subagent task definitions for doc maintenance |
 
 ## Notes from this session
+
+For the current implementation status and the next stopping points, see
+[ROADMAP.md](ROADMAP.md). The architecture, packaging, and acceptance docs
+below remain the detailed contracts behind that roadmap.
 
 ### UI/UX Kit (`src/kit/`)
 Extracted all UI components from `src/ui/` into a reusable, decoupled library:

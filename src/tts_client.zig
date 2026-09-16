@@ -1,5 +1,7 @@
 const std = @import("std");
 const gtk = @import("core").gtk;
+const qwen_models = @import("qwen_models.zig");
+const tts_worker_protocol = @import("tts_worker_protocol.zig");
 // `aikit` (and everything native-backend-related below) is only importable
 // when the app was built with `-Dnative-ai=true` (see root build.zig) —
 // that flag exists so a default `zig build`/`zig build test` (CI included)
@@ -95,10 +97,11 @@ pub fn generate_speech(engine: std.Io, text: []const u8, voice: []const u8, spee
     }
 
     // 1.5. Native backend: in-process aikit/qwentts.cpp synthesis, no
-    // server/network involved. Branches away entirely before the remote
-    // path's request-building/curl logic below, which stays untouched.
+    // server/network involved. The preferred native path is a resident
+    // metanoia-tts worker; the in-process backend remains the development
+    // fallback when the worker is not packaged or cannot be started.
     if (shouldUseNativeBackend(tts_backend)) {
-        try NativeBackend.generate(engine, allocator, text, voice, out_audio_path);
+        try NativeBackend.generate(engine, allocator, text, voice, speed, out_audio_path);
         return try allocator.dupe(u8, out_audio_path);
     }
 
@@ -193,6 +196,14 @@ const NativeBackend = if (build_options.native_ai) struct {
     var native_synth_mutex: std.Io.Mutex = .init;
     var native_synth: ?aikit.models.qwen3_tts.Qwen3TTS = null;
 
+    const NativeWorker = struct {
+        child: std.process.Child,
+        stdout_buffer: []u8,
+        reader: std.Io.File.Reader,
+    };
+
+    var native_worker: ?*NativeWorker = null;
+
     /// Releases the lazily-loaded native model, if one was loaded. Not
     /// called anywhere in normal app operation — `generate_speech`'s
     /// native path is designed to keep the model resident for the
@@ -205,6 +216,14 @@ const NativeBackend = if (build_options.native_ai) struct {
     /// (`[rsets->data count] == 0`) if a loaded context's residency sets
     /// were never released via `qt_free` before process teardown.
     fn shutdown() void {
+        if (native_worker) |worker| {
+            var threaded_io = std.Io.Threaded.init(std.heap.page_allocator, .{});
+            defer threaded_io.deinit();
+            worker.child.kill(threaded_io.io());
+            std.heap.page_allocator.free(worker.stdout_buffer);
+            std.heap.page_allocator.destroy(worker);
+            native_worker = null;
+        }
         if (native_synth) |*synth| {
             synth.synthesizer().deinit();
             native_synth = null;
@@ -298,20 +317,126 @@ const NativeBackend = if (build_options.native_ai) struct {
         try file_writer.interface.flush();
     }
 
-    /// Synthesizes `text` via aikit's native GGML/Metal backend and writes
-    /// the result to `out_audio_path`. Voice cloning: if `voice` resolves
-    /// to a reference clip in data/voices.json, uses ICL cloning against
-    /// it (same clip+transcript the remote/Python backend would use for
-    /// that voice); otherwise falls back to the backend's base voice
-    /// honestly rather than failing.
-    fn generate(engine: std.Io, allocator: std.mem.Allocator, text: []const u8, voice: []const u8, out_audio_path: []const u8) !void {
+    fn workerPath(engine: std.Io, allocator: std.mem.Allocator) !?[]const u8 {
+        if (std.c.getenv("METANOIA_TTS_BIN")) |path| return try allocator.dupe(u8, std.mem.span(path));
+
+        const candidates = .{
+            "../MacOS/metanoia-tts",
+            "bin/metanoia-tts",
+            "zig-out/bin/metanoia-tts",
+            "metanoia-tts",
+            "metanoia-tts.exe",
+        };
+        inline for (candidates) |candidate| {
+            if (std.Io.Dir.cwd().access(engine, candidate, .{ .execute = true })) |_| {
+                return try allocator.dupe(u8, candidate);
+            } else |_| {}
+        }
+        return null;
+    }
+
+    fn nativeModelPaths(engine: std.Io, allocator: std.mem.Allocator) !qwen_models.Paths {
+        if (std.c.getenv("METANOIA_MODEL_DIR")) |directory| {
+            const paths = try qwen_models.modelPaths(allocator, std.mem.span(directory));
+            if (pathExists(engine, paths.talker) and pathExists(engine, paths.codec))
+            {
+                return paths;
+            }
+        }
+
+        const managed_dir = try qwen_models.resolveModelDirectory(allocator, null);
+        const managed = try qwen_models.modelPaths(allocator, managed_dir);
+        if (pathExists(engine, managed.talker) and pathExists(engine, managed.codec))
+        {
+            return managed;
+        }
+
+        return .{
+            .directory = "",
+            .talker = native_model_path,
+            .codec = native_codec_path,
+        };
+    }
+
+    fn pathExists(engine: std.Io, path: []const u8) bool {
+        std.Io.Dir.cwd().access(engine, path, .{}) catch return false;
+        return true;
+    }
+
+    fn spawnWorker(engine: std.Io, allocator: std.mem.Allocator) !?*NativeWorker {
+        const path = try workerPath(engine, allocator) orelse return null;
+        defer allocator.free(path);
+        const paths = try nativeModelPaths(engine, allocator);
+        var child = try std.process.spawn(engine, .{
+            .argv = &.{ path, "--model", paths.talker, "--codec", paths.codec, "--stdio" },
+            .stdin = .pipe,
+            .stdout = .pipe,
+            .stderr = .inherit,
+        });
+        errdefer child.kill(engine);
+
+        const worker = try allocator.create(NativeWorker);
+        errdefer allocator.destroy(worker);
+        const stdout_buffer = try allocator.alloc(u8, 128 * 1024);
+        errdefer allocator.free(stdout_buffer);
+        worker.* = .{
+            .child = child,
+            .stdout_buffer = stdout_buffer,
+            .reader = std.Io.File.Reader.initStreaming(child.stdout.?, engine, stdout_buffer),
+        };
+        return worker;
+    }
+
+    fn responseError(response: tts_worker_protocol.Response) !void {
+        if (!response.ok) return error.TtsServerError;
+    }
+
+    fn generateWithWorker(
+        engine: std.Io,
+        allocator: std.mem.Allocator,
+        worker: *NativeWorker,
+        text: []const u8,
+        voice: []const u8,
+        speed: f32,
+        out_audio_path: []const u8,
+        maybe_ref: ?VoiceReference,
+    ) !void {
+        const request: tts_worker_protocol.Request = .{
+            .id = out_audio_path,
+            .text = text,
+            .voice = voice,
+            .output = out_audio_path,
+            .reference_audio = if (maybe_ref) |ref| ref.audio_path else null,
+            .reference_text = if (maybe_ref) |ref| ref.text else null,
+            .speed = speed,
+        };
+
+        var input_buffer: [32 * 1024]u8 = undefined;
+        var input_writer = worker.child.stdin.?.writer(engine, &input_buffer);
+        var stringify: std.json.Stringify = .{ .writer = &input_writer.interface };
+        try stringify.write(request);
+        try input_writer.interface.writeAll("\n");
+        try input_writer.interface.flush();
+
+        const line = (try tts_worker_protocol.readLine(&worker.reader.interface)) orelse return error.TtsServerError;
+        var response_arena = std.heap.ArenaAllocator.init(allocator);
+        defer response_arena.deinit();
+        const response = std.json.parseFromSliceLeaky(
+            tts_worker_protocol.Response,
+            response_arena.allocator(),
+            line,
+            .{},
+        ) catch return error.TtsServerError;
+        try responseError(response);
+    }
+
+    /// Synthesizes `text` via the resident native worker, with the in-process
+    /// aikit/qwentts.cpp backend as a fallback. Voice cloning: if `voice`
+    /// resolves to a reference clip in data/voices.json, both paths use the
+    /// same reference clip and transcript for ICL cloning.
+    fn generate(engine: std.Io, allocator: std.mem.Allocator, text: []const u8, voice: []const u8, speed: f32, out_audio_path: []const u8) !void {
         native_synth_mutex.lockUncancelable(engine);
         defer native_synth_mutex.unlock(engine);
-
-        if (native_synth == null) {
-            native_synth = try aikit.models.qwen3_tts.Qwen3TTS.init(native_model_path, native_codec_path);
-        }
-        const synthesizer = native_synth.?.synthesizer();
 
         const maybe_ref = loadVoiceReference(engine, allocator, voice) catch null;
         defer if (maybe_ref) |ref| {
@@ -319,10 +444,36 @@ const NativeBackend = if (build_options.native_ai) struct {
             allocator.free(ref.text);
         };
 
+        if (native_worker == null) {
+            native_worker = spawnWorker(engine, allocator) catch null;
+        }
+        if (native_worker) |worker| {
+            var worker_succeeded = true;
+            generateWithWorker(engine, allocator, worker, text, voice, speed, out_audio_path, maybe_ref) catch |err| {
+                std.debug.print("Native TTS worker failed: {s}; falling back in-process\n", .{@errorName(err)});
+                worker.child.kill(engine);
+                allocator.free(worker.stdout_buffer);
+                allocator.destroy(worker);
+                native_worker = null;
+                worker_succeeded = false;
+            };
+            if (worker_succeeded) {
+                return;
+            }
+        }
+
+        if (native_synth == null) {
+            const paths = try nativeModelPaths(engine, allocator);
+            native_synth = try aikit.models.qwen3_tts.Qwen3TTS.init(paths.talker, paths.codec);
+        }
+        const synthesizer = native_synth.?.synthesizer();
+
         const options: aikit.tts.SynthesizeOptions = if (maybe_ref) |ref| .{
+            .voice = voice,
+            .speed = speed,
             .reference_audio_path = ref.audio_path,
             .reference_text = ref.text,
-        } else .{};
+        } else .{ .voice = voice, .speed = speed };
 
         const audio = synthesizer.synthesize(engine, allocator, text, options) catch |err| {
             std.debug.print("Native TTS synthesis failed: {any}\n", .{err});
@@ -339,11 +490,12 @@ const NativeBackend = if (build_options.native_ai) struct {
     // without also rebuilding with the flag — a clear error beats a
     // missing-symbol build failure they'd otherwise never see coming.
     fn shutdown() void {}
-    fn generate(engine: std.Io, allocator: std.mem.Allocator, text: []const u8, voice: []const u8, out_audio_path: []const u8) !void {
+    fn generate(engine: std.Io, allocator: std.mem.Allocator, text: []const u8, voice: []const u8, speed: f32, out_audio_path: []const u8) !void {
         _ = engine;
         _ = allocator;
         _ = text;
         _ = voice;
+        _ = speed;
         _ = out_audio_path;
         return error.NativeBackendNotBuilt;
     }

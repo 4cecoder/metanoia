@@ -345,18 +345,65 @@ pub fn build(b: *std.Build) void {
     const scraper_step = b.step("scraper", "Build the volatile native interlinear/lexicon scraper");
     scraper_step.dependOn(&scraper_install.step);
 
+    // Model asset manager. This binary has no inference dependency: it only
+    // resolves, verifies, and stages the large Qwen files into the user's
+    // managed cache. Keeping it separate means the stable reader can ship
+    // without GGUF weights while a native bundle can still provision them.
+    const models_exe = b.addExecutable(.{
+        .name = "metanoia-models",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/qwen_models_main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const models_install = b.addInstallArtifact(models_exe, .{});
+    const models_step = b.step("models", "Build the Qwen model asset manager");
+    models_step.dependOn(&models_install.step);
+
+    // Native TTS worker. It is only compiled when the caller explicitly
+    // enables native AI because the worker links qwentts.cpp/GGML/Metal and
+    // requires the local native dependency tree. The app client can launch
+    // this long-lived process instead of treating the end-to-end test as a
+    // production executable.
+    var tts_worker_install: ?*std.Build.Step.InstallArtifact = null;
+    if (native_ai) {
+        const tts_worker_exe = b.addExecutable(.{
+            .name = "metanoia-tts",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/tts_worker_main.zig"),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{.{ .name = "aikit", .module = aikit_mod.? }},
+            }),
+        });
+        tts_worker_exe.root_module.link_libc = true;
+        const install = b.addInstallArtifact(tts_worker_exe, .{});
+        tts_worker_install = install;
+        const tts_worker_step = b.step("tts-worker", "Build the native Qwen TTS worker");
+        tts_worker_step.dependOn(&install.step);
+    }
+
     // macOS .app bundle (only on macOS)
     if (target.result.os.tag == .macos) {
         const app_step = b.step("app", "Create Metanoia.app bundle");
         const create_app = b.addSystemCommand(&.{
             "/bin/bash", "scripts/create_app_bundle.sh",
         });
+        create_app.setEnvironmentVariable("METANOIA_NATIVE_AI", if (native_ai) "true" else "false");
         create_app.step.dependOn(b.getInstallStep());
         create_app.step.dependOn(&scraper_install.step);
+        create_app.step.dependOn(&models_install.step);
+        if (tts_worker_install) |install| create_app.step.dependOn(&install.step);
         app_step.dependOn(&create_app.step);
 
         const stable_bundle_step = b.step("bundle-stable", "Build the stable macOS reader bundle with its scraper companion");
         stable_bundle_step.dependOn(&create_app.step);
+
+        if (native_ai) {
+            const native_bundle_step = b.step("bundle-native-ai", "Build the native macOS bundle with the Qwen TTS worker");
+            native_bundle_step.dependOn(&create_app.step);
+        }
     }
 
     // This declares intent for the executable to be installed into the
@@ -390,6 +437,7 @@ pub fn build(b: *std.Build) void {
     // By making the run step depend on the default step, it will be run from the
     // installation directory rather than directly from within the cache directory.
     run_cmd.step.dependOn(b.getInstallStep());
+    if (tts_worker_install) |install| run_cmd.step.dependOn(&install.step);
 
 
 
@@ -443,6 +491,24 @@ pub fn build(b: *std.Build) void {
         .root_module = build_test_mod,
     });
 
+    // Standalone native-runtime support libraries have their own test roots.
+    // Keep these protocol/asset-manager tests in the default suite so a
+    // worker or bundle can never silently drift away from the client contract.
+    const model_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/qwen_models.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const protocol_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tts_worker_protocol.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
     // A run step that will run the test executable.
     const run_mod_tests = b.addRunArtifact(mod_tests);
 
@@ -457,6 +523,9 @@ pub fn build(b: *std.Build) void {
 
     // Run build config tests.
     const run_build_tests = b.addRunArtifact(build_test);
+
+    const run_model_tests = b.addRunArtifact(model_tests);
+    const run_protocol_tests = b.addRunArtifact(protocol_tests);
 
     // Creates an executable that will run `test` blocks from the executable's
     // root module. Note that test executables only test one module at a time,
@@ -479,6 +548,8 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_kit_tests.step);
     test_step.dependOn(&run_build_tests.step);
     test_step.dependOn(&run_exe_tests.step);
+    test_step.dependOn(&run_model_tests.step);
+    test_step.dependOn(&run_protocol_tests.step);
 
     // Real end-to-end native-TTS/native-LLM tests — only meaningful (and
     // only buildable at all, since they need "aikit") when native_ai is
@@ -510,6 +581,7 @@ pub fn build(b: *std.Build) void {
         native_tts_test.root_module.linkSystemLibrary("sqlite3", .{});
         native_tts_test.root_module.link_libc = true;
         const run_native_tts_test = b.addRunArtifact(native_tts_test);
+        if (tts_worker_install) |install| run_native_tts_test.step.dependOn(&install.step);
         const native_tts_test_step = b.step("test-native-tts", "Run the real native-TTS end-to-end test (needs local GGUF weights)");
         native_tts_test_step.dependOn(&run_native_tts_test.step);
 

@@ -1,0 +1,234 @@
+name: native-tdd
+
+# The normal test workflow protects the dependency-free reader. This workflow
+# adds the native boundary: the resident worker, the model manager, the
+# qwentts.cpp link, and an opt-in real voice-cloning smoke test.
+on:
+  push:
+    branches: ["master"]
+    paths:
+      - "src/**"
+      - "aikit/**"
+      - "build.zig"
+      - "build.zig.zon"
+      - "packaging/**"
+      - "scripts/create_app_bundle.sh"
+      - ".github/workflows/native-tdd.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "aikit/**"
+      - "build.zig"
+      - "build.zig.zon"
+      - "packaging/**"
+      - "scripts/create_app_bundle.sh"
+      - ".github/workflows/native-tdd.yml"
+  workflow_dispatch:
+    inputs:
+      native_e2e:
+        description: "Download the Qwen GGUFs and run the real resident voice-cloning E2E"
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: "17 7 * * 0"
+
+concurrency:
+  group: native-tdd-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  QWENTTS_REF: "90efdc60d62f7d6c70113994d0be17e820fd8673"
+  QWEN_MODEL_REPO: "Serveurperso/Qwen3-TTS-GGUF"
+  QWEN_TALKER: "qwen-talker-0.6b-base-Q8_0.gguf"
+  QWEN_CODEC: "qwen-tokenizer-12hz-Q8_0.gguf"
+
+jobs:
+  # Fast contract/TDD job. It deliberately does not fetch native weights or
+  # qwentts: the model manager and worker protocol are ordinary Zig code and
+  # should be tested on every supported desktop CI image.
+  zig-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install reader dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install gtk4 pango cairo glib sqlite3
+
+      - name: Install reader dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libsqlite3-dev pkg-config build-essential jq
+
+      - name: Install Zig master nightly
+        run: |
+          set -euo pipefail
+          case "$(uname -s)-$(uname -m)" in
+            Darwin-arm64|Darwin-aarch64) ZIG_TARGET="aarch64-macos" ;;
+            Darwin-x86_64) ZIG_TARGET="x86_64-macos" ;;
+            Linux-x86_64) ZIG_TARGET="x86_64-linux" ;;
+            Linux-aarch64|Linux-arm64) ZIG_TARGET="aarch64-linux" ;;
+            *) echo "unsupported platform $(uname -s)-$(uname -m)" >&2; exit 1 ;;
+          esac
+          JSON="$(curl -fsSL https://ziglang.org/download/index.json)"
+          URL="$(echo "$JSON" | jq -r ".master[\"$ZIG_TARGET\"].tarball")"
+          curl -fsSL "$URL" -o "$RUNNER_TEMP/zig.tar.xz"
+          mkdir -p "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Verify Zig and run TDD suite
+        run: |
+          zig version
+          zig build test --summary all
+          zig build stable --summary all
+          zig build models --summary all
+          ./zig-out/bin/metanoia-models status --json
+
+  # Compile the actual native graph on Apple Silicon for every code change,
+  # but do not download 1.2 GiB of model data. This catches ABI/link/rpath and
+  # bundle wiring regressions without making ordinary PRs wait for inference.
+  native-compile:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install native build dependencies
+        run: brew install cmake gtk4 pango cairo glib sqlite3 mlx-c whisper-c jq uv
+
+      - name: Checkout pinned qwentts.cpp
+        run: |
+          set -euo pipefail
+          git clone --recurse-submodules https://github.com/ServeurpersoCom/qwentts.cpp.git vendor/qwentts.cpp
+          git -C vendor/qwentts.cpp checkout --detach "$QWENTTS_REF"
+          git -C vendor/qwentts.cpp submodule update --init --recursive
+
+      - name: Cache qwentts.cpp build
+        uses: actions/cache@v4
+        with:
+          path: vendor/qwentts.cpp/build
+          key: qwentts-${{ runner.os }}-${{ runner.arch }}-${{ env.QWENTTS_REF }}-${{ hashFiles('.github/workflows/native-tdd.yml') }}
+
+      - name: Build qwentts.cpp
+        run: |
+          cmake -S vendor/qwentts.cpp -B vendor/qwentts.cpp/build \
+            -DCMAKE_BUILD_TYPE=Release -DQWEN_SHARED=ON
+          cmake --build vendor/qwentts.cpp/build --parallel
+
+      - name: Install Zig master nightly
+        run: |
+          set -euo pipefail
+          JSON="$(curl -fsSL https://ziglang.org/download/index.json)"
+          URL="$(echo "$JSON" | jq -r '.master["aarch64-macos"].tarball')"
+          curl -fsSL "$URL" -o "$RUNNER_TEMP/zig.tar.xz"
+          mkdir -p "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Build native worker and macOS bundle
+        run: |
+          zig version
+          zig build tts-worker -Dnative-ai=true -Doptimize=ReleaseFast --summary all
+          zig build app -Dnative-ai=true -Doptimize=ReleaseFast --summary all
+          test -x zig-out/bin/metanoia-tts
+          test -x zig-out/bin/metanoia-models
+          test -x zig-out/Metanoia.app/Contents/MacOS/metanoia
+          test -x zig-out/Metanoia.app/Contents/MacOS/metanoia-scraper
+          test -x zig-out/Metanoia.app/Contents/MacOS/metanoia-models
+          test -x zig-out/Metanoia.app/Contents/MacOS/metanoia-tts
+
+  # Real model-backed E2E is intentionally opt-in for manual runs and runs
+  # weekly. It proves two cloned requests through one resident worker, which
+  # is the performance-critical path for a 33-verse chapter. Models are
+  # cached and downloaded with uvx; a cache hit never redownloads them.
+  native-e2e:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.native_e2e == true)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install native E2E dependencies
+        run: brew install cmake gtk4 pango cairo glib sqlite3 mlx-c whisper-c jq uv
+
+      - name: Checkout pinned qwentts.cpp
+        run: |
+          set -euo pipefail
+          git clone --recurse-submodules https://github.com/ServeurpersoCom/qwentts.cpp.git vendor/qwentts.cpp
+          git -C vendor/qwentts.cpp checkout --detach "$QWENTTS_REF"
+          git -C vendor/qwentts.cpp submodule update --init --recursive
+
+      - name: Cache Qwen GGUF model files
+        id: qwen-models
+        uses: actions/cache@v4
+        with:
+          path: vendor/qwentts.cpp/models
+          key: qwen3-${{ runner.os }}-${{ runner.arch }}-${{ env.QWENTTS_REF }}-${{ env.QWEN_TALKER }}-${{ env.QWEN_CODEC }}
+
+      - name: Download Qwen GGUFs with uv
+        if: steps.qwen-models.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p vendor/qwentts.cpp/models
+          uvx --from huggingface_hub hf download "$QWEN_MODEL_REPO" "$QWEN_TALKER" --local-dir vendor/qwentts.cpp/models
+          uvx --from huggingface_hub hf download "$QWEN_MODEL_REPO" "$QWEN_CODEC" --local-dir vendor/qwentts.cpp/models
+
+      - name: Build qwentts.cpp and native worker
+        run: |
+          set -euo pipefail
+          cmake -S vendor/qwentts.cpp -B vendor/qwentts.cpp/build \
+            -DCMAKE_BUILD_TYPE=Release -DQWEN_SHARED=ON
+          cmake --build vendor/qwentts.cpp/build --parallel
+          JSON="$(curl -fsSL https://ziglang.org/download/index.json)"
+          URL="$(echo "$JSON" | jq -r '.master["aarch64-macos"].tarball')"
+          curl -fsSL "$URL" -o "$RUNNER_TEMP/zig.tar.xz"
+          mkdir -p "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+          zig build tts-worker -Dnative-ai=true -Doptimize=ReleaseFast --summary all
+          zig build models --summary all
+          ./zig-out/bin/metanoia-models verify --dir vendor/qwentts.cpp/models
+
+      - name: Run resident cloned-voice E2E twice
+        run: |
+          set -euo pipefail
+          mkdir -p cache
+          REF_TEXT="$(jq -r '.jordan.text' data/voices.json)"
+          {
+            jq -cn --arg id "native-e2e-1" --arg ref "data/jordan_ref.wav" \
+              --arg ref_text "$REF_TEXT" --arg out "cache/native-e2e-1.wav" \
+              '{id:$id,text:"Wisdom gives life to those who seek it.",voice:"jordan",output:$out,reference_audio:$ref,reference_text:$ref_text,speed:1.0}'
+            jq -cn --arg id "native-e2e-2" --arg ref "data/jordan_ref.wav" \
+              --arg ref_text "$REF_TEXT" --arg out "cache/native-e2e-2.wav" \
+              '{id:$id,text:"The wise heart listens before it answers.",voice:"jordan",output:$out,reference_audio:$ref,reference_text:$ref_text,speed:1.0}'
+          } | ./zig-out/bin/metanoia-tts \
+            --model "vendor/qwentts.cpp/models/$QWEN_TALKER" \
+            --codec "vendor/qwentts.cpp/models/$QWEN_CODEC" \
+            --stdio > "$RUNNER_TEMP/tts-responses.jsonl" 2> "$RUNNER_TEMP/tts-worker.log"
+          test "$(wc -l < "$RUNNER_TEMP/tts-responses.jsonl" | tr -d ' ')" -eq 2
+          jq -e -s 'length == 2 and all(.[]; .ok == true and .sample_rate == 24000)' \
+            "$RUNNER_TEMP/tts-responses.jsonl"
+          test -s cache/native-e2e-1.wav
+          test -s cache/native-e2e-2.wav
+
+      - name: Run app-integration native TTS test
+        run: zig build test-native-tts -Dnative-ai=true -Doptimize=ReleaseFast --summary all
+
+      - name: Upload native E2E diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-tts-e2e-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/tts-responses.jsonl
+            ${{ runner.temp }}/tts-worker.log
+            cache/native-e2e-*.wav
+          if-no-files-found: ignore

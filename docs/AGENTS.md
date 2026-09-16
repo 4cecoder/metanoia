@@ -12,6 +12,7 @@ Each subagent type maintains one doc file. The orchestrator (`index.md`) links t
 | `build-engineer` | [GEMINI.md](GEMINI.md) | Zig build system, IO/stdlib migration |
 | `deployment-engineer` | [WINDOWS_SETUP.md](WINDOWS_SETUP.md) | Cross-compilation, bundling, MSYS2 |
 | `llm-architect` | [ZIG_DISCOVERIES.md](ZIG_DISCOVERIES.md) | Zig versioning, memory management, GTK FFI gotchas |
+| `roadmap-architect` | [ROADMAP.md](ROADMAP.md) | Current Metanoia milestones, native TTS migration, and release gates |
 
 ## Adding a new doc
 
